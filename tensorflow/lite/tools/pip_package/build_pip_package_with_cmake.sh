@@ -25,7 +25,6 @@ export PACKAGE_VERSION="${TENSORFLOW_VERSION}${VERSION_SUFFIX}"
 export PROJECT_NAME=${WHEEL_PROJECT_NAME:-tflite_runtime}
 BUILD_DIR="${SCRIPT_DIR}/gen/tflite_pip/${PYTHON}"
 TENSORFLOW_TARGET=${TENSORFLOW_TARGET:-$1}
-BUILD_NUM_JOBS="${BUILD_NUM_JOBS:-4}"
 if [ "${TENSORFLOW_TARGET}" = "rpi" ]; then
   export TENSORFLOW_TARGET="armhf"
 fi
@@ -108,6 +107,15 @@ case "${TENSORFLOW_TARGET}" in
       -DXNNPACK_ENABLE_ARM_I8MM=OFF \
       "${TENSORFLOW_LITE_DIR}"
     ;;
+  rv64)
+    BUILD_FLAGS=${BUILD_FLAGS:-"-march=rv64gcv0p7_zfh_xtheadc -I${PYTHON_INCLUDE} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"}
+    cmake \
+      -DCMAKE_C_COMPILER=gcc-10 \
+      -DCMAKE_CXX_COMPILER=g++-10 \
+      -DCMAKE_C_FLAGS="${BUILD_FLAGS}" \
+      -DCMAKE_CXX_FLAGS="${BUILD_FLAGS}" \
+      "${TENSORFLOW_LITE_DIR}"
+    ;;
   native)
     BUILD_FLAGS=${BUILD_FLAGS:-"-march=native -I${PYTHON_INCLUDE} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"}
     cmake \
@@ -124,7 +132,8 @@ case "${TENSORFLOW_TARGET}" in
     ;;
 esac
 
-cmake --build . --verbose -j ${BUILD_NUM_JOBS} -t _pywrap_tensorflow_interpreter_wrapper
+#cmake --build . --verbose -j ${BUILD_NUM_JOBS} -t _pywrap_tensorflow_interpreter_wrapper
+cmake --build . --verbose -j 4 -t _pywrap_tensorflow_interpreter_wrapper
 cd "${BUILD_DIR}"
 
 case "${TENSORFLOW_TARGET}" in
