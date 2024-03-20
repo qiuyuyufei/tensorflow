@@ -212,7 +212,7 @@ TEST_F(DefaultEnvTest, DeleteRecursivelyFail) {
   const string parent_dir = io::JoinPath(BaseDir(), "root_dir");
 
   int64_t undeleted_files, undeleted_dirs;
-  absl::Status s =
+  Status s =
       env_->DeleteRecursively(parent_dir, &undeleted_files, &undeleted_dirs);
   EXPECT_EQ(error::Code::NOT_FOUND, s.code());
   EXPECT_EQ(0, undeleted_files);
@@ -299,7 +299,7 @@ class TmpDirFileSystem : public NullFileSystem {
  public:
   TF_USE_FILESYSTEM_METHODS_WITH_NO_TRANSACTION_SUPPORT;
 
-  absl::Status FileExists(const string& dir, TransactionToken* token) override {
+  Status FileExists(const string& dir, TransactionToken* token) override {
     StringPiece scheme, host, path;
     io::ParseURI(dir, &scheme, &host, &path);
     if (path.empty()) return errors::NotFound(dir, " not found");
@@ -307,7 +307,7 @@ class TmpDirFileSystem : public NullFileSystem {
     // been flushed.
     if (path == "/flushed") {
       if (flushed_) {
-        return absl::OkStatus();
+        return OkStatus();
       } else {
         return errors::NotFound("FlushCaches() not called yet");
       }
@@ -315,7 +315,7 @@ class TmpDirFileSystem : public NullFileSystem {
     return Env::Default()->FileExists(io::JoinPath(BaseDir(), path));
   }
 
-  absl::Status CreateDir(const string& dir, TransactionToken* token) override {
+  Status CreateDir(const string& dir, TransactionToken* token) override {
     StringPiece scheme, host, path;
     io::ParseURI(dir, &scheme, &host, &path);
     if (scheme != "tmpdirfs") {
@@ -324,8 +324,7 @@ class TmpDirFileSystem : public NullFileSystem {
     if (host != "testhost") {
       return errors::FailedPrecondition("host must be testhost");
     }
-    absl::Status status =
-        Env::Default()->CreateDir(io::JoinPath(BaseDir(), path));
+    Status status = Env::Default()->CreateDir(io::JoinPath(BaseDir(), path));
     if (status.ok()) {
       // Record that we have created this directory so `IsDirectory` works.
       created_directories_.push_back(std::string(path));
@@ -333,12 +332,11 @@ class TmpDirFileSystem : public NullFileSystem {
     return status;
   }
 
-  absl::Status IsDirectory(const string& dir,
-                           TransactionToken* token) override {
+  Status IsDirectory(const string& dir, TransactionToken* token) override {
     StringPiece scheme, host, path;
     io::ParseURI(dir, &scheme, &host, &path);
     for (const auto& existing_dir : created_directories_)
-      if (existing_dir == path) return absl::OkStatus();
+      if (existing_dir == path) return OkStatus();
     return errors::NotFound(dir, " not found");
   }
 

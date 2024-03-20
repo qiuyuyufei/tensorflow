@@ -1,6 +1,6 @@
-load("//tsl:tsl.bzl", "internal_visibility")
+load("//tsl/platform:rules_cc.bzl", "cc_library")
+load("//tsl:tsl.bzl", "set_external_visibility")
 load("//tsl:tsl.default.bzl", "tsl_grpc_cc_dependencies")
-load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
 load(
     "//tsl/platform:build_config.bzl",
     "tf_protos_profiler_service",
@@ -13,10 +13,7 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = internal_visibility([
-        "//tsl/profiler:internal",
-    ]),
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -25,11 +22,7 @@ cc_library(
     srcs = ["capture_profile.cc"],
     hdrs = ["capture_profile.h"],
     copts = tf_profiler_copts(),
-    visibility = internal_visibility([
-        "@local_xla//xla/python:__pkg__",
-        "//tensorflow/core/profiler/rpc/client:__pkg__",
-        "//tensorflow/python/profiler/internal:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         ":profiler_client_for_pybind",
         ":remote_profiler_session_manager",
@@ -56,12 +49,7 @@ cc_library(
     srcs = ["save_profile.cc"],
     hdrs = ["save_profile.h"],
     copts = tf_profiler_copts(),
-    visibility = internal_visibility([
-        "//tensorflow/core/profiler/rpc/client:__pkg__",
-        "@local_xla//xla/python:__pkg__",
-        "//tsl/profiler:internal",
-        "//tsl/profiler/rpc:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/lib/io:zlib_compression_options",
         "//tsl/lib/io:zlib_outputbuffer",
@@ -81,20 +69,13 @@ cc_library(
 tf_profiler_pybind_cc_library_wrapper(
     name = "profiler_client_for_pybind",
     actual = ":profiler_client",
-    visibility = internal_visibility([
-        "//tensorflow/core/profiler/rpc/client:__pkg__",
-        "//tensorflow/python/profiler/internal:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "profiler_client",
     hdrs = ["profiler_client.h"],
-    visibility = internal_visibility([
-        "@local_xla//xla:__subpackages__",
-        "//tensorflow/core/profiler/rpc/client:__pkg__",
-        "//tensorflow/python/profiler/internal:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         ":profiler_client_impl",
         "//tsl/platform:status",
@@ -113,12 +94,7 @@ cc_library(
         "profiler_client.h",
     ],
     copts = tf_profiler_copts(),
-    visibility = internal_visibility([
-        "@local_xla//xla/python:__pkg__",
-        "//tensorflow/core/profiler/rpc/client:__pkg__",
-        "//tensorflow/python:__pkg__",
-        "//tensorflow/python/profiler/internal:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:errors",
         "//tsl/platform:logging",
@@ -138,6 +114,7 @@ cc_library(
     name = "profiler_client_test_util",
     testonly = 1,
     hdrs = ["profiler_client_test_util.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:logging",
         "//tsl/platform:test",
@@ -154,6 +131,7 @@ cc_library(
 tsl_cc_test(
     name = "profiler_client_test",
     srcs = ["profiler_client_test.cc"],
+    visibility = ["//visibility:public"],
     deps = [
         ":profiler_client",
         ":profiler_client_impl",  # for oss
@@ -178,6 +156,7 @@ cc_library(
     srcs = ["remote_profiler_session_manager.cc"],
     hdrs = ["remote_profiler_session_manager.h"],
     copts = tf_profiler_copts(),
+    visibility = ["//visibility:public"],
     deps = [
         ":profiler_client_for_pybind",
         "//tsl/platform:env_time",
@@ -198,6 +177,7 @@ cc_library(
 tsl_cc_test(
     name = "remote_profiler_session_manager_test",
     srcs = ["remote_profiler_session_manager_test.cc"],
+    visibility = ["//visibility:public"],
     deps = [
         ":profiler_client_impl",  # for oss
         ":profiler_client_test_util",

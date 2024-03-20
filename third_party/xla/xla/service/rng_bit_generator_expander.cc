@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -52,11 +52,9 @@ bool RngBitGeneratorExpander::InstructionMatchesPattern(
   return instruction->opcode() == HloOpcode::kRngBitGenerator;
 }
 
-absl::StatusOr<HloComputation*>
-RngBitGeneratorExpander::GetGeneratorComputation(const Shape& data_shape,
-                                                 const Shape& state_shape,
-                                                 RandomAlgorithm algorithm,
-                                                 HloModule* module) {
+StatusOr<HloComputation*> RngBitGeneratorExpander::GetGeneratorComputation(
+    const Shape& data_shape, const Shape& state_shape,
+    RandomAlgorithm algorithm, HloModule* module) {
   RngGeneratorKey cache_key{data_shape, state_shape, algorithm, module};
   auto it = computation_cache_.find(cache_key);
   if (it != computation_cache_.end()) {
@@ -99,7 +97,7 @@ RngBitGeneratorExpander::GetGeneratorComputation(const Shape& data_shape,
   return new_computation;
 }
 
-absl::StatusOr<HloInstruction*> RngBitGeneratorExpander::ExpandInstruction(
+StatusOr<HloInstruction*> RngBitGeneratorExpander::ExpandInstruction(
     HloInstruction* hlo) {
   HloRngBitGeneratorInstruction* rng = Cast<HloRngBitGeneratorInstruction>(hlo);
   RandomAlgorithm algorithm = rng->algorithm();

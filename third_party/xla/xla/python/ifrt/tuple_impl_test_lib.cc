@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ namespace xla {
 namespace ifrt {
 namespace {
 
-absl::StatusOr<tsl::RCReference<Array>> MakeArray(Client* client) {
+StatusOr<tsl::RCReference<Array>> MakeArray(Client* client) {
   DType dtype(DType::kF32);
   Shape shape({2, 3});
   std::vector<float> data(6);

@@ -59,11 +59,11 @@ Status DeleteIfExists(ResourceMgr* resource_manager,
       resource_manager->default_container(), resource_name);
   if (status.ok()) {
     VLOG(1) << "Removed existing resource " << resource_name;
-    return absl::OkStatus();
+    return OkStatus();
   }
   if (status.code() == error::NOT_FOUND) {
     VLOG(1) << "No resource " << resource_name << " to remove";
-    return absl::OkStatus();
+    return OkStatus();
   }
   VLOG(1) << "Error removing resource " << resource_name << " : " << status;
   return status;
@@ -151,7 +151,7 @@ class ConfigureAndInitializeGlobalTPUOpKernel : public OpKernel {
     }
 
     auto start = absl::Now();
-    auto init_status = absl::OkStatus();
+    auto init_status = OkStatus();
 
     // Keep trying to initialize underlying TPU system until either TPU system
     // is initialized or initialization times out.
@@ -242,7 +242,7 @@ class ConfigureAndInitializeGlobalTPUOpKernel : public OpKernel {
                      tpu::kTpuEmbeddingEngineStateInterfaceResourceName,
                      tpu::TpuEmbeddingEngineStateInterface::Create()));
 
-    return absl::OkStatus();
+    return OkStatus();
   }
 };
 

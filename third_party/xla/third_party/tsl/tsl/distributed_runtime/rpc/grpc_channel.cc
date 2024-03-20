@@ -49,10 +49,10 @@ string MakeAddress(const string& job, int replica, int task) {
 }
 
 // Allows the host to be a raw IP (either v4 or v6).
-absl::Status ValidateHostPortPair(const string& host_port) {
+Status ValidateHostPortPair(const string& host_port) {
   string bns_prefix = "/bns/";
   if (host_port.substr(0, bns_prefix.length()) == bns_prefix) {
-    return absl::OkStatus();
+    return OkStatus();
   }
   uint32 port;
   auto colon_index = host_port.find_last_of(':');
@@ -61,7 +61,7 @@ absl::Status ValidateHostPortPair(const string& host_port) {
     return errors::InvalidArgument("Could not interpret \"", host_port,
                                    "\" as a host-port pair.");
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 ::grpc::ChannelArguments* CreateDefaultChannelArguments() {
@@ -140,22 +140,21 @@ const ::grpc::ChannelArguments* GetDefaultChannelArguments() {
   return args;
 }
 
-absl::Status NewHostPortGrpcChannel(const string& target,
-                                    const RPCOptions* rpc_options,
-                                    SharedGrpcChannelPtr* channel_pointer) {
+Status NewHostPortGrpcChannel(const string& target,
+                              const RPCOptions* rpc_options,
+                              SharedGrpcChannelPtr* channel_pointer) {
   // Minimally ensure that the target is valid
   TF_RETURN_IF_ERROR(ValidateHostPortPair(target));
 
   ::grpc::ChannelArguments args = GetChannelArguments(rpc_options);
   *channel_pointer = ::grpc::CreateCustomChannel(
       "dns:///" + target, ::grpc::InsecureChannelCredentials(), args);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 ChannelCreationFunction ConvertToChannelCreationFunction(
-    const std::function<absl::Status(string, const RPCOptions*,
-                                     SharedGrpcChannelPtr*)>&
-        new_channel_func_ptr) {
+    const std::function<Status(string, const RPCOptions*,
+                               SharedGrpcChannelPtr*)>& new_channel_func_ptr) {
   return [new_channel_func_ptr](const string& target) -> SharedGrpcChannelPtr {
     SharedGrpcChannelPtr channel_ptr;
     if (new_channel_func_ptr(target, /*rpc_options=*/nullptr, &channel_ptr)
@@ -167,7 +166,7 @@ ChannelCreationFunction ConvertToChannelCreationFunction(
   };
 }
 
-absl::Status GrpcChannelSpec::AddHostPortsJob(
+Status GrpcChannelSpec::AddHostPortsJob(
     const string& job_id, const std::map<int, string>& host_ports) {
   if (!job_ids_.insert(job_id).second) {
     return errors::InvalidArgument(
@@ -177,7 +176,7 @@ absl::Status GrpcChannelSpec::AddHostPortsJob(
     TF_RETURN_IF_ERROR(ValidateHostPortPair(id_host_port.second));
   }
   host_ports_jobs_.emplace_back(job_id, host_ports);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 namespace {

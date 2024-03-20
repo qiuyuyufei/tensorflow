@@ -1,36 +1,28 @@
-load("//xla:lit.bzl", "enforce_glob", "lit_test_suite")
+load("//xla:glob_lit_test.bzl", "glob_lit_tests")
 load("//xla:xla.bzl", "xla_cc_test")
 
 package(
+    default_visibility = ["//visibility:public"],
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
 
-lit_test_suite(
+glob_lit_tests(
     name = "all_tests",
-    srcs = enforce_glob(
-        [
-            "ifrt_duplicated_callee_elimination.mlir",
-            "spmd_expansion.mlir",
-            "spmd_interface_verification.mlir",
-            "verify_array.mlir",
-            "verify_assemble.mlir",
-            "verify_attrs.mlir",
-            "verify_call.mlir",
-            "verify_call_loaded_executable.mlir",
-            "verify_disassemble.mlir",
-            "verify_loaded_executable.mlir",
-            "verify_reshard.mlir",
-        ],
-        include = [
-            "*.mlir",
-        ],
-    ),
-    cfg = "//xla:lit.cfg.py",
-    tools = [
+    data = [":test_utilities"],
+    driver = "//xla:run_lit.sh",
+    test_file_exts = ["mlir"],
+)
+
+filegroup(
+    name = "test_utilities",
+    testonly = True,
+    data = [
         ":ifrt-opt",
         "@llvm-project//llvm:FileCheck",
+        "@llvm-project//mlir:run_lit.sh",
     ],
+    visibility = ["//visibility:public"],
 )
 
 cc_binary(
@@ -51,7 +43,7 @@ cc_library(
     testonly = True,
     srcs = ["executable_impl_test_base.cc"],
     hdrs = ["executable_impl_test_base.h"],
-    visibility = ["//xla/python/ifrt:friends"],
+    visibility = ["//visibility:public"],
     deps = [
         "//xla:status_macros",
         "//xla/mlir_hlo:hlo_dialect_registration",
@@ -75,7 +67,7 @@ cc_library(
     name = "executable_impl_test_lib",
     testonly = True,
     srcs = ["executable_impl_test_lib.cc"],
-    visibility = ["//xla/python/ifrt:friends"],
+    visibility = ["//visibility:public"],
     deps = [
         ":executable_impl_test_base",
         "//xla/pjrt:pjrt_executable",

@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ limitations under the License.
 #include "xla/statusor.h"
 #include "xla/stream_executor/cuda/cuda_platform_id.h"
 #include "xla/stream_executor/host/host_platform_id.h"
-#include "xla/stream_executor/platform_manager.h"
 #include "xla/stream_executor/rocm/rocm_platform_id.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/types.h"
@@ -64,8 +63,8 @@ std::string CanonicalPlatformName(const std::string& platform_name) {
   return lowercase_platform_name;
 }
 
-absl::StatusOr<std::vector<se::Platform*>> GetSupportedPlatforms() {
-  return se::PlatformManager::PlatformsWithFilter(
+StatusOr<std::vector<se::Platform*>> GetSupportedPlatforms() {
+  return se::MultiPlatformManager::PlatformsWithFilter(
       [](const se::Platform* platform) {
         auto compiler_status = Compiler::GetForPlatform(platform);
         bool supported = compiler_status.ok();
@@ -80,18 +79,18 @@ absl::StatusOr<std::vector<se::Platform*>> GetSupportedPlatforms() {
 
 }  // namespace
 
-/*static */ absl::StatusOr<std::string> PlatformUtil::CanonicalPlatformName(
+/*static */ StatusOr<std::string> PlatformUtil::CanonicalPlatformName(
     const std::string& platform_name) {
   return xla::CanonicalPlatformName(platform_name);
 }
 
-/* static */ absl::StatusOr<std::vector<se::Platform*>>
+/* static */ StatusOr<std::vector<se::Platform*>>
 PlatformUtil::GetSupportedPlatforms() {
   // Gather all platforms which have an XLA compiler.
   return xla::GetSupportedPlatforms();
 }
 
-/* static */ absl::StatusOr<se::Platform*> PlatformUtil::GetDefaultPlatform() {
+/* static */ StatusOr<se::Platform*> PlatformUtil::GetDefaultPlatform() {
   TF_ASSIGN_OR_RETURN(auto platforms, GetSupportedPlatforms());
 
   se::Platform* platform = nullptr;
@@ -122,10 +121,10 @@ PlatformUtil::GetSupportedPlatforms() {
       platforms_string);
 }
 
-/*static*/ absl::StatusOr<se::Platform*> PlatformUtil::GetPlatform(
+/*static*/ StatusOr<se::Platform*> PlatformUtil::GetPlatform(
     const std::string& platform_name) {
   TF_ASSIGN_OR_RETURN(se::Platform * platform,
-                      se::PlatformManager::PlatformWithName(
+                      se::MultiPlatformManager::PlatformWithName(
                           xla::CanonicalPlatformName(platform_name)));
   TF_RETURN_IF_ERROR(Compiler::GetForPlatform(platform).status());
   return platform;
@@ -162,7 +161,7 @@ static bool IsDeviceSupported(se::StreamExecutor* executor) {
   return true;
 }
 
-/* static */ absl::StatusOr<std::vector<se::StreamExecutor*>>
+/* static */ StatusOr<std::vector<se::StreamExecutor*>>
 PlatformUtil::GetStreamExecutors(
     se::Platform* platform,
     const std::optional<std::set<int>>& allowed_devices) {
@@ -238,7 +237,7 @@ PlatformUtil::GetStreamExecutors(
     }
   }
   if (out.empty()) {
-    return Internal("no supported devices found for platform %s",
+    return InternalError("no supported devices found for platform %s",
                          platform->Name());
   }
   return out;

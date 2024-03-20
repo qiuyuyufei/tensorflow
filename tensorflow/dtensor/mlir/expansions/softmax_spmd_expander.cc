@@ -141,7 +141,7 @@ Status ComputeExpAndSum(mlir::OpBuilder& builder, const mlir::Value& logits,
       ComputeGlobalReduce(builder, exp_of_shifted_logits, logits_layout,
                           {class_dimension}, kReduceOpAdd,
                           /*keep_dims=*/true));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Computes softmax from its components. Assumes that builder's insertion point

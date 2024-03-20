@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -174,7 +174,7 @@ class HloModuleGroupPass : public HloPassInterface {
   StatusOr<bool> Run(HloModule* module,
                      const absl::flat_hash_set<absl::string_view>&
                          execution_threads) override {
-    return Internal("Module group pass cannot be run on a module");
+    return InternalError("Module group pass cannot be run on a module");
   }
 };
 

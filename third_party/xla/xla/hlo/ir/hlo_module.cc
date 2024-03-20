@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -74,7 +74,6 @@ HloModule::HloModule(const std::string& name,
       config_(std::move(config)),
       unique_id_(next_unique_module_id_++),
       metadata_(tsl::Env::Default()),
-      autofdo_fingerprint_(""),
       comp_envs_(std::move(comp_envs)) {
   metadata_.set_canonical_module_id(unique_id_);
 }
@@ -188,7 +187,7 @@ HloComputation* HloModule::AddEntryComputationWithLayouts(
 }
 
 Status HloModule::RemoveEmbeddedComputation(HloComputation* to_remove) {
-  if (has_schedule()) {
+  if (has_schedule() && !to_remove->IsCalledComputation()) {
     schedule_->remove_computation(to_remove);
   }
 
@@ -370,15 +369,6 @@ void HloModule::Print(Printer* printer, const HloPrintOptions& options) const {
     entry_computation_layout().Print(printer);
     printer->Append("}");
   }
-  if (config.allow_spmd_sharding_propagation_to_parameters().size() != 1 ||
-      config.allow_spmd_sharding_propagation_to_parameters().back()) {
-    printer->Append(", allow_spmd_sharding_propagation_to_parameters={");
-    AppendJoin(printer, config.allow_spmd_sharding_propagation_to_parameters(),
-               ",", [](Printer* printer, bool i) {
-                 printer->Append(i ? "true" : "false");
-               });
-    printer->Append("}");
-  }
   if (config.allow_spmd_sharding_propagation_to_output().size() != 1 ||
       config.allow_spmd_sharding_propagation_to_output().back()) {
     printer->Append(", allow_spmd_sharding_propagation_to_output={");
@@ -387,14 +377,6 @@ void HloModule::Print(Printer* printer, const HloPrintOptions& options) const {
                  printer->Append(i ? "true" : "false");
                });
     printer->Append("}");
-  }
-  if (config.replica_count() != 1) {
-    printer->Append(", replica_count=");
-    printer->Append(config.replica_count());
-  }
-  if (config.num_partitions() != 1) {
-    printer->Append(", num_partitions=");
-    printer->Append(config.num_partitions());
   }
   if (!frontend_attributes_.map().empty()) {
     AppendCat(printer, ", frontend_attributes=",
@@ -489,7 +471,6 @@ HloModuleProto HloModule::ToProto() const {
     profile_info_proto.set_relative_speedup(profile_info.relative_speedup());
     profile_info_proto.set_profile_source(profile_info.profile_source());
     profile_info_proto.set_compilation_event(profile_info.compilation_event());
-    profile_info_proto.set_fingerprint(profile_info.fingerprint());
   }
   if (config_.get().has_static_device_assignment()) {
     DeviceAssignmentProto device_assignment;
@@ -711,11 +692,6 @@ StatusOr<HloModuleConfig> HloModule::CreateModuleConfigFromShape(
     }
     module_config.set_auto_spmd_partitioning_mesh_ids(mesh_ids);
     module_config.set_deduplicate_hlo(execution_options->deduplicate_hlo());
-    if (!execution_options->allow_spmd_sharding_propagation_to_parameters()
-             .empty()) {
-      module_config.set_allow_spmd_sharding_propagation_to_parameters(
-          execution_options->allow_spmd_sharding_propagation_to_parameters());
-    }
     if (!execution_options->allow_spmd_sharding_propagation_to_output()
              .empty()) {
       module_config.set_allow_spmd_sharding_propagation_to_output(
@@ -928,12 +904,10 @@ std::vector<HloComputation*> HloModule::MakeComputationPostOrder(
   absl::flat_hash_set<HloComputation*> nonroot_computations;
   nonroot_computations.reserve(computations_.size() - 1);
   for (auto& computation : computations_) {
-    for (const HloInstructionInfo& inst :
-         computation->instructions_with_info()) {
-      if (HloInstruction::MightHaveCalledComputations(inst.opcode())) {
-        for (HloComputation* called_computation : inst->called_computations()) {
-          nonroot_computations.insert(called_computation);
-        }
+    for (auto* instruction : computation->instructions()) {
+      for (HloComputation* called_computation :
+           instruction->called_computations()) {
+        nonroot_computations.insert(called_computation);
       }
     }
   }

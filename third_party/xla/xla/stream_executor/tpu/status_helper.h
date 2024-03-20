@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ limitations under the License.
 #include "xla/stream_executor/tpu/c_api_decl.h"
 #include "xla/stream_executor/tpu/tpu_executor_api.h"
 #include "xla/stream_executor/tpu/tpu_executor_c_api.h"
+#include "tsl/platform/status.h"
 
 class StatusHelper {
  public:
@@ -30,12 +31,12 @@ class StatusHelper {
     stream_executor::tpu::ExecutorApiFn()->TpuStatus_FreeFn(c_status);
   }
 
-  static absl::Status FromC(  // TENSORFLOW_STATUS_OK
+  static tsl::Status FromC(  // TENSORFLOW_STATUS_OK
       TF_Status* const c_status) {
     if (stream_executor::tpu::ExecutorApiFn()->TpuStatus_OkFn(c_status)) {
-      return absl::OkStatus();
+      return ::tsl::OkStatus();
     } else {
-      return absl::Status(  // TENSORFLOW_STATUS_OK
+      return tsl::Status(  // TENSORFLOW_STATUS_OK
           absl::StatusCode(
               stream_executor::tpu::ExecutorApiFn()->TpuStatus_CodeFn(
                   c_status)),
@@ -47,7 +48,7 @@ class StatusHelper {
     return stream_executor::tpu::ExecutorApiFn()->TpuStatus_OkFn(c_status);
   }
 
-  absl::Status status() const {  // TENSORFLOW_STATUS_OK
+  tsl::Status status() const {  // TENSORFLOW_STATUS_OK
     return FromC(c_status);
   }
 

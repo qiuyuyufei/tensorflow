@@ -46,7 +46,7 @@ from tensorflow.python.ops import gen_logging_ops as _gen_logging_ops
 from tensorflow.python.ops import gen_summary_ops as _gen_summary_ops  # pylint: disable=unused-import
 from tensorflow.python.ops import summary_op_util as _summary_op_util
 from tensorflow.python.ops import summary_ops_v2 as _summary_ops_v2
-from tensorflow.python.summary import tb_summary
+
 # exports FileWriter, FileWriterCache
 # pylint: disable=unused-import
 from tensorflow.python.summary.writer.writer import FileWriter
@@ -124,8 +124,9 @@ def scalar(name, tensor, collections=None, family=None):
   if _should_invoke_v2_op():
     # Defer the import to happen inside the symbol to prevent breakage due to
     # missing dependency.
+    from tensorboard.summary.v2 import scalar as scalar_v2  # pylint: disable=g-import-not-at-top
     with _compat_summary_scope(name, family) as tag:
-      tb_summary.scalar(name=tag, data=tensor, step=_get_step_for_v2())
+      scalar_v2(name=tag, data=tensor, step=_get_step_for_v2())
     # Return an empty Tensor, which will be acceptable as an input to the
     # `tf.compat.v1.summary.merge()` API.
     return _constant_op.constant(b'')
@@ -234,8 +235,9 @@ def image(name, tensor, max_outputs=3, collections=None, family=None):
   if _should_invoke_v2_op():
     # Defer the import to happen inside the symbol to prevent breakage due to
     # missing dependency.
+    from tensorboard.summary.v2 import image as image_v2  # pylint: disable=g-import-not-at-top
     with _compat_summary_scope(name, family) as tag:
-      tb_summary.image(
+      image_v2(
           name=tag,
           data=tensor,
           step=_get_step_for_v2(),
@@ -328,8 +330,9 @@ def histogram(name, values, collections=None, family=None):
   if _should_invoke_v2_op():
     # Defer the import to happen inside the symbol to prevent breakage due to
     # missing dependency.
+    from tensorboard.summary.v2 import histogram as histogram_v2  # pylint: disable=g-import-not-at-top
     with _compat_summary_scope(name, family) as tag:
-      tb_summary.histogram(name=tag, data=values, step=_get_step_for_v2())
+      histogram_v2(name=tag, data=values, step=_get_step_for_v2())
     # Return an empty Tensor, which will be acceptable as an input to the
     # `tf.compat.v1.summary.merge()` API.
     return _constant_op.constant(b'')
@@ -437,11 +440,12 @@ def audio(name, tensor, sample_rate, max_outputs=3, collections=None,
   if _should_invoke_v2_op():
     # Defer the import to happen inside the symbol to prevent breakage due to
     # missing dependency.
+    from tensorboard.summary.v2 import audio as audio_v2  # pylint: disable=g-import-not-at-top
     if tensor.shape.rank == 2:
       # TF2 op requires 3-D tensor, add the `channels` dimension.
       tensor = _array_ops.expand_dims_v2(tensor, axis=2)
     with _compat_summary_scope(name, family) as tag:
-      tb_summary.audio(
+      audio_v2(
           name=tag,
           data=tensor,
           sample_rate=sample_rate,
@@ -536,7 +540,8 @@ def text(name, tensor, collections=None):
       return _constant_op.constant('')
     # Defer the import to happen inside the symbol to prevent breakage due to
     # missing dependency.
-    tb_summary.text(name=name, data=tensor, step=_get_step_for_v2())
+    from tensorboard.summary.v2 import text as text_v2  # pylint: disable=g-import-not-at-top
+    text_v2(name=name, data=tensor, step=_get_step_for_v2())
     # Return an empty Tensor, which will be acceptable as an input to the
     # `tf.compat.v1.summary.merge()` API.
     return _constant_op.constant(b'')

@@ -186,7 +186,7 @@ Status TFRDecomposeContext::DecomposeGraph(mlir::ModuleOp user_module) {
   if (failed(pm_.run(user_module))) {
     return errors::Internal("Failed to run the decompose passes.");
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Constructor of the decompose context.

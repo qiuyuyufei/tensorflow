@@ -42,7 +42,7 @@ Status ParseBoolString(const string& bool_str, bool* bool_val) {
     return absl::InvalidArgumentError(
         absl::StrCat("Invalid string for bool value: ", bool_str));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
@@ -56,7 +56,7 @@ Status DebugNodeInserter::InsertNodes(
 
   if (watches.empty()) {
     // Nothing to do: Return OK right away.
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Debug ops and URLs for wildcard node names (if any).
@@ -125,7 +125,7 @@ Status DebugNodeInserter::InsertNodes(
   }
 
   if (tensor_watches.empty()) {
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   DeviceType device_type = DeviceType{device->device_type()};
@@ -253,7 +253,7 @@ Status DebugNodeInserter::InsertNodes(
     graph->RemoveEdge(edge);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void DebugNodeInserter::DeparallelizeWhileLoops(Graph* graph, Device* device) {
@@ -357,7 +357,7 @@ Status DebugNodeInserter::CreateCopyNode(
                                   " on watched tensor ", tensor_name));
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // static
@@ -409,7 +409,7 @@ Status DebugNodeInserter::ParseDebugOpName(
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // static
@@ -461,7 +461,7 @@ Status DebugNodeInserter::SetDebugNodeAttributes(
   }
 
   if (unfulfilled_keys.empty()) {
-    return absl::OkStatus();
+    return OkStatus();
   } else {
     return absl::InvalidArgumentError(absl::StrCat(
         unfulfilled_keys.size(),
@@ -514,7 +514,7 @@ Status DebugNodeInserter::CreateDebugNode(
     TF_RETURN_IF_ERROR(SetDebugNodeAttributes(*debug_node, custom_attributes));
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

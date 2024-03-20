@@ -98,7 +98,7 @@ tensorflow::Status FuncToGraph(GraphFuncOp func) {
   graph.getRegion().takeBody(func.getRegion());
   func.erase();
 
-  return absl::OkStatus();
+  return tensorflow::OkStatus();
 }
 
 }  // namespace tfg

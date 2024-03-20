@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -89,7 +89,6 @@ class MhloDialect : public Dialect {
 class TokenType : public Type::TypeBase<TokenType, Type, TypeStorage> {
  public:
   using Base::Base;
-  static constexpr StringLiteral name = "mhlo.token";
 };
 
 void printConvolutionDimensions(AsmPrinter &p, ConvDimensionNumbersAttr dnums);

@@ -61,10 +61,10 @@ Status ValidateProcessingMode(const ProcessingModeDef& processing_mode) {
         "specify a valid sharding policy. Please add the policy to either "
         "`IsDynamicShard` or `IsStaticShard` (i.e., auto-shard).");
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::StatusOr<AutoShardPolicy> ToAutoShardPolicy(
+StatusOr<AutoShardPolicy> ToAutoShardPolicy(
     const ProcessingModeDef::ShardingPolicy sharding_policy) {
   switch (sharding_policy) {
     case ProcessingModeDef::FILE:
@@ -87,7 +87,7 @@ absl::StatusOr<AutoShardPolicy> ToAutoShardPolicy(
   }
 }
 
-absl::StatusOr<TargetWorkers> ParseTargetWorkers(absl::string_view s) {
+StatusOr<TargetWorkers> ParseTargetWorkers(absl::string_view s) {
   std::string str_upper = absl::AsciiStrToUpper(s);
   if (str_upper.empty() || str_upper == kAuto) {
     return TARGET_WORKERS_AUTO;
@@ -115,7 +115,7 @@ std::string TargetWorkersToString(TargetWorkers target_workers) {
   }
 }
 
-absl::StatusOr<DeploymentMode> ParseDeploymentMode(absl::string_view s) {
+StatusOr<DeploymentMode> ParseDeploymentMode(absl::string_view s) {
   std::string str_upper = absl::AsciiStrToUpper(s);
   if (str_upper == kColocated) {
     return DEPLOYMENT_MODE_COLOCATED;

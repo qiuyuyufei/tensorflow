@@ -407,7 +407,7 @@ void DenseToSparsePass::runOnOperation() {
       }
 
       if (result.needs_densify) {
-        auto value = op->getOperand(operand);
+        const auto value = op->getOperand(operand);
         auto densify =
             builder.create<DensifyOp>(op->getLoc(), value.getType(), value);
         value.replaceAllUsesWith(densify);

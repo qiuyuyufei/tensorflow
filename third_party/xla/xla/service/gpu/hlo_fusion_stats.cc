@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,18 +15,16 @@ limitations under the License.
 
 #include "xla/service/gpu/hlo_fusion_stats.h"
 
-#include <set>
 #include <string>
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
+#include "absl/strings/match.h"
 #include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/status.h"
 #include "tsl/platform/errors.h"
+#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -38,7 +36,7 @@ class OpcodeCollector : public ConstDfsHloVisitorWithDefault {
   std::set<std::string> GetUniqueOpcodes() { return opcodes_; }
 
  protected:
-  absl::Status DefaultAction(const xla::HloInstruction* instr) final {
+  Status DefaultAction(const xla::HloInstruction* instr) final {
     switch (instr->opcode()) {
       case HloOpcode::kConstant:
         break;
@@ -49,7 +47,6 @@ class OpcodeCollector : public ConstDfsHloVisitorWithDefault {
       case HloOpcode::kCbrt:
       case HloOpcode::kCeil:
       case HloOpcode::kCos:
-      case HloOpcode::kErf:
       case HloOpcode::kExp:
       case HloOpcode::kExpm1:
       case HloOpcode::kFloor:
@@ -76,7 +73,7 @@ class OpcodeCollector : public ConstDfsHloVisitorWithDefault {
       default:
         opcodes_.insert(std::string(HloOpcodeString(instr->opcode())));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -85,7 +82,7 @@ class OpcodeCollector : public ConstDfsHloVisitorWithDefault {
 
 std::set<std::string> GetUniqueOpcodes(HloComputation* computation) {
   OpcodeCollector collector;
-  if (!computation->Accept(&collector).ok()) {
+  if (computation->Accept(&collector) != OkStatus()) {
     return {};
   }
   return collector.GetUniqueOpcodes();
@@ -102,9 +99,9 @@ std::string HloOpcodeHistogram::ToString() {
   return result;
 }
 
-absl::Status HloFusionStatsVisitor::RunOnModule(HloModule* module) {
+Status HloFusionStatsVisitor::RunOnModule(HloModule* module) {
   TF_RETURN_IF_ERROR(module->entry_computation()->Accept(this));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 std::string HloFusionStatsVisitor::ToString() {
@@ -116,12 +113,11 @@ std::string HloFusionStatsVisitor::ToString() {
                       input_fusion_opcode_histogram_.ToString());
 }
 
-absl::Status HloFusionStatsVisitor::DefaultAction(
-    const xla::HloInstruction* instr) {
-  return absl::OkStatus();
+Status HloFusionStatsVisitor::DefaultAction(const xla::HloInstruction* instr) {
+  return OkStatus();
 }
 
-absl::Status HloFusionStatsVisitor::HandleFusion(const HloInstruction* fusion) {
+Status HloFusionStatsVisitor::HandleFusion(const HloInstruction* fusion) {
   num_fusions_++;
   std::set<std::string> opcodes =
       GetUniqueOpcodes(fusion->fused_instructions_computation());
@@ -132,7 +128,7 @@ absl::Status HloFusionStatsVisitor::HandleFusion(const HloInstruction* fusion) {
     num_input_fusions_++;
     input_fusion_opcode_histogram_[opcodes]++;
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace gpu

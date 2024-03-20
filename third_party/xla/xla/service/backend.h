@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -74,12 +74,12 @@ class BackendOptions {
 class Backend {
  public:
   // Creates a new backend.
-  static absl::StatusOr<std::unique_ptr<Backend>> CreateBackend(
+  static StatusOr<std::unique_ptr<Backend>> CreateBackend(
       const BackendOptions& options);
 
   // Creates a backend for the default platform. The default platform is defined
   // in PlatformUtil.
-  static absl::StatusOr<std::unique_ptr<Backend>> CreateDefaultBackend();
+  static StatusOr<std::unique_ptr<Backend>> CreateDefaultBackend();
 
   ~Backend();
 
@@ -109,7 +109,7 @@ class Backend {
   }
 
   // Returns the stream executor for the given device ordinal.
-  absl::StatusOr<se::StreamExecutor*> stream_executor(int device_ordinal) const;
+  StatusOr<se::StreamExecutor*> stream_executor(int device_ordinal) const;
 
   // Returns the stream executor for the default device ordinal. This stream
   // executor can only be used when the number of computations is 1 (replication
@@ -122,13 +122,13 @@ class Backend {
   // Borrows a stream for use by the caller with a given priority, either by
   // grabbing it from an internal pool, or by constructing/initializating it,
   // and returns the result to the caller.
-  absl::StatusOr<StreamPool::Ptr> BorrowStream(
+  StatusOr<StreamPool::Ptr> BorrowStream(
       int device_ordinal,
       se::StreamPriority priority = se::StreamPriority::Default);
-  absl::StatusOr<StreamPool::Ptr> BorrowStream(
+  StatusOr<StreamPool::Ptr> BorrowStream(
       se::StreamExecutor* executor,
       se::StreamPriority priority = se::StreamPriority::Default);
-  absl::StatusOr<std::vector<StreamPool::Ptr>> BorrowStreams(
+  StatusOr<std::vector<StreamPool::Ptr>> BorrowStreams(
       int device_ordinal, int num_streams,
       se::StreamPriority priority = se::StreamPriority::Default);
 
@@ -136,8 +136,8 @@ class Backend {
   // as `BorrowStreams` above does.
   // Purely for convenience, the caller could rather make this anonymous
   // function itself.
-  std::function<absl::StatusOr<std::vector<StreamPool::Ptr>>(
-      int, int, se::StreamPriority)>
+  std::function<StatusOr<std::vector<StreamPool::Ptr>>(int, int,
+                                                       se::StreamPriority)>
   StreamBorrowerWithPriority() {
     return [this](int device_ordinal, int num_streams,
                   se::StreamPriority priority) {
@@ -159,8 +159,7 @@ class Backend {
   // Returns true if the devices with the given ordinals are equivalent from
   // XLA's perspective. That is, an executable compiled for one device would
   // be equivalent to an executable compiled for the other.
-  absl::StatusOr<bool> devices_equivalent(int device_ordinal_a,
-                                          int device_ordinal_b);
+  StatusOr<bool> devices_equivalent(int device_ordinal_a, int device_ordinal_b);
 
   // For the host platform, returns the configured eigen threadpool device to be
   // used for scheduling work. For other platforms, returns NULL.

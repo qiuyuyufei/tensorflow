@@ -14,8 +14,6 @@ py_strict_library(
     deps = [
         "//tensorflow/compiler/tf2xla/python:xla",
         "//tensorflow/core:protos_all_py",
-        "//tensorflow/python/eager:context",
-        "//tensorflow/python/ops:resource_variable_ops",
         "//third_party/py/numpy",
         "@local_xla//xla:xla_data_proto_py",
     ],
@@ -28,15 +26,13 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":xla_sharding",
-        # copybara:uncomment "//third_party/py/google/protobuf:use_fast_cpp_protos",
-        "//third_party/py/numpy",
-        "@local_xla//xla:xla_data_proto_py",
-        "//tensorflow/python/eager:context",
         "//tensorflow/python/eager:def_function",
         "//tensorflow/python/framework:dtypes",
+        "//tensorflow/python/framework:tensor",
         "//tensorflow/python/framework:test_lib",
         "//tensorflow/python/ops:array_ops",
-        "//tensorflow/python/ops:variables",
+        "//third_party/py/numpy",
         "@absl_py//absl/testing:absltest",
+        "@local_xla//xla:xla_data_proto_py",
     ],
 )

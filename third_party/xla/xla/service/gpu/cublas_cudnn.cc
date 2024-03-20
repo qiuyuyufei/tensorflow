@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,14 +17,7 @@ limitations under the License.
 
 #include <string>
 
-#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
-#include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_instructions.h"
-#include "xla/hlo/ir/hlo_opcode.h"
-#include "xla/status.h"
-#include "xla/util.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -48,11 +41,6 @@ bool IsCublasLtMatmulF8(const HloInstruction& hlo) {
          hlo.custom_call_target() == kCublasLtMatmulF8CallTarget;
 }
 
-bool IsTriangularSolve(const HloInstruction& hlo) {
-  return hlo.opcode() == HloOpcode::kCustomCall &&
-         hlo.custom_call_target() == kTriangularSolveCallTarget;
-}
-
 const absl::string_view kGemmCallTarget = "__cublas$gemm";
 const absl::string_view kCublasLtMatmulCallTarget = "__cublas$lt$matmul";
 const absl::string_view kCublasLtMatmulF8CallTarget = "__cublas$lt$matmul$f8";
@@ -72,48 +60,46 @@ const absl::string_view kCudnnConvReorderFilterCallTarget =
 const absl::string_view kCudnnConvReorderFilterAndBiasCallTarget =
     "__cudnn$convReorderFilterAndBias";
 
-const absl::string_view kCudnnNormCallTarget = "__cudnn$norm";
+const absl::string_view kCubDeviceRadixSortTarget = "__cub$DeviceRadixSort";
 
 // fMHA forward call targets.
-const absl::string_view kCudnnfMHABmmBmmCallTarget = "__cudnn$fmhaBmmBmm";
-const absl::string_view kCudnnfMHASoftmaxCallTarget = "__cudnn$fmhaSoftmax";
+const absl::string_view kCudnnfMHABmmBmmCallTarget = "__cudnn$fhmaBmmBmm";
+const absl::string_view kCudnnfMHASoftmaxCallTarget = "__cudnn$fhmaSoftmax";
 const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxCallTarget =
-    "__cudnn$fmhaScaleBiasMaskSoftmax";
+    "__cudnn$fhmaScaleBiasMaskSoftmax";
 const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget =
-    "__cudnn$fmhaScaleBiasMaskSoftmaxDropout";
+    "__cudnn$fhmaScaleBiasMaskSoftmaxDropout";
 const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget =
-    "__cudnn$fmhaScaleBiasSoftmaxDropout";
+    "__cudnn$fhmaScaleBiasSoftmaxDropout";
 const absl::string_view kCudnnfMHAScaleBiasSoftmaxCallTarget =
-    "__cudnn$fmhaScaleBiasSoftmax";
+    "__cudnn$fhmaScaleBiasSoftmax";
 const absl::string_view kCudnnfMHAScaleMaskSoftmaxCallTarget =
-    "__cudnn$fmhaScaleMaskSoftmax";
+    "__cudnn$fhmaScaleMaskSoftmax";
 const absl::string_view kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget =
-    "__cudnn$fmhaScaleMaskSoftmaxDropout";
+    "__cudnn$fhmaScaleMaskSoftmaxDropout";
 const absl::string_view kCudnnfMHASoftmaxDropoutCallTarget =
-    "__cudnn$fmhaSoftmaxDropout";
+    "__cudnn$fhmaSoftmaxDropout";
 
 // fMHA backward call targets.
 const absl::string_view kCudnnfMHABmmBmmBackwardCallTarget =
-    "__cudnn$fmhaBmmBmmBackward";
+    "__cudnn$fhmaBmmBmmBackward";
 const absl::string_view kCudnnfMHASoftmaxBackwardCallTarget =
-    "__cudnn$fmhaSoftmaxBackward";
+    "__cudnn$fhmaSoftmaxBackward";
 const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxBackwardCallTarget =
-    "__cudnn$fmhaScaleBiasMaskSoftmaxBackward";
+    "__cudnn$fhmaScaleBiasMaskSoftmaxBackward";
 const absl::string_view
     kCudnnfMHAScaleBiasMaskSoftmaxDropoutBackwardCallTarget =
-        "__cudnn$fmhaScaleBiasMaskSoftmaxDropoutBackward";
+        "__cudnn$fhmaScaleBiasMaskSoftmaxDropoutBackward";
 const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutBackwardCallTarget =
-    "__cudnn$fmhaScaleBiasSoftmaxDropoutBackward";
+    "__cudnn$fhmaScaleBiasSoftmaxDropoutBackward";
 const absl::string_view kCudnnfMHAScaleBiasSoftmaxBackwardCallTarget =
-    "__cudnn$fmhaScaleBiasSoftmaxBackward";
+    "__cudnn$fhmaScaleBiasSoftmaxBackward";
 const absl::string_view kCudnnfMHAScaleMaskSoftmaxBackwardCallTarget =
-    "__cudnn$fmhaScaleMaskSoftmaxBackward";
+    "__cudnn$fhmaScaleMaskSoftmaxBackward";
 const absl::string_view kCudnnfMHAScaleMaskSoftmaxDropoutBackwardCallTarget =
-    "__cudnn$fmhaScaleMaskSoftmaxDropoutBackward";
+    "__cudnn$fhmaScaleMaskSoftmaxDropoutBackward";
 const absl::string_view kCudnnfMHASoftmaxDropoutBackwardCallTarget =
-    "__cudnn$fmhaSoftmaxDropoutBackward";
-
-const absl::string_view kCubDeviceRadixSortTarget = "__cub$DeviceRadixSort";
+    "__cudnn$fhmaSoftmaxDropoutBackward";
 
 bool IsCustomCallToDnnConvolution(const HloInstruction& hlo) {
   if (hlo.opcode() != HloOpcode::kCustomCall) {
@@ -136,12 +122,9 @@ bool IsCudnnConvolutionReorder(const HloInstruction& hlo) {
          target == kCudnnConvReorderFilterAndBiasCallTarget;
 }
 
-bool IsCustomCallToDnnNorm(const HloInstruction& hlo) {
-  if (hlo.opcode() != HloOpcode::kCustomCall) {
-    return false;
-  }
-  const auto& target = hlo.custom_call_target();
-  return target == kCudnnNormCallTarget;
+bool IsCubDeviceRadixSort(const HloInstruction& hlo) {
+  return hlo.opcode() == HloOpcode::kCustomCall &&
+         hlo.custom_call_target() == kCubDeviceRadixSortTarget;
 }
 
 bool IsFwdCustomCallTofMHA(const HloInstruction& hlo) {
@@ -191,12 +174,7 @@ bool IsCustomCallTofMHA(const HloInstruction& hlo) {
   return (IsFwdCustomCallTofMHA(hlo) || IsBwdCustomCallTofMHA(hlo));
 }
 
-bool IsCubDeviceRadixSort(const HloInstruction& hlo) {
-  return hlo.opcode() == HloOpcode::kCustomCall &&
-         hlo.custom_call_target() == kCubDeviceRadixSortTarget;
-}
-
-absl::StatusOr<CudnnConvKind> GetCudnnConvKind(
+StatusOr<CudnnConvKind> GetCudnnConvKind(
     const HloCustomCallInstruction* instr) {
   absl::string_view target = instr->custom_call_target();
   if (target == kCudnnConvForwardCallTarget) {
@@ -214,7 +192,7 @@ absl::StatusOr<CudnnConvKind> GetCudnnConvKind(
   if (target == kCudnnConvBiasActivationForwardCallTarget) {
     return CudnnConvKind::kForwardActivation;
   }
-  return Internal("Unexpected call target: %s", target);
+  return InternalError("Unexpected call target: %s", target);
 }
 
 std::string CudnnConvKindToString(CudnnConvKind kind) {
@@ -232,7 +210,7 @@ std::string CudnnConvKindToString(CudnnConvKind kind) {
   }
 }
 
-absl::StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(
+StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(
     const HloCustomCallInstruction* instr) {
   absl::string_view target = instr->custom_call_target();
   if (target == kCudnnfMHABmmBmmCallTarget) return CudnnfMHAKind::kBmmBmm;
@@ -270,7 +248,7 @@ absl::StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(
     return CudnnfMHAKind::kBackwardScaleBiasSoftmax;
   if (target == kCudnnfMHAScaleBiasSoftmaxDropoutBackwardCallTarget)
     return CudnnfMHAKind::kBackwardScaleBiasSoftmaxDropout;
-  return Internal("Unexpected call target: %s", target);
+  return InternalError("Unexpected call target: %s", target);
 }
 
 std::string CudnnfMHAKindToString(CudnnfMHAKind kind) {
@@ -315,7 +293,7 @@ std::string CudnnfMHAKindToString(CudnnfMHAKind kind) {
   }
 }
 
-absl::StatusOr<std::string> GetFMHAInstructionPrefix(
+StatusOr<std::string> GetFMHAInstructionPrefix(
     const std::string& custom_call_target) {
   if (custom_call_target == kCudnnfMHABmmBmmCallTarget) {
     return "fmha-bmm-bmm";
@@ -376,15 +354,15 @@ absl::StatusOr<std::string> GetFMHAInstructionPrefix(
       kCudnnfMHAScaleBiasSoftmaxDropoutBackwardCallTarget) {
     return "fmha-bmm-scale-bias-softmax-dropout-bmm-backward";
   }
-  return Internal("Unexpected call target: %s", custom_call_target);
+  return InternalError("Unexpected call target: %s", custom_call_target);
 }
 
 // Give fmha instruction a more useful name than "custom-call.42".
-absl::Status SetFMHAInstructionName(HloModule* module, HloInstruction* fmha) {
+Status SetFMHAInstructionName(HloModule* module, HloInstruction* fmha) {
   TF_ASSIGN_OR_RETURN(std::string fmha_prefix,
                       GetFMHAInstructionPrefix(fmha->custom_call_target()));
   module->SetAndUniquifyInstrName(fmha, fmha_prefix);
-  return absl::OkStatus();
+  return OkStatus();
 }
 }  // namespace gpu
 }  // namespace xla

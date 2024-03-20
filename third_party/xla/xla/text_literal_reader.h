@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ class TextLiteralReader {
  public:
   // See class comment -- reads a file in its entirety (there must be only one
   // literal in the text file path provided).
-  static absl::StatusOr<Literal> ReadPath(absl::string_view path);
+  static StatusOr<Literal> ReadPath(absl::string_view path);
 
  private:
   // Ownership of file is transferred.
@@ -48,7 +48,7 @@ class TextLiteralReader {
 
   // Parses a shape string on the first line, followed by lines of values to the
   // end of the file.
-  absl::StatusOr<Literal> ReadAllLines();
+  StatusOr<Literal> ReadAllLines();
 
   // Owns the file being read
   std::unique_ptr<tsl::RandomAccessFile> file_;

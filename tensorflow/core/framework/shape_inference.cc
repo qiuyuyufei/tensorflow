@@ -901,7 +901,7 @@ Status InferenceContext::MakeShapeFromTensorShape(const TensorShape& shape,
                                          out);
 }
 
-absl::StatusOr<ShapeHandle> InferenceContext::MakeShapeFromShapeTensor(
+StatusOr<ShapeHandle> InferenceContext::MakeShapeFromShapeTensor(
     const TensorShape& shape) {
   ShapeHandle out;
   TF_RETURN_IF_ERROR(MakeShapeFromTensorShape(shape, &out));

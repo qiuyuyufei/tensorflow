@@ -94,7 +94,7 @@ REGISTER_OP("Batch")
           "batch_index",
           {c->MakeShape({shape_inference::DimensionOrConstant(c->UnknownDim()),
                          shape_inference::DimensionOrConstant(3)})}));
-      return absl::OkStatus();
+      return OkStatus();
     })
     .SetIsDistributedCommunication();
 
@@ -112,7 +112,7 @@ REGISTER_OP("Unbatch")
       TF_RETURN_IF_ERROR(
           c->ReplaceDim(c->input(0), 0, c->UnknownDim(), &out_shape));
       c->set_output(0, out_shape);
-      return absl::OkStatus();
+      return OkStatus();
     });
 
 REGISTER_OP("UnbatchGrad")
@@ -126,7 +126,7 @@ REGISTER_OP("UnbatchGrad")
     .Attr("T: type")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       c->set_output(0, c->UnknownShapeOfRank(c->Rank(c->input(2))));
-      return absl::OkStatus();
+      return OkStatus();
     });
 
 }  // namespace tensorflow

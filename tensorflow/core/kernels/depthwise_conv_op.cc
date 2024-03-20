@@ -58,14 +58,16 @@ typedef Eigen::ThreadPoolDevice CPUDevice;
 typedef Eigen::GpuDevice GPUDevice;
 
 bool UseCudnnWith16BitFloat(OpKernelContext* ctx, DataType dtype) {
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#if GOOGLE_CUDA
   if (dtype == DT_HALF) {
     return true;
   } else if (dtype == DT_BFLOAT16) {
     auto* stream = ctx->op_device_context()->stream();
-    return IsBF16SupportedInOps(stream);
+    if (!stream) return false;
+    return stream->GetCudaComputeCapability().IsAtLeast(
+        se::CudaComputeCapability::AMPERE);
   }
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif
   return false;
 }
 

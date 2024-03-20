@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,11 +21,8 @@ limitations under the License.
 // Generated visualization is opened in a new default browser window using
 // /usr/bin/sensible-browser.
 
-#ifndef _WIN32
-#include <unistd.h>
-#endif
-
 #include <stdio.h>
+#include <unistd.h>
 
 #include <functional>
 #include <string>
@@ -459,9 +456,8 @@ void OpenUrl(const Options& opts, absl::string_view url) {
 // URL format doesn't work out of the box; it requires you to register a plugin.
 void RenderAndDisplayGraph(
     const Options& opts,
-    const std::function<absl::StatusOr<std::string>(RenderedGraphFormat)>&
-        renderer) {
-  absl::StatusOr<std::string> url_result = renderer(RenderedGraphFormat::kUrl);
+    const std::function<StatusOr<std::string>(RenderedGraphFormat)>& renderer) {
+  StatusOr<std::string> url_result = renderer(RenderedGraphFormat::kUrl);
   if (url_result.ok()) {
     std::string url = url_result.value();
     OpenUrl(opts, url);
@@ -477,8 +473,7 @@ void RenderAndDisplayGraph(
   }
 
   auto* env = tsl::Env::Default();
-  absl::StatusOr<std::string> html_result =
-      renderer(RenderedGraphFormat::kHtml);
+  StatusOr<std::string> html_result = renderer(RenderedGraphFormat::kHtml);
   if (!html_result.ok()) {
     std::cerr << "Failed to render graph as HTML: " << html_result.status()
               << std::endl;

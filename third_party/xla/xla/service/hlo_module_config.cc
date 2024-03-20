@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -85,9 +85,6 @@ std::string HloModuleConfig::compilation_cache_key() const {
     StrAppend(&key, device_type());
   }
   StrAppend(&key, "::alias_passthrough_params=", alias_passthrough_params_);
-  StrAppend(&key, "::allow_spmd_sharding_propagation_to_parameters={",
-            absl::StrJoin(allow_spmd_sharding_propagation_to_parameters_, ","),
-            "}");
   StrAppend(&key, "::allow_spmd_sharding_propagation_to_output={",
             absl::StrJoin(allow_spmd_sharding_propagation_to_output_, ","),
             "}");
@@ -306,9 +303,6 @@ StatusOr<HloModuleConfigProto> HloModuleConfig::ToProto() const {
   AssignProtoPhaseOrderingConfig(proto, phase_ordering_config_);
   proto.set_phase_index(phase_index_);
 
-  for (bool value : allow_spmd_sharding_propagation_to_parameters_) {
-    proto.add_allow_spmd_sharding_propagation_to_parameters(value);
-  }
   for (bool value : allow_spmd_sharding_propagation_to_output_) {
     proto.add_allow_spmd_sharding_propagation_to_output(value);
   }
@@ -376,9 +370,6 @@ StatusOr<std::unique_ptr<HloModuleConfig>> HloModuleConfig::CreateFromProto(
       proto.memory_space_assignment_config().end());
   AssignStructPhaseOrderingConfig(*config, proto);
   config->phase_index_ = proto.phase_index();
-  config->allow_spmd_sharding_propagation_to_parameters_.assign(
-      proto.allow_spmd_sharding_propagation_to_parameters().begin(),
-      proto.allow_spmd_sharding_propagation_to_parameters().end());
   config->allow_spmd_sharding_propagation_to_output_.assign(
       proto.allow_spmd_sharding_propagation_to_output().begin(),
       proto.allow_spmd_sharding_propagation_to_output().end());

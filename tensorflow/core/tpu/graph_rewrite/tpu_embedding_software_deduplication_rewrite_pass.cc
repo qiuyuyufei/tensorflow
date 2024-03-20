@@ -63,7 +63,7 @@ xla::Status CheckNumInputsOrOutputs(
 
 // Constructs a NodeDef proto for the XlaRecvTPUEmbeddingDeduplicationData node
 // to be added to the graph or function def.
-absl::StatusOr<NodeDef> MakeRecvDeduplicationDataNodeDef(
+xla::StatusOr<NodeDef> MakeRecvDeduplicationDataNodeDef(
     absl::string_view device_name, absl::string_view tpu_replicate_attr,
     absl::string_view tpu_embedding_config_str,
     absl::Span<const std::string> control_inputs) {
@@ -94,7 +94,7 @@ absl::StatusOr<NodeDef> MakeRecvDeduplicationDataNodeDef(
 
 // Constructs a NodeDef proto for the XlaRecvTPUEmbeddingActivations node to be
 // added to the graph or function def.
-absl::StatusOr<NodeDef> MakeRecvActivationsNodeDef(
+xla::StatusOr<NodeDef> MakeRecvActivationsNodeDef(
     const NodeDef& old_activations_node_def,
     absl::string_view deduplication_data_node_name,
     absl::string_view device_name, absl::string_view tpu_replicate_attr,
@@ -158,7 +158,7 @@ absl::StatusOr<NodeDef> MakeRecvActivationsNodeDef(
 
 // Constructs a NodeDef proto for the XlaRecvTPUEmbeddingDeduplicationData node
 // to be added to the graph or function def.
-absl::StatusOr<NodeDef> MakeSendGradientsNodeDef(
+xla::StatusOr<NodeDef> MakeSendGradientsNodeDef(
     const NodeDef& old_gradients_node_def,
     absl::string_view deduplication_data_node_name,
     absl::string_view device_name, absl::string_view tpu_replicate_attr,
@@ -722,7 +722,7 @@ std::vector<NodeDefBuilder::NodeOut> GetDataInputs(const NodeDef& node_def,
 }
 
 // Computes the RewriterConfig for the specified node_def.
-absl::StatusOr<RewriterConfig> ComputeRewriterConfigForNodeDef(
+xla::StatusOr<RewriterConfig> ComputeRewriterConfigForNodeDef(
     const NodeDef& node_def) {
   RewriterConfig rewriter_config;
   TF_RET_CHECK(!node_def.name().empty());
@@ -820,7 +820,7 @@ using RewriterConfigsByDevice =
 
 // Computes the RewriterConfigs for the specified FunctionDef (fdef) for each
 // device (multiple devices can be used for model parallelism).
-absl::StatusOr<RewriterConfigsByDevice> ComputeRewriterConfigsByDevice(
+xla::StatusOr<RewriterConfigsByDevice> ComputeRewriterConfigsByDevice(
     const FunctionDef& fdef) {
   RewriterConfigsByDevice final_rewriter_configs_by_device;
 

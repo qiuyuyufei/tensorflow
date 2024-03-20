@@ -37,7 +37,6 @@ py_strict_library(
     srcs = ["summary.py"],
     visibility = ["//visibility:public"],
     deps = [
-        ":tb_summary",
         "//tensorflow/core:protos_all_py",
         "//tensorflow/python/distribute:summary_op_util",
         "//tensorflow/python/eager:context",
@@ -124,11 +123,4 @@ tf_py_strict_test(
         "//tensorflow/python/training:training_util",
         "@pypi_tb_nightly//:pkg",
     ],
-)
-
-py_strict_library(
-    name = "tb_summary",
-    srcs = ["tb_summary.py"],
-    visibility = ["//tensorflow:internal"],
-    deps = ["//tensorflow/python/util:tf_export"],
 )

@@ -108,7 +108,7 @@ Status NewThreadPoolFromThreadPoolOptions(
         num_threads, !options.config.experimental().disable_thread_spinning(),
         /*allocator=*/nullptr);
     *owned = true;
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Global, named threadpool.
@@ -135,7 +135,7 @@ Status NewThreadPoolFromThreadPoolOptions(
   }
   *owned = false;
   *pool = mvalue->second;
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Function to create a global thread pool for sessions. The thread number is
@@ -206,7 +206,7 @@ class DirectSessionFactory : public SessionFactory {
       sessions_.push_back(session);
     }
     *out_session = session;
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status Reset(const SessionOptions& options,
@@ -367,6 +367,7 @@ DirectSession::DirectSession(const SessionOptions& options,
   }
   session_handle_ =
       strings::StrCat("direct", strings::FpToString(random::New64()));
+  int devices_added = 0;
   if (options.config.log_device_placement()) {
     const string mapping_str = device_mgr_->DeviceMappingString();
     string msg;
@@ -379,12 +380,17 @@ DirectSession::DirectSession(const SessionOptions& options,
       LOG(INFO) << msg;
     }
   }
-  // The client device is a CPU device from which we feed and fetch tensors.
-  device_set_.set_client_device(device_mgr_->HostCPU());
   for (auto d : device_mgr_->ListDevices()) {
     devices_.push_back(d);
     device_set_.AddDevice(d);
     d->op_segment()->AddHold(session_handle_);
+
+    // The first device added is special: it is the 'client device' (a
+    // CPU device) from which we feed and fetch Tensors.
+    if (devices_added == 0) {
+      device_set_.set_client_device(d);
+    }
+    ++devices_added;
   }
 }
 
@@ -424,7 +430,7 @@ Status DirectSession::Create(GraphDef&& graph) {
     }
     return ExtendLocked(std::move(graph));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::Extend(const GraphDef& graph) {
@@ -465,7 +471,7 @@ Status DirectSession::ExtendLocked(GraphDef&& graph) {
     execution_state_.swap(state);
     TF_RETURN_IF_ERROR(flib_def_->AddLibrary(graph.library()));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::Run(const NamedTensorList& inputs,
@@ -493,7 +499,7 @@ Status DirectSession::CreateDebuggerState(
   TF_RETURN_IF_ERROR(debugger_state->get()->PublishDebugMetadata(
       global_step, session_run_index, executor_step_index, input_names,
       output_names, target_names));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::DecorateAndPublishGraphForDebug(
@@ -504,7 +510,7 @@ Status DirectSession::DecorateAndPublishGraphForDebug(
 
   TF_RETURN_IF_ERROR(decorator->DecorateGraph(graph, device));
   TF_RETURN_IF_ERROR(decorator->PublishGraph(*graph, device->name()));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::RunInternal(
@@ -664,7 +670,6 @@ Status DirectSession::RunInternal(
   args.collective_executor =
       (run_state.collective_executor ? run_state.collective_executor->get()
                                      : nullptr);
-  args.session_config = &options_.config;
   args.session_state = &session_state_;
   args.session_handle = session_handle_;
   args.tensor_store = &run_state.tensor_store;
@@ -838,7 +843,7 @@ Status DirectSession::RunInternal(
   }
   metrics::UpdateGraphExecTime(options_.env->NowMicros() - start_time_usecs);
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::Run(const RunOptions& run_options,
@@ -959,7 +964,7 @@ Status DirectSession::Run(const RunOptions& run_options,
     metrics::RecordGraphOutputTensors(output_size);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::PRunSetup(const std::vector<string>& input_names,
@@ -1016,7 +1021,6 @@ Status DirectSession::PRunSetup(const std::vector<string>& input_names,
   // because RunOptions is not passed in so we can't know whether
   // their use is intended.
   args.collective_executor = nullptr;
-  args.session_config = &options_.config;
   args.runner = [this, pool](Executor::Args::Closure c) {
     pool->Schedule(std::move(c));
   };
@@ -1039,7 +1043,7 @@ Status DirectSession::PRunSetup(const std::vector<string>& input_names,
   }
 
   *handle = run_state_args.handle;
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::PRun(const string& handle, const NamedTensorList& inputs,
@@ -1205,7 +1209,7 @@ Status DirectSession::SendPRunInputs(const NamedTensorList& inputs,
       return s;
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::RecvPRunOutputs(
@@ -1250,7 +1254,7 @@ Status DirectSession::RecvPRunOutputs(
 
     (*outputs)[output_offset] = output_tensor;
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::CheckFetch(const NamedTensorList& feeds,
@@ -1311,7 +1315,7 @@ Status DirectSession::CheckFetch(const NamedTensorList& feeds,
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::CreateExecutors(
@@ -1376,7 +1380,7 @@ Status DirectSession::CreateExecutors(
                              tsl::core::RefCountPtr<Rendezvous>* r) {
         *r = tsl::core::RefCountPtr<Rendezvous>(
             new IntraProcessRendezvous(device_mgr));
-        return absl::OkStatus();
+        return OkStatus();
       }}));
 
   GraphOptimizer optimizer(optimizer_opts);
@@ -1485,7 +1489,7 @@ Status DirectSession::CreateExecutors(
 
   *out_executors_and_keys = std::move(ek);
   *out_func_info = std::move(func_info);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::GetOrCreateExecutors(
@@ -1520,7 +1524,7 @@ Status DirectSession::GetOrCreateExecutors(
     auto it = executors_.find(key);
     if (it != executors_.end()) {
       *executors_and_keys = it->second.get();
-      return absl::OkStatus();
+      return OkStatus();
     }
   }
 
@@ -1553,7 +1557,7 @@ Status DirectSession::GetOrCreateExecutors(
     auto it = executors_.find(sorted_key);
     if (it != executors_.end()) {
       *executors_and_keys = it->second.get();
-      return absl::OkStatus();
+      return OkStatus();
     }
   }
 
@@ -1599,7 +1603,7 @@ Status DirectSession::GetOrCreateExecutors(
   executors_.emplace(key, insert_result.first->second);
   *executors_and_keys = insert_result.first->second.get();
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::CreateGraphs(
@@ -1771,24 +1775,24 @@ Status DirectSession::CreateGraphs(
     const DeviceAttributes& attrs = d->attributes();
     response->emplace_back(attrs);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 ::tensorflow::Status DirectSession::Reset(
     const std::vector<string>& containers) {
   device_mgr_->ClearContainers(containers);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 ::tensorflow::Status DirectSession::Close() {
   cancellation_manager_->StartCancel();
   {
     mutex_lock l(closed_lock_);
-    if (closed_) return absl::OkStatus();
+    if (closed_) return OkStatus();
     closed_ = true;
   }
   if (factory_ != nullptr) factory_->Deregister(this);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 DirectSession::RunState::RunState(int64_t step_id,
@@ -1864,7 +1868,7 @@ void DirectSession::WaitForNotification(Notification* n, RunState* run_state,
   } else {
     notification->WaitForNotification();
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::MakeCallable(const CallableOptions& callable_options,
@@ -1882,7 +1886,7 @@ Status DirectSession::MakeCallable(const CallableOptions& callable_options,
     *out_handle = next_callable_handle_++;
     callables_[*out_handle] = {std::move(ek), std::move(func_info)};
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 class DirectSession::RunCallableCallFrame : public CallFrameInterface {
@@ -1909,7 +1913,7 @@ class DirectSession::RunCallableCallFrame : public CallFrameInterface {
     } else {
       *val = &(*feed_tensors_)[index];
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status SetRetval(int index, const Tensor& val) override {
@@ -1917,7 +1921,7 @@ class DirectSession::RunCallableCallFrame : public CallFrameInterface {
       return errors::Internal("RetVal index out of bounds: ", index);
     }
     (*fetch_tensors_)[index] = val;
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -2028,7 +2032,7 @@ class DirectSession::RunCallableCallFrame : public CallFrameInterface {
     metrics::RecordGraphOutputTensors(output_size);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 ::tensorflow::Status DirectSession::ReleaseCallable(CallableHandle handle) {
@@ -2037,7 +2041,7 @@ class DirectSession::RunCallableCallFrame : public CallFrameInterface {
     return errors::InvalidArgument("No such callable handle: ", handle);
   }
   callables_.erase(handle);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status DirectSession::Finalize() {
@@ -2051,7 +2055,7 @@ Status DirectSession::Finalize() {
   execution_state_.reset();
   flib_def_.reset();
   finalized_ = true;
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 DirectSession::Callable::~Callable() {

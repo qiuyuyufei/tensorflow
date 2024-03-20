@@ -332,7 +332,7 @@ class StreamingRPCState : public UntypedStreamingRPCState {
     e = &exchanges_.GetFront();
     mu_.unlock();
 
-    e->Complete(absl::OkStatus());
+    e->Complete(OkStatus());
 
     {
       mutex_lock l(mu_);

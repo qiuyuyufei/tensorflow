@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -56,16 +56,13 @@ class FusedIrEmitter {
   }
 
   // Returns the generator function for the given instruction.
-  absl::StatusOr<IndexedGenerator> GetGenerator(
-      const HloInstruction& instruction);
+  StatusOr<IndexedGenerator> GetGenerator(const HloInstruction& instruction);
 
  private:
-  absl::StatusOr<IndexedGenerator> CreateGenerator(
-      const HloInstruction& instruction);
-  absl::StatusOr<IndexedGenerator> DefaultAction(
-      const HloInstruction& instruction);
+  StatusOr<IndexedGenerator> CreateGenerator(const HloInstruction& instruction);
+  StatusOr<IndexedGenerator> DefaultAction(const HloInstruction& instruction);
   IndexedGenerator HandleConstant(const HloInstruction& constant);
-  absl::StatusOr<IndexedGenerator> HandleTuple(const HloInstruction& tuple);
+  StatusOr<IndexedGenerator> HandleTuple(const HloInstruction& tuple);
 
   ElementalIrEmitter& elemental_emitter_;
 

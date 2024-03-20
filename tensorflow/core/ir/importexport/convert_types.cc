@@ -217,8 +217,8 @@ Status ConvertToMlirShape(const TensorShapeProto& input_shape,
   return ::tensorflow::OkStatus();
 }
 
-absl::StatusOr<Type> ConvertToMlirTensorType(const TensorShapeProto& shape,
-                                             DataType dtype, Builder* builder) {
+tensorflow::StatusOr<Type> ConvertToMlirTensorType(
+    const TensorShapeProto& shape, DataType dtype, Builder* builder) {
   Type element_type;
   TF_RETURN_IF_ERROR(ConvertDataType(dtype, *builder, &element_type));
   if (shape.unknown_rank()) {

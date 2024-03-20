@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -50,8 +50,6 @@ class SymbolUploader {
   virtual void MaybeUploadSymbolMapping(
       absl::string_view unoptimized_fingerprint,
       absl::string_view optimized_fingerprint) = 0;
-
-  virtual void WaitForUploads() = 0;
 };
 
 // Registers a single process-wide XSymbolUploader to use. The registry is used
@@ -104,13 +102,6 @@ inline void MaybeUploadGpuSymbolMapping(
       uploader != nullptr) {
     return uploader->MaybeUploadSymbolMapping(unoptimized_fingerprint,
                                               optimized_fingerprint);
-  }
-}
-
-inline void MaybeWaitForUploads() {
-  if (SymbolUploader* uploader = GetGlobalSymbolUploaderRegistry().uploader();
-      uploader != nullptr) {
-    uploader->WaitForUploads();
   }
 }
 

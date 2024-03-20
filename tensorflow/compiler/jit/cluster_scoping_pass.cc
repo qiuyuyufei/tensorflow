@@ -142,12 +142,12 @@ Status ClusterScopingPassImpl::ScopingForPipelineStages() {
     }
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status ClusterScopingPassImpl::Run() {
   if (global_jit_level_ == OptimizerOptions::OFF) {
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   return ScopingForPipelineStages();

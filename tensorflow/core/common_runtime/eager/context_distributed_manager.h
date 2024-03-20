@@ -46,8 +46,7 @@ class EagerContextDistributedManager
 
   Status SetOrUpdateServerDef(const ServerDef& server_def, bool reset_context,
                               int keep_alive_secs, int64_t init_timeout_in_ms,
-                              int retries,
-                              bool clear_existing_contexts = false) override;
+                              int retries) override;
 
   Status InitializeLocalOnlyContext(const ServerDef& server_def,
                                     int keep_alive_secs) override;

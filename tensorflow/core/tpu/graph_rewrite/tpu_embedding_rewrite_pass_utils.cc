@@ -69,7 +69,7 @@ Status ReplaceNode(const NodeDef& to_def, Node* from, Node** to, Graph* graph) {
   // Remove original node.
   graph->RemoveNode(from);
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

@@ -336,7 +336,6 @@ bool IsOpTypeAllowedTf2XlaFallback(const TypeID& type_id) {
             TypeID::get<TF::UnpackOp>(),
             TypeID::get<TF::UpperBoundOp>(),
             TypeID::get<TF::WhereOp>(),
-            TypeID::get<TF::XlaSendTPUEmbeddingGradientsOp>(),
             TypeID::get<TF::XlaBroadcastHelperOp>(),
             TypeID::get<TF::XlaCallModuleOp>(),
             TypeID::get<TF::XlaCustomCallV2Op>(),
@@ -482,7 +481,6 @@ bool IsOpTypeAllowedTf2XlaPreferred(const TypeID& type_id) {
     TypeID::get<TF::UnsortedSegmentProdOp>(),
     TypeID::get<TF::UnsortedSegmentSumOp>(),
     TypeID::get<TF::XdivyOp>(),
-    TypeID::get<TF::XlaSendTPUEmbeddingGradientsOp>(),
     TypeID::get<TF::XlaAllReduceOp>(),
     TypeID::get<TF::XlaGatherOp>(),
     TypeID::get<TF::Xlog1pyOp>(),
@@ -493,19 +491,6 @@ bool IsOpTypeAllowedTf2XlaPreferred(const TypeID& type_id) {
   // clang-format on
 
   return ops->contains(type_id);
-}
-
-const llvm::DenseSet<mlir::TypeID>& DynamicTensorflowOps() {
-  // The static variable is a pointer in order to avoid destruction upon thread
-  // termination.
-  static const llvm::DenseSet<mlir::TypeID>* ops =
-      new llvm::DenseSet<mlir::TypeID>{
-          TypeID::get<mlir::TF::DynamicPartitionOp>(),
-          TypeID::get<mlir::TF::UniqueOp>(),
-          TypeID::get<mlir::TF::WhereOp>(),
-          TypeID::get<mlir::TF::XlaSetDynamicDimensionSizeOp>(),
-      };
-  return *ops;
 }
 
 }  // namespace
@@ -531,10 +516,6 @@ bool IsOpAllowedTf2xlaFallback(const TypeID& type_id) {
 
 bool IsOpAllowedTf2xlaPreferred(const TypeID& type_id) {
   return IsOpTypeAllowedTf2XlaPreferred(type_id);
-}
-
-bool IsDynamicPadderOp(const TypeID& type_id) {
-  return DynamicTensorflowOps().contains(type_id);
 }
 
 }  // namespace mhlo

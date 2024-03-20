@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ limitations under the License.
 
 namespace xla {
 
-absl::StatusOr<std::unique_ptr<HloModuleConfig>>
+StatusOr<std::unique_ptr<HloModuleConfig>>
 CompileOnlyClient::CreateModuleConfig(
     const ProgramShape& program_shape,
     absl::Span<const Shape* const> argument_shapes,
@@ -33,7 +33,7 @@ CompileOnlyClient::CreateModuleConfig(
                                                execution_options);
 }
 
-absl::StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
+StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
 CompileOnlyClient::CompileAheadOfTime(
     const absl::Span<const AotXlaComputationInstance> computations,
     const AotCompilationOptions& options,

@@ -85,7 +85,7 @@ Status MaybeInitializeStack(xla::XlaBuilder* builder, XlaResource* resource,
           actual_shape.DebugString());
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 class StackOp : public XlaOpKernel {

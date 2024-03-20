@@ -72,8 +72,8 @@ class DirectPluginOpKernelContext : public PluginOpKernelContext {
                                 void* create_func_args,
                                 void (*delete_func)(void*)) override;
 
-  std::unique_ptr<PluginCoordinationServiceAgent>
-  GetPluginCoordinationServiceAgent() const override {
+  PluginCoordinationServiceAgent* GetPluginCoordinationServiceAgent()
+      const override {
     return CreatePluginCoordinationServiceAgent(
         ctx_->coordination_service_agent());
   }
@@ -112,15 +112,13 @@ class DirectPluginOpKernelContext : public PluginOpKernelContext {
 
   int GetDeviceId() const override;
 
-  std::string_view GetDeviceName() const override;
-
   std::string GetSessionName() const override {
     return ctx_->session_metadata() ? ctx_->session_metadata()->name() : "";
   }
 
   Status GetConfigProto(const ConfigProto** config_proto) const override {
     *config_proto = ctx_->function_library()->config_proto();
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   void MaybeDeleteConfigProto(const ConfigProto* config_proto) const override {
@@ -131,7 +129,7 @@ class DirectPluginOpKernelContext : public PluginOpKernelContext {
   Status GetFunctionLibraryDefinition(
       const FunctionLibraryDefinition** flib_def) const override {
     *flib_def = ctx_->function_library()->GetFunctionLibraryDefinition();
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   void MaybeDeleteFunctionLibraryDefinition(
@@ -143,7 +141,7 @@ class DirectPluginOpKernelContext : public PluginOpKernelContext {
   Status GetResourceHandle(int index,
                            const ResourceHandle** handle) const override {
     *handle = &HandleFromInput(ctx_, index);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   void MaybeDeleteResourceHandle(const ResourceHandle* handle) const override {
@@ -162,7 +160,7 @@ class DirectPluginOpKernelContext : public PluginOpKernelContext {
 
   Status SetOutput(int index, const Tensor& tensor) override {
     ctx_->set_output(index, tensor);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   void CtxFailure(const Status& status) override { ctx_->CtxFailure(status); }

@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ limitations under the License.
 
 #include "absl/status/status.h"
 #include "xla/stream_executor/tpu/c_api_decl.h"
-#include "xla/tsl/c/tsl_status.h"
-#include "xla/tsl/c/tsl_status_helper.h"
+#include "tsl/c/tsl_status.h"
+#include "tsl/c/tsl_status_helper.h"
 #include "tsl/platform/status.h"
 
 class TslStatusHelper {

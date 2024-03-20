@@ -44,7 +44,7 @@ Status SetPjRtClientInTFGlobalResourceManager(
   return OkStatus();
 }
 
-absl::StatusOr<xla::PjRtClient*> GetPjRtClient(const DeviceType& device_type) {
+StatusOr<xla::PjRtClient*> GetPjRtClient(const DeviceType& device_type) {
   ResourceMgr* rmgr = tfrt_global::GetTFGlobalResourceMgr();
   PjRtState* pjrt_state;
   TF_RETURN_IF_ERROR(rmgr->LookupOrCreate<PjRtState>(

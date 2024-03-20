@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,16 +17,13 @@ limitations under the License.
 #ifndef XLA_SERVICE_GPU_LLVM_GPU_BACKEND_GPU_BACKEND_LIB_H_
 #define XLA_SERVICE_GPU_LLVM_GPU_BACKEND_GPU_BACKEND_LIB_H_
 
-#include <cstdint>
-#include <functional>
 #include <string>
-#include <vector>
+#include <utility>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Target/TargetMachine.h"
+#include "xla/statusor.h"
 #include "xla/stream_executor/device_description.h"
 #include "xla/types.h"
 #include "xla/xla.pb.h"
@@ -43,8 +40,8 @@ std::string CantFindCudaMessage(absl::string_view msg,
 std::string LibDevicePath(absl::string_view xla_gpu_cuda_data_dir);
 
 // Link libdevice if functions using it are detected in the module.
-absl::Status LinkLibdeviceIfNecessary(llvm::Module* module,
-                                      const std::string& libdevice_path);
+Status LinkLibdeviceIfNecessary(llvm::Module* module,
+                                const std::string& libdevice_path);
 
 // Compiles the argument module and returns it. libdevice_dir_path is the parent
 // directory of the libdevice bitcode libraries. The contents of the module may
@@ -53,7 +50,7 @@ absl::Status LinkLibdeviceIfNecessary(llvm::Module* module,
 // The Compile.* interfaces each create their own llvm::LLVMContext objects for
 // thread safety, but note that LLVM's multithreaded support is very
 // preliminary; multithreaded use is not recommended at this time.
-absl::StatusOr<std::string> CompileToPtx(
+StatusOr<std::string> CompileToPtx(
     llvm::Module* module, se::GpuComputeCapability gpu_version,
     const DebugOptions& debug_options,
     std::function<void(llvm::TargetMachine*)> configure_target = nullptr);
@@ -63,9 +60,9 @@ namespace amdgpu {
 // Compiles the argument module and returns it with LLVM AMDGPU backend.
 // rocdl_dir_path is the parent directory of ROCm-Device-Libs bitcode libraries.
 // The contents of the module may be changed.
-absl::StatusOr<std::vector<uint8_t>> CompileToHsaco(
+StatusOr<std::vector<uint8_t>> CompileToHsaco(
     llvm::Module* module, se::GpuComputeCapability gpu_version,
-    const DebugOptions& debug_options,
+    const DebugOptions& debug_options, const std::string& rocdl_dir_path,
     const std::string& module_config_cache_key);
 }  // namespace amdgpu
 

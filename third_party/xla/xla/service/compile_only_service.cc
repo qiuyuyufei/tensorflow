@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,14 +33,14 @@ limitations under the License.
 
 namespace xla {
 
-/* static */ absl::StatusOr<std::unique_ptr<CompileOnlyService>>
+/* static */ StatusOr<std::unique_ptr<CompileOnlyService>>
 CompileOnlyService::NewService(se::Platform* platform) {
   ServiceOptions default_options;
   default_options.set_platform(platform);
   return NewService(default_options);
 }
 
-/* static */ absl::StatusOr<std::unique_ptr<CompileOnlyService>>
+/* static */ StatusOr<std::unique_ptr<CompileOnlyService>>
 CompileOnlyService::NewService(const ServiceOptions& options) {
   se::Platform* platform = options.platform();
   if (platform == nullptr) {
@@ -58,7 +58,7 @@ CompileOnlyService::CompileOnlyService(const ServiceOptions& options,
                                        Compiler* compiler)
     : Service(options, /*execute_backend=*/nullptr), compiler_(compiler) {}
 
-absl::StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
+StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
 CompileOnlyService::CompileAheadOfTime(
     absl::Span<const AotXlaComputationInstance> computations,
     const AotCompilationOptions& options,

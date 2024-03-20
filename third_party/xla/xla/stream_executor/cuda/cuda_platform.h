@@ -1,4 +1,4 @@
-/* Copyright 2015 The OpenXLA Authors.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,13 +17,17 @@ limitations under the License.
 #define XLA_STREAM_EXECUTOR_CUDA_CUDA_PLATFORM_H_
 
 #include <memory>
-#include <string>
+#include <vector>
 
-#include "absl/status/statusor.h"
+#include "absl/base/thread_annotations.h"
 #include "xla/stream_executor/executor_cache.h"
+#include "xla/stream_executor/multi_platform_manager.h"
 #include "xla/stream_executor/platform.h"
-#include "xla/stream_executor/platform_manager.h"
+#include "xla/stream_executor/platform/port.h"
 #include "xla/stream_executor/stream_executor.h"
+#include "xla/stream_executor/stream_executor_internal.h"
+#include "xla/stream_executor/trace_listener.h"
+#include "tsl/platform/statusor.h"
 
 namespace stream_executor {
 namespace cuda {
@@ -49,7 +53,7 @@ class CudaPlatform : public Platform {
   int DeviceToBus(int device_ordinal);
 
   // Returns the lowest-ordinal-number StreamExecutor on the specified bus.
-  absl::StatusOr<StreamExecutor*> FirstExecutorForBus(int bus_ordinal);
+  tsl::StatusOr<StreamExecutor*> FirstExecutorForBus(int bus_ordinal);
 
   // Platform interface implementation:
   // Returns the same value as kCudaPlatform above.
@@ -60,15 +64,15 @@ class CudaPlatform : public Platform {
 
   const std::string& Name() const override;
 
-  absl::StatusOr<std::unique_ptr<DeviceDescription>> DescriptionForDevice(
+  tsl::StatusOr<std::unique_ptr<DeviceDescription>> DescriptionForDevice(
       int ordinal) const override;
 
-  absl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
+  tsl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
 
-  absl::StatusOr<StreamExecutor*> GetExecutor(
+  tsl::StatusOr<StreamExecutor*> GetExecutor(
       const StreamExecutorConfig& config) override;
 
-  absl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
+  tsl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
       const StreamExecutorConfig& config) override;
 
  private:

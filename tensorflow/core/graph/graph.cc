@@ -535,7 +535,7 @@ void Graph::Copy(const Graph& src) {
   }
 }
 
-absl::StatusOr<Node*> Graph::AddNode(NodeDef node_def) {
+StatusOr<Node*> Graph::AddNode(NodeDef node_def) {
   Status s;
   Node* out = AddNode(std::move(node_def), &s);
   TF_RETURN_IF_ERROR(s);

@@ -21,22 +21,11 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/functional/function_ref.h"
-#include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
 #include "mlir/Dialect/Func/Extensions/AllExtensions.h"  // from @llvm-project
-#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/IR/Attributes.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
 #include "mlir/IR/DialectRegistry.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/IR/SymbolTable.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/transforms/bridge.h"
@@ -45,34 +34,28 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/transforms/tf_saved_model_asset_sinking_pass.h"
 #include "tensorflow/compiler/mlir/tensorflow/translate/export_graphdef.h"
 #include "tensorflow/compiler/mlir/tensorflow/translate/import_model.h"
-#include "tensorflow/compiler/mlir/tensorflow/translate/mlir_roundtrip_flags.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/dump_mlir_util.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/error_util.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/serialize_mlir_module_utils.h"
 #include "tensorflow/compiler/mlir/tf2xla/api/v2/cluster_tf.h"
 #include "tensorflow/compiler/mlir/tf2xla/api/v2/tf_dialect_to_executor.h"
 #include "tensorflow/compiler/mlir/tfrt/backend_compiler.h"
-#include "tensorflow/compiler/mlir/tfrt/function/function.h"
 #include "tensorflow/compiler/mlir/tfrt/transforms/passes.h"
 #include "tensorflow/compiler/mlir/tfrt/transforms/tfrt_pipeline_options.h"
 #include "tensorflow/compiler/mlir/tfrt/transforms/tpu_passes.h"
 #include "tensorflow/compiler/mlir/tfrt/translate/tfrt_compile_options.h"
-#include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 #include "tensorflow/core/common_runtime/function_body.h"
 #include "tensorflow/core/common_runtime/function_def_utils.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/statusor.h"
 #include "tensorflow/core/tfrt/fallback/fallback_state.h"
-#include "tensorflow/core/tfrt/runtime/runtime.h"
 #include "tensorflow/core/tpu/tpu_defs.h"
 #include "tsl/framework/device_type.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/statusor.h"
-#include "tfrt/bef/bef_buffer.h"  // from @tf_runtime
 #include "tfrt/bef_converter/mlir_to_bef.h"  // from @tf_runtime
-#include "tfrt/support/forward_decls.h"  // from @tf_runtime
 
 namespace tensorflow {
 
@@ -185,19 +168,14 @@ Status ConvertTfMlirToRuntimeExecutable(
     tfrt_stub::FallbackState* fallback_state,
     std::vector<std::string>* added_xla_function_names) {
   mlir::StatusScopedDiagnosticHandler diag_handler(module.getContext());
-  absl::string_view checkpoint_path = model_context.checkpoint_path();
-  if (!checkpoint_path.empty()) {
-    TF_RETURN_IF_ERROR(
-        mlir::tf_saved_model::AddSessionInitializerAndInlineCheckpoint(
-            module, checkpoint_path));
-  }
+
   {
     mlir::PassManager pm(module.getContext());
     pm.addNestedPass<mlir::func::FuncOp>(
         mlir::tf_executor::CreateTFExecutorGraphPruningPass());
     pm.addNestedPass<mlir::func::FuncOp>(
         mlir::CreateExecutorDialectToFunctionalConversionPass());
-    if (!options.saved_model_dir.empty() || !checkpoint_path.empty()) {
+    if (!options.saved_model_dir.empty()) {
       pm.addPass(mlir::tf_saved_model::CreateAssetSinkingPass(
           options.saved_model_dir));
     }
@@ -238,7 +216,7 @@ Status ConvertTfMlirToRuntimeExecutable(
 
     TF_RETURN_IF_ERROR(
         tensorflow::tf2xla::v2::RunFunctionTf2xlaClusteringBridge(
-            module, /*is_supported_by_replicated_brige*/ true,
+            module, tf2xla::v2::DeviceType::XLA_TPU_JIT,
             /*is_in_fallback_enabled_mode=*/VLOG_IS_ON(1)));
 
     TF_RETURN_IF_ERROR(
@@ -255,17 +233,7 @@ Status ConvertTfMlirToRuntimeExecutable(
           "Failed to process TPUPartitionedCallOp for fallback execution"));
     }
   } else if (options.device_target == TfrtDeviceInfraTarget::kGpu) {
-    TF_RETURN_IF_ERROR(
-        tensorflow::tf2xla::v2::RunFunctionTf2xlaClusteringBridge(
-            module, /*is_supported_by_replicated_brige*/ false,
-            /*is_in_fallback_enabled_mode=*/false));
-
-    TF_RETURN_IF_ERROR(
-        tensorflow::tfrt_compiler::RunLowerClusterToRuntimeOpsPassPipeline(
-            module, tsl::DeviceType(DEVICE_GPU_XLA_JIT)));
-
-    TF_RETURN_IF_ERROR(
-        tensorflow::tf2xla::v2::ExportFromTensorflowDialectToExecutor(module));
+    TF_RETURN_IF_ERROR(mlir::TF::RunTFXLABridge(module));
 
     if (options.serialize_mlir_module_to_aot_packages) {
       const std::string mlir_string = SerializeMlirModule(module);

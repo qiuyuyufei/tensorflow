@@ -170,7 +170,11 @@ def _embedding_activations_grad(activations_op, grad_wrt_activations):
     raise RuntimeError(
         "Gradients for TPUEmbedding have been generated in non-training mode."
         "This is not expected. Consider putting your Optimizer.minimize code "
-        "behind the training mode condition check\n")
+        "behind the training mode condition check. For Estimator, you can "
+        "do \n\n"
+        "    if mode == tf.estimator.ModeKeys.TRAIN:\n"
+        "        train_op = opt.minimize(loss)\n"
+        "\n")
 
   if lookup_id < 0 or lookup_id >= len(table_gradients):
     raise RuntimeError(

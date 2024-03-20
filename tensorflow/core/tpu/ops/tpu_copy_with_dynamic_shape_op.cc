@@ -35,7 +35,11 @@ REGISTER_OP("TPUCopyWithDynamicShape")
         c->set_output(i, c->input(i));
       }
       return OkStatus();
-    });
+    })
+    .Doc(R"(
+Op that copies host tensor to device with dynamic shape support.
+For internal use only.
+)");
 
 REGISTER_OP("TPUAnnotateTensorsWithDynamicShape")
     .Input("tensors: T")

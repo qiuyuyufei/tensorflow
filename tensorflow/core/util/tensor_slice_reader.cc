@@ -85,7 +85,7 @@ Status OpenTableTensorSliceReader(const string& fname,
       s = table::Table::Open(options, f.get(), file_size, &table);
       if (s.ok()) {
         *result = new TensorSliceReaderTable(f.release(), table);
-        return absl::OkStatus();
+        return OkStatus();
       } else {
         s = errors::CreateWithUpdatedMessage(
             s, strings::StrCat(s.message(),
@@ -295,7 +295,7 @@ Status TensorSliceReader::GetTensor(
   }
   std::swap(*out_tensor, t);
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 TensorSliceReader::VarToShapeMap TensorSliceReader::GetVariableToShapeMap()

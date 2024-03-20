@@ -344,6 +344,7 @@ tf_python_pybind_extension(
         ":tfr",
         "//tensorflow/compiler/mlir/tensorflow",
         "//tensorflow/python/lib/core:pybind11_lib",
+        "//tensorflow/python/lib/core:pybind11_status",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:FuncDialect",
@@ -351,7 +352,6 @@ tf_python_pybind_extension(
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:SCFDialect",
         "@llvm-project//mlir:ShapeDialect",
-        "@llvm-project//mlir:Support",
         "@pybind11",
     ],
 )

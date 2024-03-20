@@ -1,4 +1,4 @@
-/* Copyright 2015 The OpenXLA Authors.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,20 +18,20 @@ limitations under the License.
 #include <memory>
 #include <utility>
 
+#include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/stream_executor.h"
-#include "tsl/platform/logging.h"
+#include "tsl/platform/statusor.h"
 
 namespace stream_executor {
 
 ExecutorCache::ExecutorCache() = default;
 ExecutorCache::~ExecutorCache() { DestroyAllExecutors(); }
 
-absl::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
+tsl::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
     const StreamExecutorConfig& config, const ExecutorFactory& factory) {
   // In the fast path case, the cache already has an entry and we can just
   // return after Get() which only takes a shared lock and not a unique lock.
@@ -53,12 +53,14 @@ absl::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
   // initialization of different entries.
   absl::MutexLock lock{&entry->configurations_mutex};
   for (const auto& iter : entry->configurations) {
-    VLOG(2) << "hit in cache";
-    return iter.second.get();
+    if (iter.first.device_options == config.device_options) {
+      VLOG(2) << "hit in cache";
+      return iter.second.get();
+    }
   }
 
   VLOG(2) << "building executor";
-  absl::StatusOr<std::unique_ptr<StreamExecutor>> result = factory();
+  tsl::StatusOr<std::unique_ptr<StreamExecutor>> result = factory();
   if (!result.ok()) {
     VLOG(2) << "failed to get build executor: " << result.status();
     // If construction failed, leave the cache Entry around, but with a null
@@ -69,7 +71,7 @@ absl::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
   return entry->configurations.back().second.get();
 }
 
-absl::StatusOr<StreamExecutor*> ExecutorCache::Get(
+tsl::StatusOr<StreamExecutor*> ExecutorCache::Get(
     const StreamExecutorConfig& config) {
   Entry* entry = nullptr;
   {
@@ -105,7 +107,10 @@ absl::StatusOr<StreamExecutor*> ExecutorCache::Get(
   }
 
   for (auto& [entry_config, entry_executor] : entry->configurations) {
-    return entry_executor.get();
+    if (entry_config.device_options == config.device_options) {
+      VLOG(2) << "hit in cache for device ordinal " << config.ordinal;
+      return entry_executor.get();
+    }
   }
 
   return absl::NotFoundError("No executor found with a matching config.");

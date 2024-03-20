@@ -1,10 +1,10 @@
 # Description:
 # profile_utils targets.
 
-load("//tsl:tsl.bzl", "internal_visibility")
+load("//tsl:tsl.bzl", "set_external_visibility")
 load("//tsl:tsl.default.bzl", "filegroup")
 load(
-    "@local_tsl//tsl/platform:rules_cc.bzl",
+    "//tsl/platform:rules_cc.bzl",
     "cc_library",
 )
 load(
@@ -13,25 +13,22 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = internal_visibility([
-        "@local_xla//xla/stream_executor:__subpackages__",
-        "//tensorflow/core/platform:__subpackages__",
-        "//tsl:__pkg__",
-        "//tsl/platform/default:__pkg__",
-    ]),
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
-exports_files(srcs = [
-    "android_armv7a_cpu_utils_helper.cc",
-    "android_armv7a_cpu_utils_helper.h",
-    "clock_cycle_profiler.h",
-    "cpu_utils.cc",
-    "cpu_utils.h",
-    "cpu_utils_test.cc",
-    "i_cpu_utils_helper.h",
-])
+exports_files(
+    srcs = [
+        "android_armv7a_cpu_utils_helper.cc",
+        "android_armv7a_cpu_utils_helper.h",
+        "clock_cycle_profiler.h",
+        "cpu_utils.cc",
+        "cpu_utils.h",
+        "cpu_utils_test.cc",
+        "i_cpu_utils_helper.h",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 filegroup(
     name = "legacy_lib_internal_srcs",
@@ -39,10 +36,7 @@ filegroup(
         "android_armv7a_cpu_utils_helper.cc",
         "clock_cycle_profiler.cc",
     ],
-    visibility = internal_visibility([
-        "//tensorflow/core/platform:__subpackages__",
-        "//tsl/platform:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -50,12 +44,13 @@ cc_library(
     srcs = [
         "android_armv7a_cpu_utils_helper.h",
         "cpu_utils.cc",
+        "i_cpu_utils_helper.h",
     ],
     hdrs = [
         "cpu_utils.h",
-        "i_cpu_utils_helper.h",
     ],
     copts = tsl_copts(),
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:logging",
         "//tsl/platform:macros",

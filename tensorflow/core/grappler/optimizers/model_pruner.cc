@@ -381,7 +381,7 @@ Status RewriteIdentityNAndInputsOutputs(
   }
   mutable_inputs->DeleteSubrange(curr_pos, num_inputs - curr_pos);
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status SplitIdentityNInputs(GraphDef* graph,
@@ -413,7 +413,7 @@ Status SplitIdentityNInputs(GraphDef* graph,
     *updated_graph = true;
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
@@ -504,7 +504,7 @@ Status ModelPruner::Optimize(Cluster* cluster, const GrapplerItem& item,
   *optimized_graph->mutable_versions() = item.graph.versions();
   if (nodes_to_delete.empty()) {
     optimized_graph->mutable_node()->Swap(pruned_graph->mutable_node());
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   const bool fetches_are_known = !item.fetch.empty();
@@ -526,7 +526,7 @@ Status ModelPruner::Optimize(Cluster* cluster, const GrapplerItem& item,
   if (optimized_graph->node_size() > item.graph.node_size()) {
     return errors::Internal("Pruning increased graph size.");
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // end namespace grappler

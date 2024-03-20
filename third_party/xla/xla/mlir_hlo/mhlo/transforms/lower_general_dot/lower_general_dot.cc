@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ limitations under the License.
 #include <utility>
 
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/Support/Casting.h"
 #include "mhlo/IR/hlo_ops.h"
 #include "mhlo/transforms/passes.h"
 #include "mhlo/transforms/rewriters.h"
@@ -33,7 +32,6 @@ limitations under the License.
 #include "mlir/IR/Location.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/TypeUtilities.h"
-#include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -258,9 +256,9 @@ struct GeneralDotConvert : public OpRewritePattern<DotGeneralOp> {
     if (sparse_tensor::hasAnySparseOperandOrResult(op)) return failure();
 
     // Compute the, possibly, transposed-reshaped operands.
-    lhs = llvm::cast<mlir::TypedValue<mlir::RankedTensorType>>(processDotArg(
+    lhs = llvm::cast<mlir::TypedValue<mlir::TensorType>>(processDotArg(
         lhs, loc, lhsContractingDims, /*outerDimsFirst=*/true, rewriter));
-    rhs = llvm::cast<mlir::TypedValue<mlir::RankedTensorType>>(processDotArg(
+    rhs = llvm::cast<mlir::TypedValue<mlir::TensorType>>(processDotArg(
         rhs, loc, rhsContractingDims, /*outerDimsFirst=*/false, rewriter));
 
     // Accept only static shaped types.

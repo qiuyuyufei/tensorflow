@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -70,7 +70,7 @@ class ComputationInstructionOrdering {
 
 }  // namespace
 
-static absl::StatusOr<bool> AddControlEdgesForLoopWrites(
+static StatusOr<bool> AddControlEdgesForLoopWrites(
     HloInstruction* xla_while, HloAliasAnalysis& alias_analysis) {
   HloDataflowAnalysis& dataflow = alias_analysis.dataflow_analysis();
   HloComputation* body = xla_while->while_body();
@@ -145,7 +145,7 @@ static absl::StatusOr<bool> AddControlEdgesForLoopWrites(
   return changed;
 }
 
-absl::StatusOr<bool> LoopScheduleLinearizer::Run(
+StatusOr<bool> LoopScheduleLinearizer::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   // Constructing HloAliasAnalysis is expensive, so don't do it until we find at
@@ -166,10 +166,11 @@ absl::StatusOr<bool> LoopScheduleLinearizer::Run(
       const HloComputation* body = instruction->while_body();
       bool has_async_collectives =
           absl::c_any_of(body->instructions(), [](const HloInstruction* instr) {
+            HloOpcode op = instr->opcode();
             return hlo_query::IsAsyncCollectiveStartOp(
-                       instr, /*include_send_recv=*/true) ||
+                       op, /*include_send_recv=*/true) ||
                    hlo_query::IsAsyncCollectiveDoneOp(
-                       instr, /*include_send_recv=*/true);
+                       op, /*include_send_recv=*/true);
           });
 
       if (has_async_collectives) {

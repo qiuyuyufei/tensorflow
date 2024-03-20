@@ -14,13 +14,10 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/mlir/tfrt/transforms/mlrt/import_model.h"
 
-#include <string>
 #include <utility>
-#include <vector>
 
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "mlir/IR/OwningOpRef.h"  // from @llvm-project
@@ -52,10 +49,10 @@ namespace tensorflow {
 namespace mlrt_compiler {
 
 StatusOr<mlrt::bc::Buffer> ConvertTfMlirToBytecode(
-    const TfrtCompileOptions& options, tfrt_stub::FallbackState& fallback_state,
-    mlir::ModuleOp module, tfrt_stub::ModelRuntimeContext& model_context,
-    mlir::OwningOpRef<mlir::ModuleOp>* module_with_op_keys,
-    std::vector<std::string>* added_xla_function_names) {
+    const TfrtCompileOptions& options,
+    const tfrt_stub::FallbackState& fallback_state, mlir::ModuleOp module,
+    tfrt_stub::ModelRuntimeContext& model_context,
+    mlir::OwningOpRef<mlir::ModuleOp>* module_with_op_keys) {
   mlrt::bc::Buffer bytecode_buffer;
   TF_RETURN_IF_ERROR(ConvertTfMlirToRuntimeExecutable(
       options, module,
@@ -68,12 +65,8 @@ StatusOr<mlrt::bc::Buffer> ConvertTfMlirToBytecode(
           mlir::OwningOpRef<mlir::ModuleOp> copy(module.clone());
           TF_RETURN_IF_ERROR(
               ExportFunctionDefs(*copy, [flib_def](FunctionDef function_def) {
-                VLOG(1) << absl::StrCat(
-                    "Exporting MLIR function as function_def: ",
-                    // clang-tidy off
-                    function_def.DebugString()
-                    // clang-tidy on
-                );
+                VLOG(1) << "Exporting MLIR function as function_def: "
+                        << function_def.DebugString();
 
                 // The TF MLIR compiler may change the function name. Then we
                 // need to retrieve the original name from the
@@ -134,7 +127,7 @@ StatusOr<mlrt::bc::Buffer> ConvertTfMlirToBytecode(
         bytecode_buffer = std::move(*statusor);
         return OkStatus();
       },
-      model_context, &fallback_state, added_xla_function_names));
+      model_context));
   return bytecode_buffer;
 }
 

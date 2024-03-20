@@ -24,13 +24,14 @@ namespace tensorflow {
 namespace tf2xla {
 namespace internal {
 
-// Given the pass manager, add Bridge passes to cluster the replicated input
-// graphs.
-void AddReplicatedBridgeClusteringPipelinePasses(
+// Given the pass manager, add Bridge passes to cluster the input.
+void AddBridgeClusteringPipelinePasses(
     mlir::OpPassManager& pm, llvm::StringRef module_name = llvm::StringRef());
 
-// Same as above but for non replicated graphs.
-void AddNonReplicatedBridgeClusteringPipelinePasses(mlir::OpPassManager& pm);
+// Same as above but for non TPU use cases (CPU/GPU). However, this should
+// slowly migrate to be the same as above.
+ABSL_DEPRECATED("Use AddBridgeClusteringPipelinePasses instead.")
+void AddNonTPUBridgeClusteringPipelinePasses(mlir::OpPassManager& pm);
 
 };  // namespace internal
 };  // namespace tf2xla

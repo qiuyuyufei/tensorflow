@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ limitations under the License.
 #include "xla/shape.h"
 #include "xla/shape_layout.h"
 #include "tsl/platform/errors.h"
-#include "tsl/platform/status.h"
 
 namespace xla {
 
@@ -74,10 +73,14 @@ bool UpdateShape(Shape* shape, SubByteNormalization::Mode mode) {
 // layout was changed.
 bool ProcessInputOrOutputLayout(ShapeLayout* shape_layout,
                                 SubByteNormalization::Mode mode) {
-  Shape shape = shape_layout->shape();
-  bool changed = UpdateShape(&shape, mode);
+  if (!shape_layout->LayoutIsSet() || !shape_layout->shape().IsArray()) {
+    return false;
+  }
+  Layout layout = shape_layout->layout();
+  bool changed =
+      UpdateLayout(&layout, shape_layout->shape().element_type(), mode);
   if (changed) {
-    TF_CHECK_OK(shape_layout->CopyLayoutFromShape(shape));
+    shape_layout->ResetLayout(layout);
   }
   return changed;
 }
@@ -93,11 +96,8 @@ StatusOr<bool> SubByteNormalization::Run(
     changed |= UpdateShape(shape, mode_);
     return OkStatus();
   });
-  for (HloComputation* computation : module->computations()) {
-    // We rewrite all computations instead of non-fusion computations, despite
-    // element_size_in_bits within fusions being meaningless, because HloVerfier
-    // checks for the correct use of element_size_in_bits even in fusion
-    // computations.
+  for (HloComputation* computation :
+       module->MakeNonfusionComputations(execution_threads)) {
     TF_RETURN_IF_ERROR(computation->Accept(&visitor));
   }
   auto* computation_layout = module->mutable_entry_computation_layout();

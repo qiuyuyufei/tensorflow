@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,9 +35,8 @@ class ServiceExecutableRunOptions {
   // with the first argument being the device ordinal, the second
   // argument being the number of streams to borrow, and the third
   // argument being the priority of the streams.
-  using StreamBorrower =
-      std::function<absl::StatusOr<std::vector<StreamPool::Ptr>>(
-          int, int, se::StreamPriority)>;
+  using StreamBorrower = std::function<StatusOr<std::vector<StreamPool::Ptr>>(
+      int, int, se::StreamPriority)>;
 
   ServiceExecutableRunOptions()
       : ServiceExecutableRunOptions(ExecutableRunOptions()) {}
@@ -60,7 +59,7 @@ class ServiceExecutableRunOptions {
 
   // Borrows a stream and returns a smart pointer which returns the stream on
   // destruction.
-  absl::StatusOr<StreamPool::Ptr> BorrowStream(
+  StatusOr<StreamPool::Ptr> BorrowStream(
       int device_ordinal,
       se::StreamPriority priority = se::StreamPriority::Default) const {
     if (!stream_borrower_) {
@@ -74,7 +73,7 @@ class ServiceExecutableRunOptions {
     return stream;
   }
 
-  absl::StatusOr<std::vector<StreamPool::Ptr>> BorrowStreams(
+  StatusOr<std::vector<StreamPool::Ptr>> BorrowStreams(
       int device_ordinal, int num_streams,
       se::StreamPriority priority = se::StreamPriority::Default) const {
     return stream_borrower_

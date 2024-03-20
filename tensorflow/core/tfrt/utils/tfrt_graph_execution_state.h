@@ -56,7 +56,7 @@ class TfrtGraphExecutionState {
   };
 
   // Creates a `GraphExecutionState` given `graph_def` and `fallback_state`.
-  static absl::StatusOr<std::unique_ptr<TfrtGraphExecutionState>> Create(
+  static StatusOr<std::unique_ptr<TfrtGraphExecutionState>> Create(
       const Options& options, tensorflow::GraphDef graph_def,
       const FallbackState& fallback_state);
 
@@ -73,7 +73,7 @@ class TfrtGraphExecutionState {
 
   // Creates an optimized graph by pruning with `graph_import_config` and
   // best-effort Grappler run.
-  absl::StatusOr<OptimizationResult> CreateOptimizedGraph(
+  StatusOr<OptimizationResult> CreateOptimizedGraph(
       tensorflow::GraphImportConfig& graph_import_config);
 
   // Extends the current graph by `graph`.
@@ -100,7 +100,7 @@ class TfrtGraphExecutionState {
   }
 
  private:
-  absl::StatusOr<std::unique_ptr<tensorflow::Graph>> OptimizeGraph(
+  StatusOr<std::unique_ptr<tensorflow::Graph>> OptimizeGraph(
       const tensorflow::Graph& graph,
       const tensorflow::BuildGraphOptions& build_graph_options);
 

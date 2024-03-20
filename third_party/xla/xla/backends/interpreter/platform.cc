@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,9 +20,10 @@ limitations under the License.
 
 #include "absl/strings/str_format.h"
 #include "xla/backends/interpreter/executor.h"
+#include "xla/stream_executor/device_options.h"
+#include "xla/stream_executor/multi_platform_manager.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform/initialize.h"
-#include "xla/stream_executor/platform_manager.h"
 #include "tsl/platform/status.h"
 
 namespace stream_executor {
@@ -40,32 +41,33 @@ int XlaInterpreterPlatform::VisibleDeviceCount() const { return 1; }
 
 const std::string& XlaInterpreterPlatform::Name() const { return name_; }
 
-absl::StatusOr<std::unique_ptr<DeviceDescription>>
+tsl::StatusOr<std::unique_ptr<DeviceDescription>>
 XlaInterpreterPlatform::DescriptionForDevice(int ordinal) const {
   return XlaInterpreterExecutor::CreateDeviceDescription(ordinal);
 }
 
-absl::StatusOr<StreamExecutor*> XlaInterpreterPlatform::ExecutorForDevice(
+tsl::StatusOr<StreamExecutor*> XlaInterpreterPlatform::ExecutorForDevice(
     int ordinal) {
   StreamExecutorConfig config;
   config.ordinal = ordinal;
+  config.device_options = DeviceOptions::Default();
   return GetExecutor(config);
 }
 
-absl::StatusOr<StreamExecutor*> XlaInterpreterPlatform::GetExecutor(
+tsl::StatusOr<StreamExecutor*> XlaInterpreterPlatform::GetExecutor(
     const StreamExecutorConfig& config) {
   return executor_cache_.GetOrCreate(
       config, [&]() { return GetUncachedExecutor(config); });
 }
 
-absl::StatusOr<std::unique_ptr<StreamExecutor>>
+tsl::StatusOr<std::unique_ptr<StreamExecutor>>
 XlaInterpreterPlatform::GetUncachedExecutor(
     const StreamExecutorConfig& config) {
   auto executor = std::make_unique<StreamExecutor>(
       this, std::make_unique<XlaInterpreterExecutor>(), config.ordinal);
-  auto init_status = executor->Init();
+  auto init_status = executor->Init(config.device_options);
   if (!init_status.ok()) {
-    return absl::Status{
+    return tsl::Status{
         absl::StatusCode::kInternal,
         absl::StrFormat(
             "failed initializing StreamExecutor for device ordinal %d: %s",
@@ -77,12 +79,19 @@ XlaInterpreterPlatform::GetUncachedExecutor(
 
 static void InitializeXlaInterpreterPlatform() {
   std::unique_ptr<Platform> platform(new XlaInterpreterPlatform);
-  TF_CHECK_OK(PlatformManager::RegisterPlatform(std::move(platform)));
+  TF_CHECK_OK(MultiPlatformManager::RegisterPlatform(std::move(platform)));
 }
 
 }  // namespace interpreter
 }  // namespace stream_executor
 
-STREAM_EXECUTOR_REGISTER_MODULE_INITIALIZER(
+REGISTER_MODULE_INITIALIZER(
     interpreter_platform,
     stream_executor::interpreter::InitializeXlaInterpreterPlatform());
+
+// Note that module initialization sequencing is not supported in the
+// open-source project, so this will be a no-op there.
+REGISTER_MODULE_INITIALIZER_SEQUENCE(interpreter_platform,
+                                     multi_platform_manager);
+REGISTER_MODULE_INITIALIZER_SEQUENCE(multi_platform_manager_listener,
+                                     interpreter_platform);

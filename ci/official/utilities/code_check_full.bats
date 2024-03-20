@@ -53,7 +53,6 @@ do_external_licenses_check(){
 @com_github_grpc_grpc//src/compiler
 @platforms//os
 @ruy//
-@stablehlo//stablehlo/experimental
 EOF
 
   # grep patterns for targets which are allowed to be extra licenses
@@ -101,7 +100,7 @@ EOF
 
 @test "Pip package generated license includes all dependencies' licenses" {
   do_external_licenses_check \
-    "//tensorflow/tools/pip_package:wheel" \
+    "//tensorflow/tools/pip_package:build_pip_package" \
     "//tensorflow/tools/pip_package:licenses"
 }
 
@@ -172,17 +171,17 @@ EOF
 
   # Get the full list of files and targets which get included into the pip
   # package
-  bazel cquery --keep_going 'deps(//tensorflow/tools/pip_package:wheel)' | sort -u > $BATS_TEST_TMPDIR/pip_deps
+  bazel query --keep_going 'deps(//tensorflow/tools/pip_package:build_pip_package)' | sort -u > $BATS_TEST_TMPDIR/pip_deps
   # Find all Python py_test targets not tagged "no_pip" or "manual", excluding
   # any targets in ignored packages. Combine this list of targets into a bazel
   # query list (e.g. the list becomes "target+target2+target3")
-  bazel cquery --keep_going 'kind(py_test, //tensorflow/python/...) - attr("tags", "no_pip|manual", //tensorflow/python/...)' | grep -v -f $BATS_TEST_TMPDIR/ignore_deps_for_these_packages | paste -sd "+" - > $BATS_TEST_TMPDIR/deps
+  bazel query --keep_going 'kind(py_test, //tensorflow/python/...) - attr("tags", "no_pip|manual", //tensorflow/python/...)' | grep -v -f $BATS_TEST_TMPDIR/ignore_deps_for_these_packages | paste -sd "+" - > $BATS_TEST_TMPDIR/deps
   # Find all one-step dependencies of those tests which are from //tensorflow
   # (since external deps will come from Python-level pip dependencies),
   # excluding dependencies and files that are known to be unneccessary.
   # This creates a list of targets under //tensorflow that are required for
   # TensorFlow python tests.
-  bazel cquery --keep_going "deps($(cat $BATS_TEST_TMPDIR/deps), 1)" | grep "^//tensorflow" | grep -v -f $BATS_TEST_TMPDIR/ignore_these_deps | sort -u > $BATS_TEST_TMPDIR/required_deps
+  bazel query --keep_going "deps($(cat $BATS_TEST_TMPDIR/deps), 1)" | grep "^//tensorflow" | grep -v -f $BATS_TEST_TMPDIR/ignore_these_deps | sort -u > $BATS_TEST_TMPDIR/required_deps
 
 
   # Find if any required dependencies are missing from the list of dependencies
@@ -204,7 +203,7 @@ EOF
       # For every missing dependency, find the tests which directly depend on
       # it, and print that list for debugging. Not really clear if this is
       # helpful since the only examples I've seen are enormous.
-      bazel cquery "rdeps(kind(py_test, $(cat $BATS_TEST_TMPDIR/deps)), $dep, 1)"
+      bazel query "rdeps(kind(py_test, $(cat $BATS_TEST_TMPDIR/deps)), $dep, 1)"
     done < $BATS_TEST_TMPDIR/missing_deps
     exit 1
   fi
@@ -215,7 +214,7 @@ EOF
   bazel cquery \
     --experimental_cc_shared_library \
     --@local_config_cuda//:enable_cuda \
-    "somepath(//tensorflow/tools/pip_package:wheel, " \
+    "somepath(//tensorflow/tools/pip_package:build_pip_package, " \
     "@local_config_cuda//cuda:cudart + "\
     "@local_config_cuda//cuda:cudart + "\
     "@local_config_cuda//cuda:cuda_driver + "\
@@ -225,7 +224,7 @@ EOF
     "@local_config_tensorrt//:tensorrt)" --keep_going > $BATS_TEST_TMPDIR/out
 
   cat <<EOF
-There was a path found connecting //tensorflow/tools/pip_package:wheel
+There was a path found connecting //tensorflow/tools/pip_package:build_pip_package
 to a banned CUDA dependency. Here's the output from bazel query:
 EOF
   cat $BATS_TEST_TMPDIR/out
@@ -237,7 +236,7 @@ EOF
     --experimental_cc_shared_library \
     --@local_config_cuda//:enable_cuda \
     --define framework_shared_object=false \
-    "somepath(//tensorflow/tools/pip_package:wheel, " \
+    "somepath(//tensorflow/tools/pip_package:build_pip_package, " \
     "@local_config_cuda//cuda:cudart + "\
     "@local_config_cuda//cuda:cudart + "\
     "@local_config_cuda//cuda:cuda_driver + "\
@@ -247,7 +246,7 @@ EOF
     "@local_config_tensorrt//:tensorrt)" --keep_going > $BATS_TEST_TMPDIR/out
 
   cat <<EOF
-There was a path found connecting //tensorflow/tools/pip_package:wheel
+There was a path found connecting //tensorflow/tools/pip_package:build_pip_package
 to a banned CUDA dependency when '--define framework_shared_object=false' is set.
 This means that a CUDA target was probably included via an is_static condition,
 used when targeting platforms like Windows where we build statically instead
@@ -300,17 +299,6 @@ EOF
     bazel build --experimental_cc_shared_library --nobuild --keep_going -- //tensorflow/... -//tensorflow/lite/... -//tensorflow/tools/toolchains/win/... -//tensorflow/tools/toolchains/win_1803/...
 }
 
-@test "API compatibility test passes, ensuring no unexpected changes to the TF API" {
-    bazel test $TFCI_BAZEL_COMMON_ARGS //tensorflow/tools/api/tests:api_compatibility_test
-    echo "You have to re-generate the TF API goldens and have the API changes reviewed."
-    echo "Look at the instructions for ':api_compatibility_test -- --update_goldens=True'"
-}
-
-# See b/279852433 (internal).
-# TODO(b/279852433) Replace deps(//tensorflow/...) with deps(//...)
-@test "Verify that it's possible to query every TensorFlow target without BUILD errors" {
-    bazel query "deps(//tensorflow/...)" > /dev/null
-}
 
 teardown_file() {
     bazel shutdown

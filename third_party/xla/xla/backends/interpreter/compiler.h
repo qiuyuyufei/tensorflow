@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,18 +42,18 @@ class InterpreterCompiler : public Compiler {
   InterpreterCompiler() {}
   ~InterpreterCompiler() override {}
 
-  absl::StatusOr<std::unique_ptr<HloModule>> RunHloPasses(
+  StatusOr<std::unique_ptr<HloModule>> RunHloPasses(
       std::unique_ptr<HloModule> hlo_module, se::StreamExecutor* stream_exec,
       const CompileOptions& options) override;
-  absl::StatusOr<std::unique_ptr<Executable>> RunBackend(
+  StatusOr<std::unique_ptr<Executable>> RunBackend(
       std::unique_ptr<HloModule> hlo_module, se::StreamExecutor* stream_exec,
       const CompileOptions& options) override;
-  absl::StatusOr<std::vector<std::unique_ptr<Executable>>> Compile(
+  StatusOr<std::vector<std::unique_ptr<Executable>>> Compile(
       std::unique_ptr<HloModuleGroup> module_group,
       std::vector<std::vector<se::StreamExecutor*>> stream_exec,
       const CompileOptions& options) override;
 
-  absl::StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
+  StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
   CompileAheadOfTime(std::unique_ptr<HloModuleGroup> module_group,
                      const AotCompilationOptions& aot_options) override;
 

@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,10 +20,8 @@ limitations under the License.
 #include <optional>
 #include <ostream>
 #include <string>
-#include <tuple>
 #include <utility>
 
-#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/functional/function_ref.h"
 #include "xla/service/hlo.pb.h"
@@ -170,14 +168,6 @@ class HloBufferDonorConfig {
              param_index == other.param_index;
     }
 
-    bool operator<(const BufferDonor& other) const {
-      return std::forward_as_tuple(param_number, param_index) <
-             std::forward_as_tuple(other.param_number, other.param_index);
-    }
-    bool operator>(const BufferDonor& other) const { return other < *this; }
-    bool operator<=(const BufferDonor& other) const { return !(*this > other); }
-    bool operator>=(const BufferDonor& other) const { return !(*this < other); }
-
     // A hash function borrowed from go/absl-hash.
     template <typename H>
     friend H AbslHashValue(H h, const BufferDonor& donor) {
@@ -208,7 +198,7 @@ class HloBufferDonorConfig {
   Status Verify(const HloModule& module) const;
 
   // Returns the registered buffer donors
-  const absl::btree_set<BufferDonor>& buffer_donor() const {
+  const absl::flat_hash_set<BufferDonor>& buffer_donor() const {
     return buffer_donor_;
   }
 
@@ -218,7 +208,7 @@ class HloBufferDonorConfig {
 
  private:
   // A set recording the registered buffer donors.
-  absl::btree_set<BufferDonor> buffer_donor_;
+  absl::flat_hash_set<BufferDonor> buffer_donor_;
 };
 
 std::ostream& operator<<(std::ostream& out,

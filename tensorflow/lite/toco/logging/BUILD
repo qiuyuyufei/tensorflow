@@ -94,7 +94,6 @@ py_strict_test(
     deps = [
         ":gen_html",
         ":toco_conversion_log_proto_py",
-        #internal proto upb dep
         "//tensorflow/python/framework:test_lib",
         "//tensorflow/python/lib/io:file_io",
         "//tensorflow/python/platform:client_testlib",

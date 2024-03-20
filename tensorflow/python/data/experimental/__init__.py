@@ -25,6 +25,7 @@ See [Importing Data](https://tensorflow.org/guide/datasets) for an overview.
 @@AutoShardPolicy
 @@AutotuneAlgorithm
 @@AutotuneOptions
+@@CheckpointInputPipelineHook
 @@Counter
 @@CsvDataset
 @@DatasetInitializer
@@ -119,6 +120,7 @@ from tensorflow.python.data.experimental.ops.interleave_ops import parallel_inte
 from tensorflow.python.data.experimental.ops.interleave_ops import sample_from_datasets
 from tensorflow.python.data.experimental.ops.io import load
 from tensorflow.python.data.experimental.ops.io import save
+from tensorflow.python.data.experimental.ops.iterator_ops import CheckpointInputPipelineHook
 from tensorflow.python.data.experimental.ops.iterator_ops import make_saveable_from_iterator
 from tensorflow.python.data.experimental.ops.lookup_ops import DatasetInitializer
 from tensorflow.python.data.experimental.ops.lookup_ops import index_table_from_dataset

@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -723,7 +723,7 @@ class MemoryUsageTracker {
 
   // Get the compact shape of given hlo instruction. An internal cache is used
   // to avoid computing the shape multiple times.
-  absl::StatusOr<Shape> GetCompactShape(const HloInstruction* hlo);
+  StatusOr<Shape> GetCompactShape(const HloInstruction* hlo);
 
   // Creates a Buffer representing the given logical buffer. The buffer is added
   // to buffers_ and a reference is returned.
@@ -1506,8 +1506,7 @@ std::string MemoryUsageTracker::ToString() const {
   return output;
 }
 
-absl::StatusOr<Shape> MemoryUsageTracker::GetCompactShape(
-    const HloInstruction* hlo) {
+StatusOr<Shape> MemoryUsageTracker::GetCompactShape(const HloInstruction* hlo) {
   auto it = compact_shape_.find(hlo);
   if (it != compact_shape_.end()) {
     return it->second;
@@ -1989,7 +1988,7 @@ UsesList MemoryUsageTracker::GetItemUses(Item* item) const {
   return combined_users;
 }
 
-absl::StatusOr<int64_t> RematerializeInstructions(
+StatusOr<int64_t> RematerializeInstructions(
     MemoryUsageTracker* memory_tracker, std::vector<Item*>* best_items,
     absl::flat_hash_set<const HloInstruction*>* remat_move_instructions,
     InstructionList* instruction_list, HloSchedule* schedule,
@@ -2033,7 +2032,12 @@ absl::StatusOr<int64_t> RematerializeInstructions(
     }
 
     // Add control dependencies to the new operation.
-    TF_RETURN_IF_ERROR(remat->CopyAllControlDepsFrom(best));
+    for (auto successor : best->control_successors()) {
+      TF_RETURN_IF_ERROR(remat->AddControlDependencyTo(successor));
+    }
+    for (auto predecessor : best->control_predecessors()) {
+      TF_RETURN_IF_ERROR(predecessor->AddControlDependencyTo(remat));
+    }
 
     Item* remat_item = instruction_list->CreateItem(remat);
 
@@ -2168,10 +2172,10 @@ absl::StatusOr<int64_t> RematerializeInstructions(
   return net_instructions_added;
 }
 
-absl::StatusOr<int64_t> CompressInstruction(MemoryUsageTracker* memory_tracker,
-                                            Item* best_item,
-                                            const Shape& compact_shape,
-                                            InstructionList* instruction_list) {
+StatusOr<int64_t> CompressInstruction(MemoryUsageTracker* memory_tracker,
+                                      Item* best_item,
+                                      const Shape& compact_shape,
+                                      InstructionList* instruction_list) {
   HloInstruction* best = best_item->instruction;
   VLOG(5) << "Transposing instruction " << best->name() << " (saving "
           << HumanReadableNumBytes(memory_tracker->MemoryReducedIfCompressed(
@@ -2221,9 +2225,9 @@ absl::StatusOr<int64_t> CompressInstruction(MemoryUsageTracker* memory_tracker,
   return 2;
 }
 
-absl::StatusOr<int64_t> OffloadInstruction(MemoryUsageTracker* memory_tracker,
-                                           Item* best_item,
-                                           InstructionList* instruction_list) {
+StatusOr<int64_t> OffloadInstruction(MemoryUsageTracker* memory_tracker,
+                                     Item* best_item,
+                                     InstructionList* instruction_list) {
   HloInstruction* best_instruction = best_item->instruction;
   HloComputation* computation = best_instruction->parent();
   VLOG(2) << "Best_instruction's users: "
@@ -2498,7 +2502,7 @@ struct InstructionsAdded {
 // Rematerializes the best block of instructions of size between min_block_size
 // and max_block_size (both inclusive) if at least one candidate block of
 // instructions can be found. Returns number of instructions rematerialized.
-absl::StatusOr<InstructionsAdded> RematerializeBestBlock(
+StatusOr<InstructionsAdded> RematerializeBestBlock(
     int min_block_size, int max_block_size, MemoryUsageTracker* memory_tracker,
     InstructionList* instruction_list, HloSchedule* schedule,
     int64_t memory_limit_bytes,
@@ -2567,7 +2571,7 @@ absl::StatusOr<InstructionsAdded> RematerializeBestBlock(
 }
 }  // namespace
 
-absl::StatusOr<int64_t> HloRematerialization::ComputePeakMemory(
+StatusOr<int64_t> HloRematerialization::ComputePeakMemory(
     const HloComputation* computation, const HloInstructionSequence& order,
     const absl::flat_hash_set<absl::string_view>& execution_threads) const {
   InstructionList instruction_list(order);
@@ -2590,7 +2594,7 @@ absl::StatusOr<int64_t> HloRematerialization::ComputePeakMemory(
   return peak_memory;
 }
 
-absl::StatusOr<int64_t> HloRematerialization::CalledComputationsMemoryUsage(
+StatusOr<int64_t> HloRematerialization::CalledComputationsMemoryUsage(
     const HloInstruction* instruction,
     const absl::flat_hash_set<absl::string_view>& execution_threads) const {
   const CallSite* callsite =
@@ -2610,7 +2614,7 @@ absl::StatusOr<int64_t> HloRematerialization::CalledComputationsMemoryUsage(
   return callee_usage;
 }
 
-absl::StatusOr<bool> HloRematerialization::RematerializeComputation(
+StatusOr<bool> HloRematerialization::RematerializeComputation(
     HloComputation* computation, HloSchedule* schedule,
     int64_t memory_limit_bytes, int64_t min_remat_size,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
@@ -2812,7 +2816,7 @@ absl::StatusOr<bool> HloRematerialization::RematerializeComputation(
   return changed;
 }
 
-absl::StatusOr<bool> HloRematerialization::Run(
+StatusOr<bool> HloRematerialization::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   if (options_.remat_mode_config.host_offload) {

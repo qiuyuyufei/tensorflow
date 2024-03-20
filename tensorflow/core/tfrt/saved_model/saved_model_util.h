@@ -47,16 +47,13 @@ namespace tensorflow {
 namespace tfrt_stub {
 
 // Filename for serialized BEF Buffer.
-inline constexpr char kBefBufferFileName[] = "serialized_bef.mlir.bef";
-
-// Filename for serialized MLRT bytecode Buffer.
-inline constexpr char kMlrtBufferFileName[] = "serialized_mlrt.mlir.mlrt";
+inline constexpr char kBefBufferFilenameMLIRBEF[] = "serialized_bef.mlir.bef";
 
 // Filename for serialized MLIR_MODULE.
-inline constexpr char kMlirModuleFilename[] = "serialized_mlir.mlir";
+inline constexpr char kMLIRModuleFilename[] = "serialized_mlir.mlir";
 
 // Subdirectory where AoT Packages are saved
-inline constexpr char kAotPackagesDirectory[] = "aot_packages";
+inline constexpr char kAoTPackagesDirectory[] = "aot_packages";
 
 // TODO(tfrt-dev): Replace tfrt::TensorSpec with tensorflow::TensorSpec once the
 // latter is checked in.
@@ -106,7 +103,6 @@ using ::tensorflow::StatusOr;
 
 struct Initializer {
   std::string name;
-  std::vector<tensorflow::Tensor> inputs;
 };
 
 struct InitializersAndSignatures {
@@ -116,29 +112,27 @@ struct InitializersAndSignatures {
   SignatureMap signature_map;
 };
 
-// If `saved_model_dir` is non-empty, this function fills in the Initializer's
-// inputs in the returned result.
 StatusOr<InitializersAndSignatures> GetInitializersAndSignatures(
-    mlir::ModuleOp module, absl::string_view saved_model_dir = "");
+    mlir::ModuleOp module);
 
 std::string GetAotPackagePath(absl::string_view saved_model_dir);
 
-std::string GetBefFilePath(std::string aot_package_directory);
+std::string GetBEFFilePath(std::string aot_package_directory);
 
 std::string GetMlirFilePath(const std::string& aot_package_directory);
 
 // TODO(b/295241000): Implement MLIR deserialization to skip it AoT and remove
 // redundant steps
-absl::StatusOr<tfrt::BefBuffer> LoadBefAndMlir(
+absl::StatusOr<tfrt::BefBuffer> LoadAotPackages(
     const TfrtCompileOptions& options, mlir::ModuleOp mlir_module,
     const std::string& saved_model_dir,
     tfrt_stub::FallbackState* fallback_state);
 
-absl::Status DeserializeAotMlirModule(
+absl::Status DeserializeAoTMlirModule(
     absl::string_view saved_model_dir, mlir::MLIRContext* context,
     mlir::OwningOpRef<mlir::ModuleOp>* mlir_module);
 
-void RegisterTfrtDialectsForAot(mlir::DialectRegistry& registry);
+void RegisterTFRTDialectsForAoT(mlir::DialectRegistry& registry);
 
 }  // namespace tfrt_stub
 }  // namespace tensorflow

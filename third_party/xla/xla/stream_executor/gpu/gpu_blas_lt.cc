@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,176 +15,119 @@ limitations under the License.
 
 #include "xla/stream_executor/gpu/gpu_blas_lt.h"
 
-#include <algorithm>
 #include <cstdint>
-#include <optional>
 #include <utility>
 
-#include "absl/status/statusor.h"
-#include "absl/strings/str_format.h"
 #include "xla/primitive_util.h"
-#include "xla/service/algorithm_util.h"
 #include "xla/stream_executor/blas.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/util.h"
-#include "xla/xla_data.pb.h"
-#include "tsl/protobuf/dnn.pb.h"
+#include "tsl/platform/statusor.h"
 #if GOOGLE_CUDA
 #include "tsl/platform/tensor_float_32_utils.h"
 #endif
 
-namespace stream_executor {
+namespace stream_executor::gpu {
 
-namespace gpu {
-
-using blas::ComputationType;
-using blas::DataType;
-using xla::PrimitiveType;
-
-absl::StatusOr<DataType> AsBlasDataType(PrimitiveType dtype) {
+tsl::StatusOr<blas::DataType> AsBlasDataType(xla::PrimitiveType dtype) {
   switch (dtype) {
-    case PrimitiveType::F8E5M2:
-      return DataType::kF8E5M2;
-    case PrimitiveType::F8E4M3FN:
-      return DataType::kF8E4M3FN;
-    case PrimitiveType::F8E5M2FNUZ:
-      return DataType::kF8E5M2FNUZ;
-    case PrimitiveType::F8E4M3FNUZ:
-      return DataType::kF8E4M3FNUZ;
-    case PrimitiveType::S8:
-      return DataType::kInt8;
-    case PrimitiveType::F16:
-      return DataType::kHalf;
-    case PrimitiveType::BF16:
-      return DataType::kBF16;
-    case PrimitiveType::F32:
-      return DataType::kFloat;
-    case PrimitiveType::S32:
-      return DataType::kInt32;
-    case PrimitiveType::F64:
-      return DataType::kDouble;
-    case PrimitiveType::C64:
-      return DataType::kComplexFloat;
-    case PrimitiveType::C128:
-      return DataType::kComplexDouble;
+    case xla::PrimitiveType::F8E5M2:
+      return blas::DataType::kF8E5M2;
+    case xla::PrimitiveType::F8E4M3FN:
+      return blas::DataType::kF8E4M3FN;
+    case xla::PrimitiveType::S8:
+      return blas::DataType::kInt8;
+    case xla::PrimitiveType::F16:
+      return blas::DataType::kHalf;
+    case xla::PrimitiveType::BF16:
+      return blas::DataType::kBF16;
+    case xla::PrimitiveType::F32:
+      return blas::DataType::kFloat;
+    case xla::PrimitiveType::S32:
+      return blas::DataType::kInt32;
+    case xla::PrimitiveType::F64:
+      return blas::DataType::kDouble;
+    case xla::PrimitiveType::C64:
+      return blas::DataType::kComplexFloat;
+    case xla::PrimitiveType::C128:
+      return blas::DataType::kComplexDouble;
     default:
-      return xla::Internal(
+      return xla::InternalError(
           "AsBlasDataType: unsupported type: %s",
           xla::primitive_util::LowercasePrimitiveTypeName(dtype));
   }
 }
 
-absl::StatusOr<PrimitiveType> AsXlaPrimitiveType(DataType dtype) {
+tsl::StatusOr<xla::PrimitiveType> AsXlaPrimitiveType(blas::DataType dtype) {
   switch (dtype) {
-    case DataType::kF8E5M2:
-      return PrimitiveType::F8E5M2;
-    case DataType::kF8E4M3FN:
-      return PrimitiveType::F8E4M3FN;
-    case DataType::kF8E5M2FNUZ:
-      return PrimitiveType::F8E5M2FNUZ;
-    case DataType::kF8E4M3FNUZ:
-      return PrimitiveType::F8E4M3FNUZ;
-    case DataType::kInt8:
-      return PrimitiveType::S8;
-    case DataType::kHalf:
-      return PrimitiveType::F16;
-    case DataType::kBF16:
-      return PrimitiveType::BF16;
-    case DataType::kFloat:
-      return PrimitiveType::F32;
-    case DataType::kInt32:
-      return PrimitiveType::S32;
-    case DataType::kDouble:
-      return PrimitiveType::F64;
-    case DataType::kComplexFloat:
-      return PrimitiveType::C64;
-    case DataType::kComplexDouble:
-      return PrimitiveType::C128;
+    case blas::DataType::kF8E5M2:
+      return xla::PrimitiveType::F8E5M2;
+    case blas::DataType::kF8E4M3FN:
+      return xla::PrimitiveType::F8E4M3FN;
+    case blas::DataType::kInt8:
+      return xla::PrimitiveType::S8;
+    case blas::DataType::kHalf:
+      return xla::PrimitiveType::F16;
+    case blas::DataType::kBF16:
+      return xla::PrimitiveType::BF16;
+    case blas::DataType::kFloat:
+      return xla::PrimitiveType::F32;
+    case blas::DataType::kInt32:
+      return xla::PrimitiveType::S32;
+    case blas::DataType::kDouble:
+      return xla::PrimitiveType::F64;
+    case blas::DataType::kComplexFloat:
+      return xla::PrimitiveType::C64;
+    case blas::DataType::kComplexDouble:
+      return xla::PrimitiveType::C128;
     default:
-      return xla::Internal("AsXlaPrimitiveType: unsupported dtype");
+      return xla::InternalError("AsXlaPrimitiveType: unsupported dtype");
   }
 }
 
-MatrixLayout::MatrixLayout(xla::PrimitiveType dtype_, int64_t num_rows_,
-                           int64_t num_cols_, MatrixLayout::Order order_,
-                           int64_t batch_size_,
-                           std::optional<int64_t> leading_dim_stride_,
-                           std::optional<int64_t> batch_stride_,
-                           std::optional<blas::Transpose> transpose_)
-    : dtype(dtype_),
-      num_rows(num_rows_),
-      num_cols(num_cols_),
-      order(order_),
-      batch_size(batch_size_) {
-  if (!leading_dim_stride_) {
-    leading_dim_stride = order == Order::kRowMajor ? num_cols : num_rows;
-  } else {
-    leading_dim_stride = *leading_dim_stride_;
-  }
-  if (!batch_stride_) {
-    batch_stride = (batch_size > 1) ? num_rows * num_cols : 0;
-  } else {
-    batch_stride = *batch_stride_;
-  }
-  transpose = transpose_ ? *transpose_ : blas::Transpose::kNoTranspose;
-}
-
-void MatrixLayout::Transpose() {
-  std::swap(num_rows, num_cols);
-  order = (order == Order::kRowMajor) ? Order::kColumnMajor : Order::kRowMajor;
-}
-
-absl::StatusOr<ComputationType> GetBlasComputationType(
-    xla::PrecisionConfig::Algorithm algorithm, xla::PrimitiveType lhs_dtype,
-    xla::PrimitiveType output_dtype, int64_t compute_precision) {
-  if (algorithm == xla::PrecisionConfig::ALG_UNSET) {
-    switch (output_dtype) {
-      case PrimitiveType::F8E5M2:      // fall-through
-      case PrimitiveType::F8E4M3FN:    // fall-through
-      case PrimitiveType::F8E5M2FNUZ:  // fall-through
-      case PrimitiveType::F8E4M3FNUZ:  // fall-through
-      case PrimitiveType::F16:         // fall-through
-      case PrimitiveType::BF16:
-        // Accumulate in f32 precision.
-        return ComputationType::kF32;
-      case PrimitiveType::F32:  // fall-through
-      case PrimitiveType::C64:
+tsl::StatusOr<blas::ComputationType> GetBlasComputationType(
+    xla::PrimitiveType lhs_dtype, xla::PrimitiveType output_dtype,
+    int64_t compute_precision) {
+  switch (output_dtype) {
+    case xla::PrimitiveType::F8E5M2:    // fall-through
+    case xla::PrimitiveType::F8E4M3FN:  // fall-through
+    case xla::PrimitiveType::F16:       // fall-through
+    case xla::PrimitiveType::BF16:
+      // Accumulate in f32 precision.
+      return blas::ComputationType::kF32;
+    case xla::PrimitiveType::F32:  // fall-through
+    case xla::PrimitiveType::C64:
 #if GOOGLE_CUDA
-        if (tsl::tensor_float_32_execution_enabled() &&
-            compute_precision <= 1 && lhs_dtype == output_dtype) {
-          // CublasLt requires compute type to be F32 for F8 matmul.
-          // TF32 should only be chosen for FP32 or C64 gemm
-          return ComputationType::kTF32AsF32;
-        }
+      if (tsl::tensor_float_32_execution_enabled() && compute_precision <= 1 &&
+          lhs_dtype == output_dtype) {
+        // CublasLt requires compute type to be F32 for F8 matmul.
+        // TF32 should only be chosen for FP32 or C64 gemm
+        return blas::ComputationType::kTF32AsF32;
+      }
 #endif
-        return ComputationType::kF32;
-      case PrimitiveType::F64:  // fall-through
-      case PrimitiveType::C128:
-        return ComputationType::kF64;
-      case PrimitiveType::S32:
-        return ComputationType::kI32;
-      default:
-        return xla::Internal("GetBlasComputationType: unsupported type");
-    }
+      return blas::ComputationType::kF32;
+    case xla::PrimitiveType::F64:  // fall-through
+    case xla::PrimitiveType::C128:
+      return blas::ComputationType::kF64;
+    case xla::PrimitiveType::S32:
+      return blas::ComputationType::kI32;
+    default:
+      return xla::InternalError("GetBlasComputationType: unsupported type");
   }
-
-  return xla::algorithm_util::GetBlasComputationType(algorithm);
 }
 
 // BLAS GeMM's output is column-major. If we require row-major, use identity:
 // C^T = (A @ B)^T = B^T @ A^T.
 bool MakeOutputColumnMajor(MatrixLayout& lhs, MatrixLayout& rhs,
-                           MatrixLayout& output, MatrixLayout* c) {
+                           MatrixLayout& output, MatrixLayout* pC) {
   bool swap_operands = output.order != MatrixLayout::Order::kColumnMajor;
   if (swap_operands) {
     std::swap(lhs, rhs);
     rhs.Transpose();
-    // prevent layouts from being swapped two times if they are equal
-    if (&lhs != &rhs) {
-      lhs.Transpose();
-    }
-    if (c != nullptr && c != &output) {
-      c->Transpose();
+    lhs.Transpose();
+    // prevent pC and output from being swapped two times if they are equal!
+    if (pC != nullptr && pC != &output) {
+      pC->Transpose();
     }
     output.Transpose();
   }
@@ -193,10 +136,10 @@ bool MakeOutputColumnMajor(MatrixLayout& lhs, MatrixLayout& rhs,
 
 /*static*/ auto BlasLt::GetMatmulPlan(const Stream* stream,
                                       const GemmConfig& cfg, Epilogue epilogue)
-    -> absl::StatusOr<MatmulPlanPtr> {
+    -> tsl::StatusOr<MatmulPlanPtr> {
   auto blas = Get(stream);
   if (blas == nullptr) {
-    return xla::Internal("BlasLt is unavailable");
+    return xla::InternalError("BlasLt is unavailable");
   }
   return blas->GetMatmulPlan(cfg, epilogue);
 }
@@ -206,13 +149,12 @@ bool MakeOutputColumnMajor(MatrixLayout& lhs, MatrixLayout& rhs,
   return (blas != nullptr ? blas->GetBlasLt() : nullptr);
 }
 
-DataType GetScaleType(DataType c_type, ComputationType computation_type) {
-  return (computation_type == ComputationType::kF32 &&
-                  c_type != DataType::kComplexFloat
-              ? DataType::kFloat
-              : c_type);
+blas::DataType GetScaleType(blas::DataType c_type,
+                            blas::ComputationType computation_type) {
+  return ((computation_type == blas::ComputationType::kF32) &&
+          (c_type != blas::DataType::kComplexFloat))
+             ? blas::DataType::kFloat
+             : c_type;
 }
 
-}  // namespace gpu
-
-}  // namespace stream_executor
+}  // namespace stream_executor::gpu

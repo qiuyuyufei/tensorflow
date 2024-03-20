@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ limitations under the License.
 #include <cstdint>
 
 #include "absl/types/span.h"
+#include "xla/stream_executor/platform/port.h"
 #include "tsl/platform/logging.h"
 
 namespace stream_executor {

@@ -67,7 +67,7 @@ class TransposerImpl : public Transposer {
  public:
   explicit TransposerImpl() : Transposer() {}
   Status TransposeNode(TransposeContext*, utils::MutableNodeView*) override {
-    return absl::OkStatus();
+    return OkStatus();
   }
 };
 

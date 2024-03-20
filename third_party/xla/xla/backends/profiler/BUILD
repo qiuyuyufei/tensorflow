@@ -1,9 +1,4 @@
-load(
-    "@local_tsl//tsl:tsl.bzl",
-    "if_with_tpu_support",
-    "internal_visibility",
-    "tsl_gpu_library",
-)
+load("@local_tsl//tsl:tsl.bzl", "if_with_tpu_support", "tsl_gpu_library")
 
 # copybara:uncomment package(default_applicable_licenses = ["//tensorflow:license"])
 
@@ -18,7 +13,7 @@ package_group(
 
 tsl_gpu_library(
     name = "profiler_backends",
-    visibility = internal_visibility(["//xla:internal"]),
+    visibility = ["//visibility:public"],
     deps = [
         "//xla/backends/profiler/cpu:host_tracer",
         "//xla/backends/profiler/cpu:metadata_collector",

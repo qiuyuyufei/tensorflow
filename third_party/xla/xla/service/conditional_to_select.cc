@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ limitations under the License.
 
 namespace xla {
 
-static absl::StatusOr<bool> DoConditionalToSelect(HloInstruction* conditional) {
+static StatusOr<bool> DoConditionalToSelect(HloInstruction* conditional) {
   // Only allow conditional to select if the called computations
   // do not have side effects.
   if (conditional->true_computation()->HasSideEffect() ||
@@ -66,7 +66,7 @@ static absl::StatusOr<bool> DoConditionalToSelect(HloInstruction* conditional) {
   return true;
 }
 
-absl::StatusOr<bool> ConditionalToSelect::Run(
+StatusOr<bool> ConditionalToSelect::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);

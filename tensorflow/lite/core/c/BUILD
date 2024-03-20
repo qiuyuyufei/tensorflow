@@ -1,9 +1,9 @@
-load("//tensorflow:tensorflow.default.bzl", "get_compatible_with_portable")
 load(
     "//tensorflow/lite:build_def.bzl",
     "tflite_cc_library_with_c_headers_test",
     "tflite_copts",
 )
+load("//tensorflow:tensorflow.default.bzl", "get_compatible_with_portable")
 load(
     "//tensorflow/lite/core/c:special_rules.bzl",
     "c_api_experimental_visibility_allowlist",
@@ -45,18 +45,6 @@ filegroup(
         "c_api_types.h",
         "common.h",
         "registration_external.h",
-    ],
-)
-
-filegroup(
-    name = "tflite_internal_cc_3p_api_deps_src",
-    srcs = [
-        "builtin_op_data.h",
-        "common.cc",
-        "common.h",
-    ],
-    visibility = [
-        "//tensorflow/lite:__pkg__",
     ],
 )
 
@@ -132,7 +120,6 @@ tflite_cc_library_with_c_headers_test(
     name = "c_api_without_op_resolver_without_alwayslink",
     srcs = ["c_api.cc"],
     hdrs = ["c_api.h"],
-    compatible_with = get_compatible_with_portable(),
     copts = tflite_copts(),
     tags = ["allow_undefined_symbols"],  # For tflite::CreateOpResolver().
     deps = [
@@ -176,33 +163,6 @@ cc_test(
         "//tensorflow/lite:testdata/add_quantized.bin",
         "//tensorflow/lite:testdata/custom_sinh.bin",
     ],
-    deps = [
-        ":c_api",
-        ":c_api_experimental",
-        ":c_api_types",
-        ":common",
-        "//tensorflow/lite:string_util",
-        "//tensorflow/lite/c:c_api_internal",
-        "//tensorflow/lite/core:subgraph",
-        "//tensorflow/lite/delegates:delegate_test_util",
-        "//tensorflow/lite/schema:schema_fbs",
-        "//tensorflow/lite/testing:util",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "c_api_test_with_opaque_delegate",
-    size = "small",
-    srcs = ["c_api_test.cc"],
-    copts = tflite_copts(),
-    data = [
-        "//tensorflow/lite:testdata/2_subgraphs.bin",
-        "//tensorflow/lite:testdata/add.bin",
-        "//tensorflow/lite:testdata/add_quantized.bin",
-        "//tensorflow/lite:testdata/custom_sinh.bin",
-    ],
-    local_defines = ["TFLITE_USE_OPAQUE_DELEGATE"],
     deps = [
         ":c_api",
         ":c_api_experimental",
@@ -299,15 +259,11 @@ cc_test(
         "c_api_opaque.h",
         "c_api_opaque_test.cc",
     ],
-    data = [
-        "//tensorflow/lite:testdata/custom_sinh.bin",
-    ],
     deps = [
         ":c_api",
         ":c_api_types",
         ":common",
         ":registration_external",
-        "//tensorflow/lite:builtin_ops",
         "//tensorflow/lite:string_util",
         "//tensorflow/lite:util",
         "//tensorflow/lite/c:c_api_opaque_internal",
@@ -382,7 +338,6 @@ tflite_cc_library_with_c_headers_test(
         "//tensorflow/lite:signature_runner",
         "//tensorflow/lite/c:c_api_internal",
         "//tensorflow/lite/c:c_api_opaque_internal",
-        "//tensorflow/lite/c:c_api_types",
         "//tensorflow/lite/core:framework",
         "//tensorflow/lite/kernels:kernel_util",
         "//tensorflow/lite/profiling/telemetry:profiler",
@@ -420,7 +375,6 @@ tflite_cc_library_with_c_headers_test(
         "//tensorflow/lite:util",
         "//tensorflow/lite/c:c_api_internal",
         "//tensorflow/lite/c:c_api_opaque_internal",
-        "//tensorflow/lite/c:c_api_types",
         "//tensorflow/lite/core:framework",
         "//tensorflow/lite/kernels:kernel_util",
         "//tensorflow/lite/profiling/telemetry:profiler",
@@ -472,7 +426,6 @@ tflite_cc_library_with_c_headers_test(
         "//tensorflow/lite:util",
         "//tensorflow/lite/c:c_api_internal",
         "//tensorflow/lite/c:c_api_opaque_internal_without_alwayslink",
-        "//tensorflow/lite/c:c_api_types",
         "//tensorflow/lite/core:framework",
         "//tensorflow/lite/kernels:kernel_util",
         "//tensorflow/lite/profiling/telemetry:profiler",
@@ -497,7 +450,6 @@ tflite_cc_library_with_c_headers_test(
     hdrs = [
         "c_api_opaque.h",
     ],
-    compatible_with = get_compatible_with_portable(),
     copts = tflite_copts(),
     visibility = [
         "//tensorflow/lite:__subpackages__",
@@ -523,7 +475,6 @@ tflite_cc_library_with_c_headers_test(
     hdrs = [
         "c_api_opaque.h",
     ],
-    compatible_with = get_compatible_with_portable(),
     copts = tflite_copts(),
     tags = ["allow_undefined_symbols"],  # For tflite::CreateOpResolver().
     deps = [
@@ -559,7 +510,6 @@ tflite_cc_library_with_c_headers_test(
     hdrs = [
         "c_api_opaque.h",
     ],
-    compatible_with = get_compatible_with_portable(),
     copts = tflite_copts(),
     tags = ["allow_undefined_symbols"],  # For tflite::CreateOpResolver().
     deps = [
@@ -601,7 +551,6 @@ cc_test(
         ":common",
         "//tensorflow/lite:kernel_api",
         "//tensorflow/lite:util",
-        "//tensorflow/lite/c:c_api_types",
         "//tensorflow/lite/delegates:delegate_test_util",
         "//tensorflow/lite/testing:util",
         "@com_google_googletest//:gtest_main",

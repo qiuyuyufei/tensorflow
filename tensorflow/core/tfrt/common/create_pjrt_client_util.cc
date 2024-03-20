@@ -23,7 +23,7 @@ limitations under the License.
 
 namespace tensorflow {
 
-absl::StatusOr<xla::PjRtClient*> GetOrCreatePjRtClient(
+StatusOr<xla::PjRtClient*> GetOrCreatePjRtClient(
     const DeviceType& device_type,
     std::optional<std::set<int>> allowed_devices) {
   ResourceMgr* rmgr = tfrt_global::GetTFGlobalResourceMgr();

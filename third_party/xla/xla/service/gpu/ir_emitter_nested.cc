@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,55 +14,24 @@ limitations under the License.
 ==============================================================================*/
 #include "xla/service/gpu/ir_emitter_nested.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <iterator>
 #include <string>
 #include <vector>
 
-#include "absl/algorithm/container.h"
-#include "absl/hash/hash.h"
-#include "absl/log/check.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "absl/types/span.h"
-#include "llvm/IR/Argument.h"
 #include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/Support/Alignment.h"
-#include "llvm/Support/AtomicOrdering.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/TargetParser/Triple.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
-#include "xla/literal.h"
-#include "xla/primitive_util.h"
-#include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/ir_emitter.h"
 #include "xla/service/gpu/ir_emitter_context.h"
 #include "xla/service/gpu/kernel_reuse_cache.h"
 #include "xla/service/llvm_ir/buffer_assignment_util.h"
-#include "xla/service/llvm_ir/ir_array.h"
 #include "xla/service/llvm_ir/kernel_support_library.h"
-#include "xla/service/llvm_ir/llvm_loop.h"
 #include "xla/service/llvm_ir/llvm_util.h"
-#include "xla/service/llvm_ir/loop_emitter.h"
 #include "xla/service/llvm_ir/tuple_ops.h"
-#include "xla/shape.h"
-#include "xla/shape_util.h"
-#include "xla/status_macros.h"
-#include "xla/stream_executor/device_description.h"
-#include "xla/util.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -81,7 +50,7 @@ class IrEmitterNested : public IrEmitter {
 
   // Overrides the default empty implementation. Binds the given instruction
   // "parameter" with the parameter of the IR function.
-  absl::Status HandleParameter(HloInstruction* parameter) override;
+  Status HandleParameter(HloInstruction* parameter) override;
 
   // Generate the code for the computation passed in the constructor, if it
   // wasn't already generated previously.
@@ -94,17 +63,17 @@ class IrEmitterNested : public IrEmitter {
   //
   // The allocation index for these constants will always be -1 (i.e. doesn't
   // correspond to any allocation)
-  absl::StatusOr<llvm::Function*> CodegenNestedComputation();
+  StatusOr<llvm::Function*> CodegenNestedComputation();
 
  protected:
-  absl::Status EmitTargetElementLoop(
+  Status EmitTargetElementLoop(
       const HloInstruction& hlo,
       const llvm_ir::ElementGenerator& element_generator) override;
 
  private:
   // Emits constants to generated LLVM IR, and also populates related
   // information to 'ir_emitter_context_' for large-constant initializations.
-  absl::Status EmitConstants(const HloComputation& computation);
+  Status EmitConstants(const HloComputation& computation);
 
   const HloComputation& nested_computation_;
 };
@@ -117,7 +86,7 @@ IrEmitterNested::IrEmitterNested(const HloComputation& nested_computation,
 
 // Nested function serves the same purpose on GPU as a thread-local function on
 // a CPU.
-absl::StatusOr<llvm::Function*> IrEmitterNested::CodegenNestedComputation() {
+StatusOr<llvm::Function*> IrEmitterNested::CodegenNestedComputation() {
   // Include a fingerprint of the HLO in the function name. Currently, codegen
   // is invoked on temporary HLO objects, which means the address of the
   // computation is not necessarily unique.
@@ -144,7 +113,8 @@ absl::StatusOr<llvm::Function*> IrEmitterNested::CodegenNestedComputation() {
   for (const HloInstruction* param : params) {
     io_hlos.push_back(param);
     const Shape& param_shape = param->shape();
-    argument_types.push_back(b_.getPtrTy());
+    argument_types.push_back(
+        llvm_ir::ShapeToIrType(param_shape, module_)->getPointerTo());
     int64_t param_size =
         llvm_ir::ByteSizeOf(param_shape, module_->getDataLayout());
     argument_dereferenceable_bytes.push_back(param_size);
@@ -153,7 +123,8 @@ absl::StatusOr<llvm::Function*> IrEmitterNested::CodegenNestedComputation() {
   const HloInstruction* root = nested_computation_.root_instruction();
   {
     const Shape& root_shape = root->shape();
-    argument_types.push_back(b_.getPtrTy());
+    argument_types.push_back(
+        llvm_ir::ShapeToIrType(root_shape, module_)->getPointerTo());
     int64_t root_size = llvm_ir::ByteSizeOf(
         root_shape, ir_emitter_context_->llvm_module()->getDataLayout());
     argument_dereferenceable_bytes.push_back(root_size);
@@ -213,17 +184,20 @@ absl::StatusOr<llvm::Function*> IrEmitterNested::CodegenNestedComputation() {
       llvm::Value* ret_value =
           Load(llvm_ir::ShapeToIrType(return_shape, module_), root_value,
                "load_ret_value");
-      Store(ret_value, out_parameter);
+      Store(ret_value,
+            BitCast(out_parameter, root_value->getType(), "bitcast_ret_value"));
     } else {
       CHECK(return_shape.IsTuple());
       llvm::Type* tuple_type = llvm_ir::ShapeToIrType(return_shape, module_);
+      llvm::Type* tuple_type_ptr = tuple_type->getPointerTo();
+      llvm::Value* tuple_ptr = BitCast(out_parameter, tuple_type_ptr);
 
       for (int i = 0; i < return_shape.tuple_shapes_size(); i++) {
         const Shape& element_shape = return_shape.tuple_shapes(i);
         llvm::Value* destination = llvm_ir::EmitGetTupleElement(
             element_shape,
             /*index=*/i,
-            /*alignment=*/1, out_parameter, tuple_type, &b_);
+            /*alignment=*/1, tuple_ptr, tuple_type, &b_);
         llvm::Value* source = llvm_ir::EmitGetTupleElement(
             element_shape,
             /*index=*/i,
@@ -238,11 +212,11 @@ absl::StatusOr<llvm::Function*> IrEmitterNested::CodegenNestedComputation() {
   return function;
 }
 
-absl::Status IrEmitterNested::HandleParameter(HloInstruction* parameter) {
-  return absl::OkStatus();
+Status IrEmitterNested::HandleParameter(HloInstruction* parameter) {
+  return OkStatus();
 }
 
-absl::Status IrEmitterNested::EmitTargetElementLoop(
+Status IrEmitterNested::EmitTargetElementLoop(
     const HloInstruction& hlo,
     const llvm_ir::ElementGenerator& element_generator) {
   // For MOF we give the loop emitter an array for every output it should
@@ -253,13 +227,13 @@ absl::Status IrEmitterNested::EmitTargetElementLoop(
     TF_RETURN_IF_ERROR(
         llvm_ir::LoopEmitter(element_generator, target_arrays, &b_).EmitLoop());
     llvm_ir::EmitTuple(GetIrArray(hlo, hlo), target_arrays, &b_);
-    return absl::OkStatus();
+    return OkStatus();
   }
   return llvm_ir::LoopEmitter(element_generator, GetIrArray(hlo, hlo), &b_)
       .EmitLoop();
 }
 
-absl::Status IrEmitterNested::EmitConstants(const HloComputation& computation) {
+Status IrEmitterNested::EmitConstants(const HloComputation& computation) {
   for (HloInstruction* instr : computation.instructions()) {
     if (instr->opcode() != HloOpcode::kConstant) {
       continue;
@@ -283,11 +257,9 @@ absl::Status IrEmitterNested::EmitConstants(const HloComputation& computation) {
 
         global_name,
         /*allocation_idx=*/-1,
-        DenseDataIntermediate::Alias(
-            absl::MakeSpan(base, base + literal.size_bytes())),
-        &b_);
+        llvm::ArrayRef<uint8_t>(base, base + literal.size_bytes()), &b_);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Casts the provided llvm::Value* to the default address space. This is useful
@@ -297,8 +269,8 @@ llvm::Value* AddrCastToDefault(llvm::Value* arg, llvm::IRBuilder<>& b) {
   llvm::Type* arg_type = arg->getType();
   CHECK(arg_type->isPointerTy());
   if (arg_type->getPointerAddressSpace() != 0) {
-    llvm::Type* generic_arg_type = llvm::PointerType::get(
-        llvm::cast<llvm::PointerType>(arg_type)->getContext(), 0);
+    llvm::Type* generic_arg_type = llvm::PointerType::getWithSamePointeeType(
+        llvm::cast<llvm::PointerType>(arg_type), 0);
     llvm::Value* addrspacecast_arg =
         b.CreateAddrSpaceCast(arg, generic_arg_type);
     return addrspacecast_arg;
@@ -321,8 +293,8 @@ void EmitAMDGPUAtomicAdd(llvm::IRBuilder<>* builder,
           // is in global addrspace (1)
           : builder->CreateAddrSpaceCast(
                 output_address,
-                llvm::PointerType::get(output_address_type->getContext(),
-                                       /*AddressSpace=*/1));
+                llvm::PointerType::getWithSamePointeeType(output_address_type,
+                                                          /*AddressSpace=*/1));
 
   builder->CreateAtomicRMW(
       llvm::AtomicRMWInst::FAdd, output_ptr, source, llvm::MaybeAlign(),
@@ -388,12 +360,8 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
       bool f64_atomic_add_supported =
           ir_emitter_context.cuda_compute_capability().IsAtLeast(
               se::CudaComputeCapability::PASCAL_);
-      bool f16_atomic_add_supported =
-          ir_emitter_context.cuda_compute_capability().IsAtLeast(
-              se::CudaComputeCapability::VOLTA);
       bool atomic_add_supported =
           element_type == F32 ||
-          (f16_atomic_add_supported && element_type == F16) ||
           (f64_atomic_add_supported && element_type == F64);
       if (atomic_add_supported) {
         builder->CreateAtomicRMW(llvm::AtomicRMWInst::FAdd, output_address,
@@ -448,8 +416,15 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
 
       KernelSupportLibrary ksl(builder, llvm_ir::UnrollMode::kDefaultUnroll);
 
+      llvm::PointerType* output_address_type =
+          llvm::dyn_cast<llvm::PointerType>(output_address->getType());
+      llvm::Type* atomic_address_type = builder->getFloatTy()->getPointerTo(
+          output_address_type->getPointerAddressSpace());
+      llvm::Value* atomic_memory_address =
+          builder->CreatePointerBitCastOrAddrSpaceCast(output_address,
+                                                       atomic_address_type);
       llvm::Value* old_output = builder->CreateLoad(
-          builder->getFloatTy(), output_address, "old_output");
+          builder->getFloatTy(), atomic_memory_address, "old_output");
       auto is_nan_output = builder->CreateFCmpUNO(old_output, old_output);
       ksl.If(
           "is_nan_output", is_nan_output,
@@ -571,22 +546,23 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
 //       *cas_new_output_address);
 //   } while (!success);
 //
-absl::Status EmitAtomicOperationUsingCAS(llvm::IRBuilder<>* builder,
-                                         IrEmitterContext& ir_emitter_context,
-                                         const HloComputation& computation,
-                                         llvm::Value* output_address,
-                                         llvm::Value* source_address,
-                                         llvm::Type* element_type) {
+Status EmitAtomicOperationUsingCAS(llvm::IRBuilder<>* builder,
+                                   IrEmitterContext& ir_emitter_context,
+                                   const HloComputation& computation,
+                                   llvm::Value* output_address,
+                                   llvm::Value* source_address,
+                                   llvm::Type* element_type) {
   llvm::PointerType* output_address_type =
       llvm::dyn_cast<llvm::PointerType>(output_address->getType());
   CHECK_NE(output_address_type, nullptr);
+  CHECK(output_address_type->isOpaqueOrPointeeTypeMatches(element_type));
 
   int element_size = llvm_ir::GetSizeInBits(element_type);
 
   int atomic_size = (element_size < 32) ? 32 : element_size;
   llvm::Type* atomic_type = builder->getIntNTy(atomic_size);
   llvm::Type* atomic_address_type =
-      builder->getPtrTy(output_address_type->getPointerAddressSpace());
+      atomic_type->getPointerTo(output_address_type->getPointerAddressSpace());
 
   // cas_old_output_address and cas_new_output_address point to the scratch
   // memory where we store the old and new values for the repeated atomicCAS
@@ -622,14 +598,16 @@ absl::Status EmitAtomicOperationUsingCAS(llvm::IRBuilder<>* builder,
         offset);
     binop_output_address = builder->CreateIntToPtr(
         binop_output_address,
-        builder->getPtrTy(
+        llvm::PointerType::get(
+            element_type,
             cas_new_output_address->getType()->getPointerAddressSpace()));
   } else {
     atomic_memory_address = builder->CreatePointerBitCastOrAddrSpaceCast(
         output_address, atomic_address_type);
     binop_output_address = builder->CreatePointerBitCastOrAddrSpaceCast(
         cas_new_output_address,
-        builder->getPtrTy(
+        llvm::PointerType::get(
+            element_type,
             cas_new_output_address->getType()->getPointerAddressSpace()));
   }
 
@@ -695,16 +673,16 @@ absl::Status EmitAtomicOperationUsingCAS(llvm::IRBuilder<>* builder,
   // Set the insertion point to the exit basic block so that the caller of
   // this method can continue emitting code to the right place.
   llvm_ir::SetToFirstInsertPoint(loop_exit_bb, builder);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
 
-absl::Status CallNestedComputation(llvm::IRBuilder<>* builder,
-                                   IrEmitterContext& ir_emitter_context,
-                                   const HloComputation& computation,
-                                   absl::Span<llvm::Value* const> operands,
-                                   llvm::Value* output) {
+Status CallNestedComputation(llvm::IRBuilder<>* builder,
+                             IrEmitterContext& ir_emitter_context,
+                             const HloComputation& computation,
+                             absl::Span<llvm::Value* const> operands,
+                             llvm::Value* output) {
   TF_RET_CHECK(computation.num_parameters() > 0);
 
   TF_ASSIGN_OR_RETURN(llvm::Function * emitted_function,
@@ -724,10 +702,10 @@ absl::Status CallNestedComputation(llvm::IRBuilder<>* builder,
 
   builder->CreateCall(emitted_function, arguments);
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::StatusOr<std::vector<llvm::Value*>> CallNestedComputationWithScalars(
+StatusOr<std::vector<llvm::Value*>> CallNestedComputationWithScalars(
     llvm::IRBuilder<>* builder, IrEmitterContext& ir_emitter_context,
     const HloComputation& computation,
     absl::Span<llvm::Value* const> parameter_elements) {
@@ -742,7 +720,7 @@ absl::StatusOr<std::vector<llvm::Value*>> CallNestedComputationWithScalars(
                                               computation, parameter_buffers);
 }
 
-absl::StatusOr<std::vector<llvm::Value*>> CallNestedComputationWithScalarAddrs(
+StatusOr<std::vector<llvm::Value*>> CallNestedComputationWithScalarAddrs(
     llvm::IRBuilder<>* builder, IrEmitterContext& ir_emitter_context,
     const HloComputation& computation,
     absl::Span<llvm::Value* const> parameter_elements_addrs) {
@@ -778,7 +756,7 @@ absl::StatusOr<std::vector<llvm::Value*>> CallNestedComputationWithScalarAddrs(
   return returned_scalars;
 }
 
-absl::Status EmitAtomicOperationForNestedComputation(
+Status EmitAtomicOperationForNestedComputation(
     llvm::IRBuilder<>* builder, IrEmitterContext& ir_emitter_context,
     const HloComputation& computation, llvm::Value* output_address,
     llvm::Value* source_address, llvm::Type* element_type) {
@@ -792,7 +770,7 @@ absl::Status EmitAtomicOperationForNestedComputation(
 
   if (MaybeEmitDirectAtomicOperation(builder, ir_emitter_context, computation,
                                      output_address, source_address)) {
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   return EmitAtomicOperationUsingCAS(builder, ir_emitter_context, computation,

@@ -60,7 +60,7 @@ Status GetSeed(const Tensor& seed_t, const int row,
     return errors::InvalidArgument("Invalid seed type: ",
                                    DataTypeString(seed_t.dtype()));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 template <typename IntType>

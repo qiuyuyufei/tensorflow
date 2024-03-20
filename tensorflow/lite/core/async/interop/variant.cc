@@ -37,8 +37,6 @@ bool Variant::operator==(const Variant& other) const {
       return val.s == other.val.s;
     case kString:
       return (val.c == other.val.c) || (strcmp(val.c, other.val.c) == 0);
-    case kBool:
-      return val.b == other.val.b;
   }
 }
 

@@ -842,7 +842,7 @@ class TFRTFuncOpSignatureConversion
     result_attrs.resize(converted_results.size());
 
     // Update the function signature in-place.
-    rewriter.modifyOpInPlace(func_op, [&] {
+    rewriter.updateRootInPlace(func_op, [&] {
       func_op.setType(mlir::FunctionType::get(
           func_op.getContext(), converted_signature.getConvertedTypes(),
           converted_results));
@@ -1910,7 +1910,7 @@ Status CreateTfExecutorToTfrtPipeline(mlir::PassManager &pm,
       CreateTFExecutorToTFPreInvariantOptimizationPipeline(pm, options));
   CreateTFExecutorToTFInvariantOptimizationPipelineHelper(pm, options);
   CreateTfToTfrtPipeline(pm, options);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status CreateTFExecutorToTFPipeline(mlir::PassManager &pm,
@@ -1918,7 +1918,7 @@ Status CreateTFExecutorToTFPipeline(mlir::PassManager &pm,
   TF_RETURN_IF_ERROR(
       CreateTFExecutorToTFPreInvariantOptimizationPipeline(pm, options));
   CreateTFExecutorToTFInvariantOptimizationPipelineHelper(pm, options);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 static mlir::PassRegistration<TfToTfrtConversionPass> tf_to_tfrt_pass;

@@ -12,19 +12,45 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "ducc/google/threading.h"
 
 #include <thread>
-#include <utility>
 
 #include "ducc/src/ducc0/infra/threading.h"
 #include "unsupported/Eigen/CXX11/ThreadPool"
 
 namespace ducc0 {
-
 namespace google {
-
 namespace {
+
+// Pseudo thread-pool for single-threaded execution.
+class NoThreadPool : public ducc0::detail_threading::thread_pool {
+ public:
+  size_t nthreads() const override { return 1; }
+  size_t adjust_nthreads(size_t nthreads_in) const override { return 1; };
+  void submit(std::function<void()> work) override { work(); }
+};
+
+// Thread-pool wrapper around Eigen's ThreadPool.
+class EigenThreadPool : public ducc0::detail_threading::thread_pool {
+ public:
+  EigenThreadPool(Eigen::ThreadPoolInterface& pool) : pool_{&pool} {}
+  size_t nthreads() const override { return pool_->NumThreads(); }
+  size_t adjust_nthreads(size_t nthreads_in) const override {
+    // If called by a thread in the pool, return 1
+    if (pool_->CurrentThreadId() >= 0) {
+      return 1;
+    } else if (nthreads_in == 0) {
+      return pool_->NumThreads();
+    }
+    return std::min<size_t>(nthreads_in, pool_->NumThreads());
+  };
+  void submit(std::function<void()> work) override {
+    pool_->Schedule(std::move(work));
+  }
+
+ private:
+  Eigen::ThreadPoolInterface* pool_;
+};
 
 // Default shared global pool.  It is created on first use.
 EigenThreadPool* GetGlobalThreadPoolSingleton() {
@@ -45,9 +71,6 @@ ducc0::detail_threading::thread_pool*& GetActiveThreadPoolSingleton() {
 
 // Implementations required by ducc0.
 namespace detail_threading {
-
-// Missing variable used by DUCC threading.cc.
-thread_local bool in_parallel_region = false;
 
 thread_pool* set_active_pool(thread_pool* new_pool) {
   return std::exchange(ducc0::google::GetActiveThreadPoolSingleton(), new_pool);

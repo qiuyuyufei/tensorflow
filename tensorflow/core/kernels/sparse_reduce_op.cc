@@ -129,7 +129,7 @@ Status ValidateInputs(const Tensor *shape_t, const Tensor *reduction_axes_t) {
     }
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 struct SumOp {

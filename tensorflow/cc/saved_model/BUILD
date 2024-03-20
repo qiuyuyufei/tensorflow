@@ -69,7 +69,6 @@ cc_library(
         ":metrics",
         ":util",
         "//tensorflow/core:protos_all_cc",
-        "@com_google_absl//absl/status:statusor",
     ] + if_google([
         "//tensorflow/tools/proto_splitter:merge",
     ]) + if_not_mobile([
@@ -110,7 +109,7 @@ cc_library(
         "//tensorflow/core:direct_session",
         "//tensorflow/core:all_kernels",
     ] + if_google(
-        ["//tensorflow/core/platform/default/build_config:tensorflow_platform_specific"],
+        ["@local_tsl//tsl/platform/default/build_config:tensorflow_platform_specific"],
         [],
     )) + if_not_mobile([
         "//tensorflow/core:core_cpu",

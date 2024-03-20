@@ -839,36 +839,12 @@ class DivAndModTest(test_util.TensorFlowTestCase):
 
   def intEdgeTestData(self, dtype):
     """Edge-case test data for integer types."""
-    # INT_MIN/-1 will produce signed-integer overflow, so we instead test
-    # (INT_MIN + 1) / -1.
+    # INT_MIN/-1 expected to produce signed-integer overflow,
+    # INT_MIN/INT_MAX expected to work.
     nums = np.array(
-        [
-            [np.iinfo(dtype).min, -1, 1, np.iinfo(dtype).max],
-            [np.iinfo(dtype).min + 1, -1, 1, np.iinfo(dtype).max],
-            [np.iinfo(dtype).min, -1, 1, np.iinfo(dtype).max],
-            [np.iinfo(dtype).min, -1, 1, np.iinfo(dtype).max],
-        ],
-        dtype=dtype,
-    )
-    divs = np.array(
-        [
-            [
-                np.iinfo(dtype).min,
-                np.iinfo(dtype).min,
-                np.iinfo(dtype).min,
-                np.iinfo(dtype).min,
-            ],
-            [-1, -1, -1, -1],
-            [1, 1, 1, 1],
-            [
-                np.iinfo(dtype).max,
-                np.iinfo(dtype).max,
-                np.iinfo(dtype).max,
-                np.iinfo(dtype).max,
-            ],
-        ],
-        dtype=dtype,
-    )
+        [np.iinfo(dtype).min, -1, 1, np.iinfo(dtype).max], dtype=dtype
+    ).reshape([4, 1])
+    divs = nums.reshape([1, 4])
     return nums, divs
 
   @test_util.disable_asan("Expected signed integer overflow.")

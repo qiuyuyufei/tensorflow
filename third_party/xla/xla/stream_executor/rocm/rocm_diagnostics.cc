@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,18 +35,19 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/strip.h"
+#include "tsl/platform/errors.h"
 #include "tsl/platform/host_info.h"
 #include "tsl/platform/logging.h"
 
 namespace stream_executor {
 namespace rocm {
 
-std::string DriverVersionToString(DriverVersion version) {
+string DriverVersionToString(DriverVersion version) {
   return absl::StrFormat("%d.%d.%d", std::get<0>(version), std::get<1>(version),
                          std::get<2>(version));
 }
 
-std::string DriverVersionStatusToString(absl::StatusOr<DriverVersion> version) {
+string DriverVersionStatusToString(tsl::StatusOr<DriverVersion> version) {
   if (!version.ok()) {
     return version.status().ToString();
   }
@@ -54,34 +55,34 @@ std::string DriverVersionStatusToString(absl::StatusOr<DriverVersion> version) {
   return DriverVersionToString(version.value());
 }
 
-absl::StatusOr<DriverVersion> StringToDriverVersion(const std::string& value) {
-  std::vector<std::string> pieces = absl::StrSplit(value, '.');
+tsl::StatusOr<DriverVersion> StringToDriverVersion(const string& value) {
+  std::vector<string> pieces = absl::StrSplit(value, '.');
   if (pieces.size() != 2 && pieces.size() != 3) {
-    return absl::Status{absl::StatusCode::kInvalidArgument,
-                        absl::StrFormat("expected %%d.%%d or %%d.%%d.%%d form "
-                                        "for driver version; got \"%s\"",
-                                        value.c_str())};
+    return tsl::Status{absl::StatusCode::kInvalidArgument,
+                       absl::StrFormat("expected %%d.%%d or %%d.%%d.%%d form "
+                                       "for driver version; got \"%s\"",
+                                       value.c_str())};
   }
 
   int major;
   int minor;
   int patch = 0;
   if (!absl::SimpleAtoi(pieces[0], &major)) {
-    return absl::Status{
+    return tsl::Status{
         absl::StatusCode::kInvalidArgument,
         absl::StrFormat("could not parse major version number \"%s\" as an "
                         "integer from string \"%s\"",
                         pieces[0].c_str(), value.c_str())};
   }
   if (!absl::SimpleAtoi(pieces[1], &minor)) {
-    return absl::Status{
+    return tsl::Status{
         absl::StatusCode::kInvalidArgument,
         absl::StrFormat("could not parse minor version number \"%s\" as an "
                         "integer from string \"%s\"",
                         pieces[1].c_str(), value.c_str())};
   }
   if (pieces.size() == 3 && !absl::SimpleAtoi(pieces[2], &patch)) {
-    return absl::Status{
+    return tsl::Status{
         absl::StatusCode::kInvalidArgument,
         absl::StrFormat("could not parse patch version number \"%s\" as an "
                         "integer from string \"%s\"",
@@ -102,7 +103,7 @@ namespace gpu {
 
 // -- class Diagnostician
 
-std::string Diagnostician::GetDevNodePath(int dev_node_ordinal) {
+string Diagnostician::GetDevNodePath(int dev_node_ordinal) {
   return absl::StrCat("/dev/kfd", dev_node_ordinal);
 }
 
@@ -117,10 +118,10 @@ void Diagnostician::LogDiagnosticInformation() {
   LOG(INFO) << "hostname: " << tsl::port::Hostname();
   if (VLOG_IS_ON(1)) {
     const char* value = getenv("LD_LIBRARY_PATH");
-    std::string library_path = value == nullptr ? "" : value;
+    string library_path = value == nullptr ? "" : value;
     VLOG(1) << "LD_LIBRARY_PATH is: \"" << library_path << "\"";
 
-    std::vector<std::string> pieces = absl::StrSplit(library_path, ':');
+    std::vector<string> pieces = absl::StrSplit(library_path, ':');
     for (const auto& piece : pieces) {
       if (piece.empty()) {
         continue;
@@ -136,11 +137,11 @@ void Diagnostician::LogDiagnosticInformation() {
       closedir(dir);
     }
   }
-  absl::StatusOr<DriverVersion> dso_version = FindDsoVersion();
+  tsl::StatusOr<DriverVersion> dso_version = FindDsoVersion();
   LOG(INFO) << "librocm reported version is: "
             << rocm::DriverVersionStatusToString(dso_version);
 
-  absl::StatusOr<DriverVersion> kernel_version = FindKernelDriverVersion();
+  tsl::StatusOr<DriverVersion> kernel_version = FindKernelDriverVersion();
   LOG(INFO) << "kernel reported version is: "
             << rocm::DriverVersionStatusToString(kernel_version);
 
@@ -151,8 +152,8 @@ void Diagnostician::LogDiagnosticInformation() {
 
 // Iterates through loaded DSOs with DlIteratePhdrCallback to find the
 // driver-interfacing DSO version number. Returns it as a string.
-absl::StatusOr<DriverVersion> Diagnostician::FindDsoVersion() {
-  absl::StatusOr<DriverVersion> result{absl::Status{
+tsl::StatusOr<DriverVersion> Diagnostician::FindDsoVersion() {
+  tsl::StatusOr<DriverVersion> result{tsl::Status{
       absl::StatusCode::kNotFound,
       "was unable to find librocm.so DSO loaded into this program"}};
 
@@ -176,11 +177,11 @@ absl::StatusOr<DriverVersion> Diagnostician::FindDsoVersion() {
       if (dot == nullptr) {
         return 0;
       }
-      std::string dso_version = dot + strlen(so_suffix);
+      string dso_version = dot + strlen(so_suffix);
       // TODO(b/22689637): Eliminate the explicit namespace if possible.
       auto stripped_dso_version = absl::StripSuffix(dso_version, ".ld64");
-      auto result = static_cast<absl::StatusOr<DriverVersion>*>(data);
-      *result = rocm::StringToDriverVersion(std::string(stripped_dso_version));
+      auto result = static_cast<tsl::StatusOr<DriverVersion>*>(data);
+      *result = rocm::StringToDriverVersion(string(stripped_dso_version));
       return 1;
     }
     return 0;
@@ -191,30 +192,30 @@ absl::StatusOr<DriverVersion> Diagnostician::FindDsoVersion() {
   return result;
 }
 
-absl::StatusOr<DriverVersion> Diagnostician::FindKernelModuleVersion(
-    const std::string& driver_version_file_contents) {
+tsl::StatusOr<DriverVersion> Diagnostician::FindKernelModuleVersion(
+    const string& driver_version_file_contents) {
   static const char* kDriverFilePrelude = "Kernel Module  ";
   size_t offset = driver_version_file_contents.find(kDriverFilePrelude);
-  if (offset == std::string::npos) {
-    return absl::Status{
+  if (offset == string::npos) {
+    return tsl::Status{
         absl::StatusCode::kNotFound,
         absl::StrCat("could not find kernel module information in "
                      "driver version file contents: \"",
                      driver_version_file_contents, "\"")};
   }
 
-  std::string version_and_rest = driver_version_file_contents.substr(
-      offset + strlen(kDriverFilePrelude), std::string::npos);
+  string version_and_rest = driver_version_file_contents.substr(
+      offset + strlen(kDriverFilePrelude), string::npos);
   size_t space_index = version_and_rest.find(" ");
   auto kernel_version = version_and_rest.substr(0, space_index);
   // TODO(b/22689637): Eliminate the explicit namespace if possible.
   auto stripped_kernel_version = absl::StripSuffix(kernel_version, ".ld64");
-  return rocm::StringToDriverVersion(std::string(stripped_kernel_version));
+  return rocm::StringToDriverVersion(string(stripped_kernel_version));
 }
 
 void Diagnostician::WarnOnDsoKernelMismatch(
-    absl::StatusOr<DriverVersion> dso_version,
-    absl::StatusOr<DriverVersion> kernel_version) {
+    tsl::StatusOr<DriverVersion> dso_version,
+    tsl::StatusOr<DriverVersion> kernel_version) {
   if (kernel_version.ok() && dso_version.ok() &&
       dso_version.value() == kernel_version.value()) {
     LOG(INFO) << "kernel version seems to match DSO: "
@@ -228,9 +229,9 @@ void Diagnostician::WarnOnDsoKernelMismatch(
   }
 }
 
-absl::StatusOr<DriverVersion> Diagnostician::FindKernelDriverVersion() {
-  auto status = absl::Status{absl::StatusCode::kUnimplemented,
-                             "kernel reported driver version not implemented"};
+tsl::StatusOr<DriverVersion> Diagnostician::FindKernelDriverVersion() {
+  auto status = tsl::Status{absl::StatusCode::kUnimplemented,
+                            "kernel reported driver version not implemented"};
   return status;
 }
 

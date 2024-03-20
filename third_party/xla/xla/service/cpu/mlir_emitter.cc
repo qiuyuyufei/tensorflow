@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -59,6 +59,15 @@ std::unique_ptr<llvm::Module> MakeLLVMModule(
 void BuildViewForBuffer(llvm::SmallVectorImpl<llvm::Value *> *args,
                         llvm::IRBuilder<> *b, const Shape &opShape,
                         llvm::Value *op_val) {
+  llvm::Type *ty = op_val->getType();
+  if (!ty->isOpaquePointerTy()) {
+    while (auto aty = llvm::dyn_cast<llvm::ArrayType>(
+               ty->getNonOpaquePointerElementType())) {
+      ty = aty->getElementType()->getPointerTo();
+    }
+  }
+  op_val = b->CreateBitCast(op_val, ty);
+
   args->push_back(op_val);          // Allocated pointer.
   args->push_back(op_val);          // Aligned pointer.
   args->push_back(b->getInt64(0));  // Offset.

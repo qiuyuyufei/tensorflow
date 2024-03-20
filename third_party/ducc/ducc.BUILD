@@ -67,7 +67,9 @@ cc_library(
     copts = DUCC_COPTS,
     features = ["-use_header_modules"],
     include_prefix = "ducc",
-    licenses = ["notice"],
+    # includes = [
+    #     ".",  # Needed for relative paths.
+    # ],
     visibility = ["//visibility:public"],
     deps = [
         ":fft",

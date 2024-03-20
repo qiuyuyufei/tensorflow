@@ -39,7 +39,7 @@ namespace {
 constexpr absl::Duration kGetMetadataRetryTimeout = absl::Hours(1);
 }  // namespace
 
-absl::StatusOr<DataServiceMetadata> GetDataServiceMetadata(
+StatusOr<DataServiceMetadata> GetDataServiceMetadata(
     const std::string& dataset_id, const std::string& address,
     const std::string& protocol) {
   DataServiceDispatcherClient client(address, protocol);
@@ -63,7 +63,7 @@ absl::StatusOr<DataServiceMetadata> GetDataServiceMetadata(
   return metadata;
 }
 
-absl::StatusOr<bool> CompressionDisabledAtRuntime(
+StatusOr<bool> CompressionDisabledAtRuntime(
     const std::string& dataset_id, const std::string& address,
     const std::string& protocol, bool disable_compression_at_runtime) {
   DataServiceDispatcherClient client(address, protocol);
@@ -82,8 +82,8 @@ absl::StatusOr<bool> CompressionDisabledAtRuntime(
   return response.compression_disabled_at_runtime();
 }
 
-absl::StatusOr<DataServiceConfig> GetDataServiceConfig(
-    const std::string& address, const std::string& protocol) {
+StatusOr<DataServiceConfig> GetDataServiceConfig(const std::string& address,
+                                                 const std::string& protocol) {
   DataServiceDispatcherClient client(address, protocol);
   DataServiceConfig config;
   absl::Time deadline =
@@ -97,7 +97,7 @@ absl::StatusOr<DataServiceConfig> GetDataServiceConfig(
   return config;
 }
 
-absl::StatusOr<DataServiceMetadata::Compression> GetValidatedCompression(
+StatusOr<DataServiceMetadata::Compression> GetValidatedCompression(
     const std::string& dataset_id, const DataServiceMetadata& metadata) {
   if (metadata.compression() == DataServiceMetadata::COMPRESSION_UNSPECIFIED) {
     return errors::Internal(absl::Substitute(

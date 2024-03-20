@@ -27,7 +27,7 @@ using LockGuard = tsl::mutex_lock;
 using CondVar = tsl::condition_variable;
 
 // Missing variable used by DUCC threading.cc.
-extern thread_local bool in_parallel_region;
+static thread_local bool in_parallel_region = false;
 
 }  // namespace detail_threading
 }  // namespace ducc0

@@ -29,7 +29,6 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/lite/python/saved_model_to_tfl_flatbuffer.h"
 #include "tensorflow/compiler/mlir/lite/quantization/lite/quantize_model.h"
 #include "tensorflow/compiler/mlir/lite/sparsity/sparsify_model.h"
-#include "tensorflow/compiler/mlir/quantization/tensorflow/python/py_function_lib.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_def.pb.h"
 #include "tensorflow/lite/core/api/error_reporter.h"
@@ -97,9 +96,8 @@ void PopulateConversionLogHelper(const toco::ModelFlags& model_flags,
 PyObject* TocoConvert(PyObject* model_flags_proto_txt_raw,
                       PyObject* toco_flags_proto_txt_raw,
                       PyObject* input_contents_txt_raw, bool extended_return,
-                      PyObject* debug_info_txt_raw, bool enable_mlir_converter,
-                      const tensorflow::quantization::PyFunctionLibrary*
-                          quantization_py_function_library) {
+                      PyObject* debug_info_txt_raw,
+                      bool enable_mlir_converter) {
   // Use Python C API to validate and convert arguments. In py3 (bytes),
   // in py2 (str).
   auto ConvertArg = [&](PyObject* obj, bool* error) {
@@ -198,8 +196,7 @@ PyObject* TocoConvert(PyObject* model_flags_proto_txt_raw,
           &output_file_contents_txt);
     } else if (!model_flags.saved_model_dir().empty()) {
       status = tensorflow::ConvertSavedModelToTFLiteFlatBuffer(
-          model_flags, toco_flags, &output_file_contents_txt,
-          quantization_py_function_library);
+          model_flags, toco_flags, &output_file_contents_txt);
     } else {
       tensorflow::GraphDef graph_def;
       if (!graph_def.ParseFromString(input_contents_txt)) {
@@ -297,8 +294,7 @@ PyObject* MlirQuantizeModel(PyObject* data, bool disable_per_channel,
                             bool enable_numeric_verify,
                             bool enable_whole_model_verify,
                             PyObject* op_denylist, PyObject* node_denylist,
-                            bool enable_variable_quantization,
-                            bool disable_per_channel_for_dense_layers) {
+                            bool enable_variable_quantization) {
   using tflite::interpreter_wrapper::PythonErrorReporter;
   char* buf = nullptr;
   Py_ssize_t length;
@@ -344,7 +340,7 @@ PyObject* MlirQuantizeModel(PyObject* data, bool disable_per_channel,
       /*operator_names=*/{}, disable_per_channel, fully_quantize, output_model,
       error_reporter.get(), enable_numeric_verify, enable_whole_model_verify,
       /*legacy_float_scale=*/true, denylisted_ops, denylisted_nodes,
-      enable_variable_quantization, disable_per_channel_for_dense_layers);
+      enable_variable_quantization);
   if (status != kTfLiteOk) {
     error_reporter->exception();
     return nullptr;
@@ -422,7 +418,7 @@ PyObject* RegisterCustomOpdefs(PyObject* list) {
         [opdef](
             tensorflow::OpRegistrationData* op_reg_data) -> tensorflow::Status {
           *op_reg_data = tensorflow::OpRegistrationData(opdef);
-          return absl::OkStatus();
+          return ::tensorflow::OkStatus();
         });
 
     // Register the corresponding fake op kernel.

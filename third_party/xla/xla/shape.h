@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ limitations under the License.
 #ifndef XLA_SHAPE_H_
 #define XLA_SHAPE_H_
 
-#include <limits>
+#include <cstdint>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -44,7 +44,6 @@ class Shape {
   Shape(const Shape&);
   Shape(Shape&&);
   Shape& operator=(const Shape&);
-  Shape& operator=(Shape&&);
 
   // Construct a shape from a ShapeProto.
   explicit Shape(const ShapeProto& shape_proto);
@@ -92,48 +91,9 @@ class Shape {
 
   bool is_dynamic() const { return !is_static(); }
 
-  // Unbounded dynamism.
-  // If `dimensions(axis) == kUnboundedSize && is_dynamic_dimension(axis)`,
-  // this means that the axis has unbounded dynamic size.
-  // The sentinel value for kUnboundedSize is chosen to be exactly the same
-  // as the sentinel value mlir::ShapedType::kDynamic.
-  static constexpr int64_t kUnboundedSize = std::numeric_limits<int64_t>::min();
-
-  // Returns true if the shape has one or more dimensions with unbounded sizes.
-  // Tuple shapes are traversed recursively, returns true if any element is
-  // unbounded dynamic.
-  bool is_unbounded_dynamic() const;
-
-  // Returns true if the given dimension is unbounded dynamic.
-  bool is_unbounded_dynamic_dimension(int dimension) const {
-    return dimensions_[dimension] == kUnboundedSize;
-  }
-
-  // Sets a given dimension as unbounded dynamic.
-  void set_unbounded_dynamic_dimension(int dimension) {
-    dynamic_dimensions_[dimension] = true;
-    dimensions_[dimension] = kUnboundedSize;
-  }
-
-  // Returns true if the shape has one or more dimensions with bounded sizes.
-  // Tuple shapes are traversed recursively, returns true if any element is
-  // bounded dynamic.
-  bool is_bounded_dynamic() const;
-
-  // Returns true if the given dimension is bounded dynamic.
-  bool is_bounded_dynamic_dimension(int dimension) const {
-    return is_dynamic_dimension(dimension) &&
-           !is_unbounded_dynamic_dimension(dimension);
-  }
-
   // Returns true if the given dimension is dynamically-sized.
   bool is_dynamic_dimension(int dimension) const {
-    return dynamic_dimensions_[dimension];
-  }
-
-  // Returns true if the given dimension is statically-sized.
-  bool is_static_dimension(int dimension) const {
-    return !dynamic_dimensions_[dimension];
+    return dynamic_dimensions_.at(dimension);
   }
 
   // Sets whether or not the given dimension is dynamically-sized.
@@ -167,16 +127,18 @@ class Shape {
 
   // Methods for accessing the dimensions array.
   int dimensions_size() const { return dimensions_.size(); }
-  int64_t dimensions(int index) const { return dimensions_[index]; }
+  int64_t dimensions(int index) const { return dimensions_.at(index); }
 
   int64_t dimensions_minor(int index) const {
     CHECK(has_layout());
-    return dimensions_[layout_->minor_to_major(index)];
+    return dimensions_.at(layout_->minor_to_major(index));
   }
-  void set_dimensions(int index, int64_t value) { dimensions_[index] = value; }
+  void set_dimensions(int index, int64_t value) {
+    dimensions_.at(index) = value;
+  }
   void set_dimensions_minor(int index, int64_t value) {
     CHECK(has_layout());
-    dimensions_[layout_->minor_to_major(index)] = value;
+    dimensions_.at(layout_->minor_to_major(index)) = value;
   }
   void add_dimensions(int64_t value) {
     dimensions_.push_back(value);
@@ -195,7 +157,7 @@ class Shape {
   // tuple shapes.
   int tuple_shapes_size() const { return tuple_shapes_.size(); }
   const Shape& tuple_shapes(int index) const;
-  Shape* mutable_tuple_shapes(int index) { return &tuple_shapes_[index]; }
+  Shape* mutable_tuple_shapes(int index) { return &tuple_shapes_.at(index); }
   Shape* add_tuple_shapes();
   void clear_tuple_shapes() { tuple_shapes_.clear(); }
   const std::vector<Shape>& tuple_shapes() const { return tuple_shapes_; }
@@ -216,8 +178,7 @@ class Shape {
   }
   void clear_layout() { layout_ = std::nullopt; }
 
-  // Recursively clear all dynamic dimension of a shape, including bounded and
-  // unbounded dynamic dimensions.
+  // Recursively clear dynamic dimension of a shape.
   void clear_dynamic_dimensions() {
     if (!IsTuple()) {
       if (is_dynamic()) {
@@ -286,7 +247,6 @@ class Shape {
       ignore_tiles_in_layout_ = true;
       ignore_element_size_in_layout_ = true;
       ignore_memory_space_in_layout_ = true;
-      ignore_tail_padding_alignment_in_elements_in_layout_ = true;
       return *this;
     }
     Equal& IgnoreElementType() {
@@ -305,10 +265,6 @@ class Shape {
       ignore_dimensions_ = true;
       return *this;
     }
-    Equal& IgnoreTailPaddingAlignmentInElements() {
-      ignore_tail_padding_alignment_in_elements_in_layout_ = true;
-      return *this;
-    }
 
    private:
     bool ignore_layout_ = false;
@@ -319,7 +275,6 @@ class Shape {
     bool ignore_fp_precision_ = false;
     bool ignore_dynamic_dimension_ = false;
     bool ignore_dimensions_ = false;
-    bool ignore_tail_padding_alignment_in_elements_in_layout_ = false;
   };
 
   // Test that all fields of the shape are the same, equivalent to Equal().
@@ -376,7 +331,6 @@ class ProgramShape {
   ProgramShape(const ProgramShape&);
   ProgramShape(ProgramShape&&);
   ProgramShape& operator=(const ProgramShape&);
-  ProgramShape& operator=(ProgramShape&&);
 
   // Creates a ProgramShape from a ProgramShapeProto protobuf.
   explicit ProgramShape(const ProgramShapeProto& program_shape_proto);
@@ -396,8 +350,8 @@ class ProgramShape {
 
   // Methods for accessing and manipulating the Shape of the parameters.
   int parameters_size() const { return parameters_.size(); }
-  const Shape& parameters(int index) const { return parameters_[index]; }
-  Shape* mutable_parameters(int index) { return &parameters_[index]; }
+  const Shape& parameters(int index) const { return parameters_.at(index); }
+  Shape* mutable_parameters(int index) { return &parameters_.at(index); }
   Shape* add_parameters() {
     parameters_.emplace_back();
     return &parameters_.back();
@@ -413,13 +367,13 @@ class ProgramShape {
   // Methods for accessing and manipulating the names of the parameters.
   int parameter_names_size() const { return parameter_names_.size(); }
   const std::string& parameter_names(int index) const {
-    return parameter_names_[index];
+    return parameter_names_.at(index);
   }
   void set_parameter_names(int index, const std::string& value) {
-    parameter_names_[index] = value;
+    parameter_names_.at(index) = value;
   }
   std::string* mutable_parameter_names(int index) {
-    return &parameter_names_[index];
+    return &parameter_names_.at(index);
   }
   void add_parameter_names(const std::string& value) {
     parameter_names_.push_back(value);

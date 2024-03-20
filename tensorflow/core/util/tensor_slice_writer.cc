@@ -76,7 +76,7 @@ Status CreateTableTensorSliceBuilder(const string& name,
   Status s = Env::Default()->NewWritableFile(name, &f);
   if (s.ok()) {
     *builder = new TableBuilder(name, f.release());
-    return absl::OkStatus();
+    return OkStatus();
   } else {
     return s;
   }

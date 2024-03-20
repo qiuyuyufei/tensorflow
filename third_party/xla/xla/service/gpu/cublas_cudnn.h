@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,14 +16,10 @@ limitations under the License.
 #ifndef XLA_SERVICE_GPU_CUBLAS_CUDNN_H_
 #define XLA_SERVICE_GPU_CUBLAS_CUDNN_H_
 
-#include <string>
-
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_module.h"
+#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -52,12 +48,6 @@ enum class CudnnConvKind {
                        // => output
 };
 
-enum class CudnnNormKind {
-  kLayerForwardInfer,
-  kLayerForwardTrain,
-  kLayerBackward,
-};
-
 enum class CudnnfMHAKind {
   kBmmBmm,
   kScaleBiasMaskSoftmax,
@@ -79,8 +69,7 @@ enum class CudnnfMHAKind {
   kBackwardScaleBiasSoftmaxDropout,
 };
 
-absl::StatusOr<CudnnConvKind> GetCudnnConvKind(
-    const HloCustomCallInstruction* instr);
+StatusOr<CudnnConvKind> GetCudnnConvKind(const HloCustomCallInstruction* instr);
 
 // Converts a CudnnConvKind value to a string.
 std::string CudnnConvKindToString(CudnnConvKind kind);
@@ -98,9 +87,6 @@ bool IsCublasLtMatmul(const HloInstruction& hlo);
 
 // Scaled matrix multiplication in FP8. Calls into cublasLt.
 bool IsCublasLtMatmulF8(const HloInstruction& hlo);
-
-// Triangular solve that calls into legacy cublas.
-bool IsTriangularSolve(const HloInstruction& hlo);
 
 // A call to cuBLAS general matrix multiplication API.
 extern const absl::string_view kGemmCallTarget;
@@ -165,11 +151,11 @@ bool IsCustomCallToDnnConvolution(const HloInstruction& hlo);
 // reordering helper (required for int8x32 convolutions).
 bool IsCudnnConvolutionReorder(const HloInstruction& hlo);
 
-// A call to cuDNN for a fused norm.
-extern const absl::string_view kCudnnNormCallTarget;
+// CUB library calls.
+// Reference: https://nvlabs.github.io/cub/
+extern const absl::string_view kCubDeviceRadixSortTarget;
 
-// Returns true if `hlo` will be implemented as a call to a cuDNN norm kernel.
-bool IsCustomCallToDnnNorm(const HloInstruction& hlo);
+bool IsCubDeviceRadixSort(const HloInstruction& hlo);
 
 // The fused_mha_rewriter phase where each of the MHA signatures are pattern
 // matched and rewritten into a custom-call with specific custom-call target.
@@ -213,19 +199,12 @@ bool IsFwdCustomCallTofMHA(const HloInstruction& hlo);
 bool IsBwdCustomCallTofMHA(const HloInstruction& hlo);
 bool IsCustomCallTofMHA(const HloInstruction& hlo);
 
-absl::StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(
-    const HloCustomCallInstruction* instr);
+StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(const HloCustomCallInstruction* instr);
 
 std::string CudnnfMHAKindToString(CudnnfMHAKind kind);
-absl::Status SetFMHAInstructionName(HloModule* module, HloInstruction* fmha);
+Status SetFMHAInstructionName(HloModule* module, HloInstruction* fmha);
 
 bool MHACallHasDropout(absl::string_view fmha_call_name);
-
-// CUB library calls.
-// Reference: https://nvlabs.github.io/cub/
-extern const absl::string_view kCubDeviceRadixSortTarget;
-
-bool IsCubDeviceRadixSort(const HloInstruction& hlo);
 }  // namespace gpu
 }  // namespace xla
 

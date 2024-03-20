@@ -63,7 +63,7 @@ namespace impl {
 /// }
 ///
 /// // Get the list of signatures and check it.
-/// auto signature_defs = interpreter->signature_keys();
+/// auto signature_defs = interpreter->signature_def_names();
 /// if (signature_defs.empty()) {
 ///   // Return error.
 /// }

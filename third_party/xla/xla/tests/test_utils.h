@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -56,9 +56,8 @@ class PseudorandomGenerator {
 // Generates fake data in a literal of the given shape, or returns an error
 // status if the element type is currently unhandled for fake data
 // generation. See below for documentation of pseudo_random and use_large_range.
-absl::StatusOr<Literal> MakeFakeLiteral(const Shape& shape,
-                                        bool pseudo_random = true,
-                                        bool use_large_range = false);
+StatusOr<Literal> MakeFakeLiteral(const Shape& shape, bool pseudo_random = true,
+                                  bool use_large_range = false);
 
 // Generates a vector of arguments containing fake data. The number, shape and
 // layout of the arguments is appropriate for given HLO module.
@@ -75,10 +74,6 @@ absl::StatusOr<Literal> MakeFakeLiteral(const Shape& shape,
 //
 // These constraints are best-effort only.
 //
-// If max_bits_of_precision is set to a number, then floating point & integer
-// types will be constrained to be represented in that number of bits. Setting
-// it to 5 for integers would mean it only creates integers between -32 and 32.
-//
 // If pseudo_random is true, the generated numbers will be generated
 // deterministically in a pseudo random way unless the values are constrated to
 // be e.g. init values as above. If pseudo_random is false, the returned values
@@ -94,18 +89,16 @@ absl::StatusOr<Literal> MakeFakeLiteral(const Shape& shape,
 // TODO(b/79942829): Make interesting argument generation fast enough that using
 // pseudo_random does not save any noticeable amount of time so that the
 // parameter can be removed.
-absl::StatusOr<std::vector<Literal>> MakeFakeArguments(
+StatusOr<std::vector<Literal>> MakeFakeArguments(
     const HloModule* module, bool pseudo_random = true,
-    bool use_large_range = false, bool treat_gte_as_data_formatting = false,
-    std::optional<int64_t> max_bits_of_precision = std::nullopt);
+    bool use_large_range = false, bool treat_gte_as_data_formatting = false);
 
 // Overload which accepts a random number generator. This enables generation of
 // different random values with sequential calls to MakeFakeArguments by reusing
 // the same generator.
-absl::StatusOr<std::vector<Literal>> MakeFakeArguments(
+StatusOr<std::vector<Literal>> MakeFakeArguments(
     const HloModule* module, std::minstd_rand0* engine,
-    bool use_large_range = false, bool treat_gte_as_data_formatting = false,
-    std::optional<int64_t> max_bits_of_precision = std::nullopt);
+    bool use_large_range = false, bool treat_gte_as_data_formatting = false);
 
 // Check that a given module satisfies various constraints before trying to
 // execute it.

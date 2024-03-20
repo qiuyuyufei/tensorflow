@@ -27,23 +27,23 @@ namespace tensorflow {
 namespace data {
 
 // Gets the `DataServiceMetadata` for `dataset_id`.
-absl::StatusOr<DataServiceMetadata> GetDataServiceMetadata(
+StatusOr<DataServiceMetadata> GetDataServiceMetadata(
     const std::string& dataset_id, const std::string& address,
     const std::string& protocol);
 
 // Gets the `DisableCompressAtRuntimeResponse.compression_disabled_at_runtime`
 // for the given dataset.
-absl::StatusOr<bool> CompressionDisabledAtRuntime(
+StatusOr<bool> CompressionDisabledAtRuntime(
     const std::string& dataset_id, const std::string& address,
     const std::string& protocol, bool disable_compression_at_runtime);
 
 // Gets the `DataServiceConfig` for the data service running at `address`.
-absl::StatusOr<DataServiceConfig> GetDataServiceConfig(
-    const std::string& address, const std::string& protocol);
+StatusOr<DataServiceConfig> GetDataServiceConfig(const std::string& address,
+                                                 const std::string& protocol);
 
 // Gets the compression from `metadata`. If `metadata` specifies no valid
 // compression, returns an internal error.
-absl::StatusOr<DataServiceMetadata::Compression> GetValidatedCompression(
+StatusOr<DataServiceMetadata::Compression> GetValidatedCompression(
     const std::string& dataset_id, const DataServiceMetadata& metadata);
 
 // Estimates the cardinality of a data service dataset.

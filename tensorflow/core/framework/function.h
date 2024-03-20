@@ -16,9 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_CORE_FRAMEWORK_FUNCTION_H_
 #define TENSORFLOW_CORE_FRAMEWORK_FUNCTION_H_
 
-#include <functional>
 #include <memory>
-#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -376,7 +374,7 @@ class FunctionRecord : public core::RefCounted {
 
   // Get a mutable reference to the FunctionDef owned by the record.
   // Will fail if record is finalized.
-  absl::StatusOr<FunctionDef*> mutable_fdef();
+  StatusOr<FunctionDef*> mutable_fdef();
 
   // Get an immutable access to FunctionRecord properties.
   const FunctionDef& fdef() const;
@@ -454,8 +452,6 @@ class FunctionLibraryDefinition : public OpRegistryInterface {
                         const StackTracesMap& stack_traces = {})
       TF_LOCKS_EXCLUDED(mu_);
   Status AddFunctionDef(FunctionDef&& fdef, StackTracesMap&& stack_traces = {})
-      TF_LOCKS_EXCLUDED(mu_);
-  Status AddFunctionRecord(core::RefCountPtr<FunctionRecord> record)
       TF_LOCKS_EXCLUDED(mu_);
 
   // Adds gradient definition 'grad' to this function library.
@@ -569,8 +565,6 @@ class FunctionLibraryDefinition : public OpRegistryInterface {
   // reachable from the nodes of `graph` or `func`.
   FunctionLibraryDefinition ReachableDefinitions(const GraphDef& graph) const;
   FunctionLibraryDefinition ReachableDefinitions(const FunctionDef& func) const;
-  absl::StatusOr<FunctionLibraryDefinition> ReachableDefinitions(
-      const std::string& function_name) const;
 
   // Copies the function named `func` from `other` to this
   // FunctionLibraryDefinition.
@@ -593,41 +587,23 @@ class FunctionLibraryDefinition : public OpRegistryInterface {
   }
 
   // Adds or updates an OptimizedFunctionGraph. Key is `function_name`.
-  //
-  // NOTE: This overload will lead to a copy of a potentially large graph
-  // being stored in memory for the lifetime of the library. Using the lazy
-  // `creator` function overload is recommended in new code.
-  ABSL_DEPRECATED("Use the lazy `creator` function overload in new code.")
   void AddOptimizedFunctionGraph(const std::string& function_name,
                                  const OptimizedFunctionGraph& graph)
       TF_LOCKS_EXCLUDED(mu_) {
-    std::function<absl::StatusOr<OptimizedFunctionGraph>()> creator =
-        [graph]() { return graph; };
-    AddOptimizedFunctionGraph(function_name, std::move(creator));
-  }
-
-  // Adds or updates an OptimizedFunctionGraph, using a `creator` that can
-  // lazily build or load the graph on demand. Key is `function_name`.
-  void AddOptimizedFunctionGraph(
-      const std::string& function_name,
-      std::function<absl::StatusOr<OptimizedFunctionGraph>()> creator)
-      TF_LOCKS_EXCLUDED(mu_) {
     mutex_lock l(mu_);
-    optimized_function_graph_creator_map_.emplace(function_name,
-                                                  std::move(creator));
+    optimized_function_graph_map_.emplace(function_name, graph);
   }
 
-  // Look up for OptimizedFunctionGraph given `function_name`. Returns nullopt
+  // Look up for OptimizedFunctionGraph given `function_name`. Returns nullptr
   // if not found.
-  std::optional<absl::StatusOr<OptimizedFunctionGraph>>
-  FindOptimizedFunctionGraph(const std::string& function_name) const
-      TF_LOCKS_EXCLUDED(mu_) {
+  OptimizedFunctionGraph* FindOptimizedFunctionGraph(
+      const std::string& function_name) const TF_LOCKS_EXCLUDED(mu_) {
     tf_shared_lock l(mu_);
-    if (auto it = optimized_function_graph_creator_map_.find(function_name);
-        it != optimized_function_graph_creator_map_.end()) {
-      return it->second();
+    if (auto it = optimized_function_graph_map_.find(function_name);
+        it != optimized_function_graph_map_.end()) {
+      return &(it->second);
     }
-    return std::nullopt;
+    return nullptr;
   }
 
   // Creates a map of function names to stack traces for a FunctionDefLibrary.
@@ -680,8 +656,8 @@ class FunctionLibraryDefinition : public OpRegistryInterface {
   gtl::FlatMap<string, FunctionRecord*> records_ TF_GUARDED_BY(mu_);
   gtl::FlatMap<string, string> func_grad_ TF_GUARDED_BY(mu_);
   // Maps from function name to optimized function graph.
-  gtl::FlatMap<string, std::function<absl::StatusOr<OptimizedFunctionGraph>()>>
-      optimized_function_graph_creator_map_ TF_GUARDED_BY(mu_);
+  gtl::FlatMap<string, OptimizedFunctionGraph> optimized_function_graph_map_
+      TF_GUARDED_BY(mu_);
 };
 
 // Forward declare. Defined in common_runtime/function.h

@@ -49,21 +49,21 @@ if [ ! -z "${CI_BUILD_HOME}" ] && [ `pwd` = "/workspace" ]; then
 fi
 
 # Build source tree.
-rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}/tflite_runtime"
-cp -r "${TENSORFLOW_LITE_DIR}/tools/pip_package/debian" \
-      "${TENSORFLOW_LITE_DIR}/tools/pip_package/MANIFEST.in" \
-      "${TENSORFLOW_LITE_DIR}/python/interpreter_wrapper" \
-      "${BUILD_DIR}"
-cp  "${TENSORFLOW_LITE_DIR}/tools/pip_package/setup_with_binary.py" "${BUILD_DIR}/setup.py"
-cp "${TENSORFLOW_LITE_DIR}/python/interpreter.py" \
-   "${TENSORFLOW_LITE_DIR}/python/metrics/metrics_interface.py" \
-   "${TENSORFLOW_LITE_DIR}/python/metrics/metrics_portable.py" \
-   "${BUILD_DIR}/tflite_runtime"
-echo "__version__ = '${PACKAGE_VERSION}'" >> "${BUILD_DIR}/tflite_runtime/__init__.py"
-echo "__git_version__ = '$(git -C "${TENSORFLOW_DIR}" describe)'" >> "${BUILD_DIR}/tflite_runtime/__init__.py"
-
-# Build python interpreter_wrapper.
-mkdir -p "${BUILD_DIR}/cmake_build"
+#rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}/tflite_runtime"
+#cp -r "${TENSORFLOW_LITE_DIR}/tools/pip_package/debian" \
+#      "${TENSORFLOW_LITE_DIR}/tools/pip_package/MANIFEST.in" \
+#      "${TENSORFLOW_LITE_DIR}/python/interpreter_wrapper" \
+#      "${BUILD_DIR}"
+#cp  "${TENSORFLOW_LITE_DIR}/tools/pip_package/setup_with_binary.py" "${BUILD_DIR}/setup.py"
+#cp "${TENSORFLOW_LITE_DIR}/python/interpreter.py" \
+#   "${TENSORFLOW_LITE_DIR}/python/metrics/metrics_interface.py" \
+#   "${TENSORFLOW_LITE_DIR}/python/metrics/metrics_portable.py" \
+#   "${BUILD_DIR}/tflite_runtime"
+#echo "__version__ = '${PACKAGE_VERSION}'" >> "${BUILD_DIR}/tflite_runtime/__init__.py"
+#echo "__git_version__ = '$(git -C "${TENSORFLOW_DIR}" describe)'" >> "${BUILD_DIR}/tflite_runtime/__init__.py"
+#
+## Build python interpreter_wrapper.
+#mkdir -p "${BUILD_DIR}/cmake_build"
 cd "${BUILD_DIR}/cmake_build"
 
 echo "Building for ${TENSORFLOW_TARGET}"
@@ -108,6 +108,7 @@ case "${TENSORFLOW_TARGET}" in
       "${TENSORFLOW_LITE_DIR}"
     ;;
   rv64)
+    #BUILD_FLAGS=${BUILD_FLAGS:-"-march=rv64imafdcv -I${PYTHON_INCLUDE} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"}
     BUILD_FLAGS=${BUILD_FLAGS:-"-march=rv64gcv0p7_zfh_xtheadc -I${PYTHON_INCLUDE} -I${PYBIND11_INCLUDE} -I${NUMPY_INCLUDE}"}
     cmake \
       -DCMAKE_C_COMPILER=gcc-10 \

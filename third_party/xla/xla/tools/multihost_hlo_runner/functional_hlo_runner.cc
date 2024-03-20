@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,7 +32,6 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/literal.h"
-#include "xla/pjrt/cpu/cpu_client.h"
 #include "xla/pjrt/distributed/client.h"
 #include "xla/pjrt/gpu/se_gpu_pjrt_client.h"
 #include "xla/pjrt/pjrt_client.h"
@@ -54,13 +53,13 @@ namespace xla {
 
 namespace {
 // Creates an HloModule from the given proto.
-absl::StatusOr<std::unique_ptr<HloModule>> HloTextToModule(
+StatusOr<std::unique_ptr<HloModule>> HloTextToModule(
     absl::string_view hlo_text) {
   return ParseAndReturnUnverifiedModule(hlo_text);
 }
 
 // Creates an HloModule from the given proto.
-absl::StatusOr<std::unique_ptr<HloModule>> HloProtoToModule(
+StatusOr<std::unique_ptr<HloModule>> HloProtoToModule(
     const HloModuleProto& proto) {
   TF_ASSIGN_OR_RETURN(
       HloModuleConfig config,
@@ -77,8 +76,7 @@ void PopulateWithSameValue(Literal* literal, ElementType val) {
   }
 }
 
-absl::StatusOr<Literal> MakeFakeLiteralWithSameValue(const Shape& shape,
-                                                     int value) {
+StatusOr<Literal> MakeFakeLiteralWithSameValue(const Shape& shape, int value) {
   if (!shape.IsArray()) {
     return InvalidArgument(
         "MakeFakeLiteralWithSameValue does not support non-array type");
@@ -86,7 +84,7 @@ absl::StatusOr<Literal> MakeFakeLiteralWithSameValue(const Shape& shape,
   Shape new_shape = shape;
   new_shape.mutable_layout()->clear_tiles();
   return primitive_util::PrimitiveTypeSwitch<StatusOr<Literal>>(
-      [&](auto type) -> absl::StatusOr<Literal> {
+      [&](auto type) -> StatusOr<Literal> {
         if constexpr (primitive_util::IsArrayType(type)) {
           using NativeT = primitive_util::NativeTypeOf<type>;
 
@@ -245,26 +243,22 @@ void AddShardingAnnotationsToSpmdPartitionedModule(HloModule* hlo_module) {
   set_manual_sharding(entry_root);
 }
 
-absl::StatusOr<std::unique_ptr<PjRtClient>>
-FunctionalHloRunner::CreateHostClient() {
-  return GetTfrtCpuClient(CpuClientOptions());
+StatusOr<std::unique_ptr<PjRtClient>> FunctionalHloRunner::CreateGpuClient() {
+  return GetStreamExecutorGpuClient(
+      /*asynchronous=*/true, GpuAllocatorConfig(), /*node_id=*/0);
 }
 
-absl::StatusOr<std::unique_ptr<PjRtClient>>
-FunctionalHloRunner::CreateGpuClient() {
-  return GetStreamExecutorGpuClient(GpuClientOptions());
+StatusOr<std::unique_ptr<PjRtClient>> FunctionalHloRunner::CreateMockGpuClient(
+    int num_nodes) {
+  return GetStreamExecutorGpuClient(
+      /*asynchronous=*/true, GpuAllocatorConfig(), /*node_id=*/0,
+      /*num_nodes=*/num_nodes, /*allowed_devices=*/std::nullopt,
+      /*platform_name=*/std::nullopt,
+      /*should_stage_host_to_device_transfers=*/true,
+      /*kv_get=*/nullptr, /*kv_put=*/nullptr, /*enable_mock_nccl=*/true);
 }
 
-absl::StatusOr<std::unique_ptr<PjRtClient>>
-FunctionalHloRunner::CreateMockGpuClient(int num_nodes) {
-  GpuClientOptions options;
-  options.num_nodes = num_nodes;
-  options.enable_mock_nccl = true;
-  return GetStreamExecutorGpuClient(options);
-}
-
-absl::StatusOr<std::unique_ptr<PjRtClient>>
-FunctionalHloRunner::CreateGpuClient(
+StatusOr<std::unique_ptr<PjRtClient>> FunctionalHloRunner::CreateGpuClient(
     std::shared_ptr<xla::DistributedRuntimeClient> distributed_client,
     int node_id, int num_nodes) {
   if (node_id < 0 || node_id >= num_nodes) {
@@ -274,15 +268,31 @@ FunctionalHloRunner::CreateGpuClient(
 
   TF_RET_CHECK(distributed_client != nullptr);
 
-  GpuClientOptions options;
-  options.node_id = node_id;
-  options.num_nodes = num_nodes;
-  options.kv_store =
-      GetDistributedKeyValueStore(distributed_client, /*key_prefix=*/"gpu:");
-  return GetStreamExecutorGpuClient(options);
+  // Use the plugin name as key prefix.
+  static constexpr absl::string_view kKeyPrefix = "gpu:";
+
+  xla::PjRtClient::KeyValueGetCallback kv_get =
+      [distributed_client](
+          const std::string& k,
+          absl::Duration timeout) -> xla::StatusOr<std::string> {
+    return distributed_client->BlockingKeyValueGet(absl::StrCat(kKeyPrefix, k),
+                                                   timeout);
+  };
+
+  xla::PjRtClient::KeyValuePutCallback kv_put =
+      [distributed_client](const std::string& k,
+                           const std::string& v) -> xla::Status {
+    return distributed_client->KeyValueSet(absl::StrCat(kKeyPrefix, k), v);
+  };
+
+  return GetStreamExecutorGpuClient(
+      /*asynchronous=*/true, GpuAllocatorConfig(), node_id, num_nodes,
+      /*allowed_devices=*/std::nullopt,
+      /*platform_name=*/std::nullopt,
+      /*should_stage_host_to_device_transfers=*/true, kv_get, kv_put);
 }
 
-absl::StatusOr<ExecutionOptions> FunctionalHloRunner::LoadExecutionOptions(
+StatusOr<ExecutionOptions> FunctionalHloRunner::LoadExecutionOptions(
     absl::string_view path) {
   ExecutionOptions execution_options;
   TF_RETURN_IF_ERROR(tsl::ReadTextOrBinaryProto(
@@ -290,7 +300,7 @@ absl::StatusOr<ExecutionOptions> FunctionalHloRunner::LoadExecutionOptions(
   return execution_options;
 }
 
-absl::StatusOr<CompileOptions> FunctionalHloRunner::CreateCompileOptions(
+StatusOr<CompileOptions> FunctionalHloRunner::CreateCompileOptions(
     const PjRtClient& client,
     const FunctionalHloRunner::RawCompileOptions& raw_options, int task_id) {
   CompileOptions compile_options;
@@ -406,12 +416,10 @@ FunctionalHloRunner::CreateExecutableBuildOptionsFromExecutionOptions(
   build_options.set_use_auto_spmd_partitioning(
       execution_options.use_auto_spmd_partitioning());
   build_options.set_deduplicate_hlo(execution_options.deduplicate_hlo());
-  build_options.set_allow_spmd_sharding_propagation_to_parameters(
-      execution_options.allow_spmd_sharding_propagation_to_parameters());
   build_options.set_allow_spmd_sharding_propagation_to_output(
       execution_options.allow_spmd_sharding_propagation_to_output());
   if (execution_options.has_device_assignment()) {
-    absl::StatusOr<std::unique_ptr<DeviceAssignment>> device_assignment =
+    StatusOr<std::unique_ptr<DeviceAssignment>> device_assignment =
         DeviceAssignment::Deserialize(execution_options.device_assignment());
     TF_CHECK_OK(device_assignment.status());
     build_options.set_device_assignment(**device_assignment);
@@ -456,7 +464,7 @@ absl::Span<PjRtDevice* const> FunctionalHloRunner::GetLocalDevices(
   return client.addressable_devices();
 }
 
-absl::StatusOr<FunctionalHloRunner::HloModuleAndArguments>
+StatusOr<FunctionalHloRunner::HloModuleAndArguments>
 FunctionalHloRunner::LoadHloModuleAndArguments(absl::string_view hlo_file,
                                                InputFormat input_format) {
   HloModuleAndArguments hlo_module_and_arguments;
@@ -505,7 +513,7 @@ Status FunctionalHloRunner::LoadAndRunAndDump(
              : FunctionalHloRunner::DumpOutput(output, dump_output_to, task_id);
 }
 
-absl::StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
+StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
 FunctionalHloRunner::LoadAndRun(PjRtClient& client,
                                 const DebugOptions& debug_options,
                                 const PreprocessingOptions& preproc_options,
@@ -538,6 +546,29 @@ FunctionalHloRunner::LoadAndRun(PjRtClient& client,
   return CompileAndRun(
       client, debug_options, preproc_options, compile_options, running_options,
       hlo_module_and_arguments.hlo_module.get(), loaded_arguments);
+}
+
+StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
+FunctionalHloRunner::LoadAndRun(
+    PjRtClient& client, const DebugOptions& debug_options,
+    const PreprocessingOptions& preproc_options,
+    const CompileOptions& compile_options,
+    const RunningOptions& running_options,
+    absl::Span<const std::string> hlo_files, InputFormat input_format,
+    const LiteralVec& argument_literals,
+    const PerDeviceIndexVecType& per_device_index_vec) {
+  CHECK(!hlo_files.empty());
+  // We only support SPMD as of now, i.e., all devices are supposed
+  // to execute the same HLO module.
+  // TODO(tdanyluk): Consider revising this API which takes multiple HLOs, but
+  // uses only one.
+  HloModuleAndArguments hlo_module_and_arguments;
+  TF_ASSIGN_OR_RETURN(hlo_module_and_arguments,
+                      LoadHloModuleAndArguments(hlo_files[0], input_format));
+  return CompileAndRun(client, debug_options, preproc_options, compile_options,
+                       running_options,
+                       hlo_module_and_arguments.hlo_module.get(),
+                       argument_literals, per_device_index_vec);
 }
 
 Status FunctionalHloRunner::LoadAndCompile(
@@ -573,7 +604,7 @@ Status FunctionalHloRunner::LoadAndCompile(
   return OkStatus();
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>>
+StatusOr<std::unique_ptr<HloModule>>
 FunctionalHloRunner::ReadModuleFromHloTextFile(absl::string_view hlo_file) {
   std::string hlo_string;
   TF_RETURN_IF_ERROR(tsl::ReadFileToString(tsl::Env::Default(),
@@ -581,7 +612,7 @@ FunctionalHloRunner::ReadModuleFromHloTextFile(absl::string_view hlo_file) {
   return ParseAndReturnUnverifiedModule(hlo_string);
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>>
+StatusOr<std::unique_ptr<HloModule>>
 FunctionalHloRunner::ReadModuleFromBinaryProtoFile(absl::string_view hlo_file) {
   HloProto proto;
   TF_RETURN_IF_ERROR(
@@ -589,7 +620,7 @@ FunctionalHloRunner::ReadModuleFromBinaryProtoFile(absl::string_view hlo_file) {
   return HloProtoToModule(proto.hlo_module());
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>>
+StatusOr<std::unique_ptr<HloModule>>
 FunctionalHloRunner::ReadModuleFromTextProtoFile(absl::string_view hlo_file) {
   HloProto proto;
   TF_RETURN_IF_ERROR(
@@ -597,7 +628,7 @@ FunctionalHloRunner::ReadModuleFromTextProtoFile(absl::string_view hlo_file) {
   return HloProtoToModule(proto.hlo_module());
 }
 
-absl::StatusOr<FunctionalHloRunner::HloModuleAndArguments>
+StatusOr<FunctionalHloRunner::HloModuleAndArguments>
 FunctionalHloRunner::ReadModuleFromSnapshotBinaryProtoFile(
     absl::string_view hlo_file) {
   HloSnapshot proto;
@@ -614,17 +645,17 @@ FunctionalHloRunner::ReadModuleFromSnapshotBinaryProtoFile(
   return hlo_module_and_arguments;
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>>
-FunctionalHloRunner::ReadModuleFromString(absl::string_view hlo_text) {
+StatusOr<std::unique_ptr<HloModule>> FunctionalHloRunner::ReadModuleFromString(
+    absl::string_view hlo_text) {
   return HloTextToModule(hlo_text);
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>>
-FunctionalHloRunner::ReadModuleFromProto(const HloModuleProto& proto) {
+StatusOr<std::unique_ptr<HloModule>> FunctionalHloRunner::ReadModuleFromProto(
+    const HloModuleProto& proto) {
   return HloProtoToModule(proto);
 }
 
-absl::StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
+StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
 FunctionalHloRunner::CompileAndRun(PjRtClient& client,
                                    const DebugOptions& debug_options,
                                    const PreprocessingOptions& preproc_options,
@@ -637,6 +668,21 @@ FunctionalHloRunner::CompileAndRun(PjRtClient& client,
                               preproc_options, compile_options));
 
   return Run(client, executable.get(), arguments, running_options);
+}
+
+StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
+FunctionalHloRunner::CompileAndRun(
+    PjRtClient& client, const DebugOptions& debug_options,
+    const PreprocessingOptions& preproc_options,
+    const CompileOptions& compile_options,
+    const RunningOptions& running_options, HloModule* hlo_module,
+    const LiteralVec& argument_literals,
+    const PerDeviceIndexVecType& argument_indices) {
+  TF_ASSIGN_OR_RETURN(std::unique_ptr<PjRtLoadedExecutable> executable,
+                      Compile(client, hlo_module, debug_options,
+                              preproc_options, compile_options));
+  return Run(client, executable.get(), argument_literals, argument_indices,
+             running_options);
 }
 
 namespace {
@@ -752,11 +798,11 @@ CompileOptions FunctionalHloRunner::CompleteCompileOptions(
   return compile_options;
 }
 
-absl::StatusOr<std::unique_ptr<PjRtLoadedExecutable>>
-FunctionalHloRunner::Compile(PjRtClient& client, HloModule* hlo_module,
-                             const DebugOptions& debug_options,
-                             const PreprocessingOptions& preproc_options,
-                             const CompileOptions& compile_options) {
+StatusOr<std::unique_ptr<PjRtLoadedExecutable>> FunctionalHloRunner::Compile(
+    PjRtClient& client, HloModule* hlo_module,
+    const DebugOptions& debug_options,
+    const PreprocessingOptions& preproc_options,
+    const CompileOptions& compile_options) {
   TF_RETURN_IF_ERROR(PrepareHloModuleForCompilation(hlo_module, debug_options,
                                                     preproc_options));
   CompileOptions modified_compile_options =
@@ -769,7 +815,7 @@ FunctionalHloRunner::Compile(PjRtClient& client, HloModule* hlo_module,
   return executable;
 }
 
-absl::StatusOr<std::unique_ptr<PjRtExecutable>> FunctionalHloRunner::Compile(
+StatusOr<std::unique_ptr<PjRtExecutable>> FunctionalHloRunner::Compile(
     PjRtClient& client, HloModule* hlo_module,
     const DebugOptions& debug_options,
     const PreprocessingOptions& preproc_options,
@@ -791,11 +837,11 @@ absl::StatusOr<std::unique_ptr<PjRtExecutable>> FunctionalHloRunner::Compile(
 // Runs the executable and may repeat for multiple times.
 // Since the input buffers may be donated by the PjrtClient, we re-create the
 // input PjrtBuffers for each repetition.
-absl::StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
-FunctionalHloRunner::Run(PjRtClient& client, PjRtLoadedExecutable* executable,
+StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType> FunctionalHloRunner::Run(
+    PjRtClient& client, PjRtLoadedExecutable* executable,
 
-                         const PerDeviceLiteralVecType& arguments,
-                         const RunningOptions& running_options) {
+    const PerDeviceLiteralVecType& arguments,
+    const RunningOptions& running_options) {
   auto create_argument_buffers_on_device = [&client, &executable, &arguments,
                                             &running_options](
                                                bool flatten_tupled_arguments) {
@@ -823,6 +869,66 @@ FunctionalHloRunner::Run(PjRtClient& client, PjRtLoadedExecutable* executable,
     // already been flattened.
     return CopyArgumentsToDevice(client, executable->addressable_devices(),
                                  arguments, running_options.log_input_output());
+  };
+  return RunInternal(client, executable, create_argument_buffers_on_device,
+                     running_options);
+}
+
+// Runs the executable and may repeat for multiple times.
+// Since the input buffers may be donated by the PjrtClient, we re-create the
+// input PjrtBuffers for each repetition.
+StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType> FunctionalHloRunner::Run(
+
+    PjRtClient& client, PjRtLoadedExecutable* executable,
+    const LiteralVec& argument_literals,
+    const PerDeviceIndexVecType& argument_indices,
+    const RunningOptions& running_options) {
+  auto create_argument_buffers_on_device = [&client, &executable,
+                                            &argument_literals,
+                                            &argument_indices,
+                                            &running_options](
+                                               bool flatten_arguments) {
+    CHECK_GE(argument_literals.size(), 1);
+    bool arguments_can_be_flattened = absl::c_all_of(
+        argument_literals,
+        [](const Literal& literal) { return literal.shape().IsTuple(); });
+    arguments_can_be_flattened &= absl::c_all_of(
+        argument_indices, [](PerDeviceIndexVecType::const_reference
+                                 device_id_and_argument_indices) {
+          return device_id_and_argument_indices.second.size() == 1;
+        });
+    if (flatten_arguments && arguments_can_be_flattened) {
+      int tuple_shape_size =
+          argument_literals.front().shape().tuple_shapes_size();
+      LiteralVec flattened_argument_literals;
+      for (const Literal& tupled_argument : argument_literals) {
+        LiteralVec flattened_arguments =
+            tupled_argument.Clone().DecomposeTuple();
+        for (Literal& flattened_argument : flattened_arguments) {
+          flattened_argument_literals.push_back(std::move(flattened_argument));
+        }
+      }
+      PerDeviceIndexVecType flattened_per_device_index_vec;
+      for (const auto& device_id_and_argument_indices : argument_indices) {
+        std::vector<int> flattened_argument_indices(tuple_shape_size);
+        int tupled_argument_index =
+            device_id_and_argument_indices.second.front();
+        for (int i = 0; i < tuple_shape_size; i++) {
+          flattened_argument_indices[i] =
+              tupled_argument_index * tuple_shape_size + i;
+        }
+        int device_id = device_id_and_argument_indices.first;
+        flattened_per_device_index_vec.insert(
+            {device_id, std::move(flattened_argument_indices)});
+      }
+      return CopyArgumentsToDevice(client, executable->addressable_devices(),
+                                   flattened_argument_literals,
+                                   flattened_per_device_index_vec,
+                                   running_options.log_input_output());
+    }
+    return CopyArgumentsToDevice(client, executable->addressable_devices(),
+                                 argument_literals, argument_indices,
+                                 running_options.log_input_output());
   };
   return RunInternal(client, executable, create_argument_buffers_on_device,
                      running_options);
@@ -911,11 +1017,11 @@ Status EnsureSingleTupleForFlattening(const HloModule& module) {
 
 }  // namespace
 
-absl::StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
+StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
 FunctionalHloRunner::RunInternal(
     PjRtClient& client, PjRtLoadedExecutable* executable,
-    std::function<absl::StatusOr<
-        std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>(bool)>
+    std::function<
+        StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>(bool)>
         create_argument_buffers_on_device,
     const RunningOptions& running_options) {
   ExecuteOptions execute_options;
@@ -1035,7 +1141,7 @@ FunctionalHloRunner::RunInternal(
   return results;
 }
 
-absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
+StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
 FunctionalHloRunner::CreateArgumentsOnDevice(
     PjRtClient& client, const PjRtLoadedExecutable* executable,
     const RunningOptions& running_options, bool flatten_arguments) {
@@ -1141,7 +1247,7 @@ FunctionalHloRunner::CreateArgumentsOnDevice(
                                running_options.log_input_output());
 }
 
-absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
+StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
 FunctionalHloRunner::CreateUninitializedArgumentsOnDevice(
     PjRtClient& client, const PjRtLoadedExecutable* executable,
     const RunningOptions& running_options, bool flatten_arguments) {
@@ -1225,7 +1331,7 @@ FunctionalHloRunner::CreateUninitializedArgumentsOnDevice(
   return argument_buffers_per_device;
 }
 
-absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
+StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
 FunctionalHloRunner::CopyArgumentsToDevice(
     PjRtClient& client, absl::Span<PjRtDevice* const> addressable_devices,
     const PerDeviceLiteralVecType& arguments, bool log_input) {
@@ -1270,7 +1376,7 @@ FunctionalHloRunner::CopyArgumentsToDevice(
   return argument_buffers;
 }
 
-absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
+StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
 FunctionalHloRunner::CopyArgumentsToDevice(
     PjRtClient& client, absl::Span<PjRtDevice* const> addressable_devices,
     const LiteralVec& argument_literals,
@@ -1318,7 +1424,7 @@ FunctionalHloRunner::CopyArgumentsToDevice(
   return argument_buffers;
 }
 
-absl::StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
+StatusOr<FunctionalHloRunner::PerDeviceLiteralVecType>
 FunctionalHloRunner::FetchAndLogOutput(
     PjRtClient& client,
     const std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>& output_buffers,
@@ -1360,7 +1466,7 @@ FunctionalHloRunner::FetchAndLogOutput(
                "same device";
         output_slice.emplace_back(
             ShapeUtil::DeviceShapeToHostShape(buffer->on_device_shape()));
-        buffer->ToLiteral(&output_slice.back()).OnReady([&](Status s) {
+        buffer->ToLiteral(&output_slice.back(), [&](Status s) {
           absl::MutexLock lock(&mu);
           --num_pending_transfers;
           status.Update(s);

@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,25 +16,11 @@ limitations under the License.
 #include "xla/service/gpu/horizontal_input_fusion.h"
 
 #include <algorithm>
-#include <cstddef>
-#include <vector>
 
 #include "absl/container/flat_hash_set.h"
-#include "absl/log/log.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "xla/hlo/ir/hlo_computation.h"
-#include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_module.h"
-#include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/gpu/gpu_fusible.h"
 #include "xla/service/hlo_creation_utils.h"
-#include "xla/shape.h"
-#include "xla/shape_util.h"
-#include "xla/stream_executor/device_description.h"
-#include "xla/util.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -62,7 +48,7 @@ class HorizontalInputFusionImpl {
 
   ~HorizontalInputFusionImpl() = default;
 
-  absl::StatusOr<bool> Run();
+  StatusOr<bool> Run();
 
  private:
   HloComputation* computation_;
@@ -120,7 +106,7 @@ std::vector<HloInstruction*> FindAndSortFusionCandidates(
   return fusion_instrs;
 }
 
-absl::StatusOr<bool> HorizontalInputFusionImpl::Run() {
+StatusOr<bool> HorizontalInputFusionImpl::Run() {
   bool changed = false;
   XLA_VLOG_LINES(3, computation_->ToString());
 
@@ -169,13 +155,13 @@ absl::StatusOr<bool> HorizontalInputFusionImpl::Run() {
 
 }  // namespace
 
-absl::StatusOr<bool> GpuHorizontalInputFusion::RunOnComputation(
+StatusOr<bool> GpuHorizontalInputFusion::RunOnComputation(
     HloComputation* computation) {
   HorizontalInputFusionImpl horizontal_fusion_impl(computation, device_info_);
   return horizontal_fusion_impl.Run();
 }
 
-absl::StatusOr<bool> GpuHorizontalInputFusion::Run(
+StatusOr<bool> GpuHorizontalInputFusion::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

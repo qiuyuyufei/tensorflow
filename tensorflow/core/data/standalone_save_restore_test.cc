@@ -44,7 +44,7 @@ class TestDataset {
         Dataset::FromGraph(Dataset::Params(), dataset_def.graph(), &dataset_));
   }
 
-  absl::StatusOr<std::unique_ptr<Iterator>> MakeIterator() const {
+  StatusOr<std::unique_ptr<Iterator>> MakeIterator() const {
     std::unique_ptr<Iterator> iterator;
     TF_RETURN_IF_ERROR(dataset_->MakeIterator(&iterator));
     return iterator;

@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,34 +17,36 @@ limitations under the License.
 #define XLA_PYTHON_TRACEBACK_H_
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 // placeholder for index annotation headers
 #include "absl/container/inlined_vector.h"
-#include "third_party/nanobind/include/nanobind/nanobind.h"
-#include "xla/python/nb_class_ptr.h"
+#include "pybind11/pybind11.h"  // from @pybind11
+#include "pybind11/stl.h"  // from @pybind11
 
 namespace xla {
 
-// Represents a Python traceback. This object is designed to be allocated on
-// the Python heap; creating or destroying a traceback requires the GIL.
+// Represents a Python traceback.
 class Traceback {
  public:
-  // Requires GIL. Creates a Traceback object that requires destructor to be
+  // Require GIL. Creates a Traceback object that requires destructor to be
   // invoked with GIL held as well.
-  static std::optional<nb_class_ptr<Traceback>> Get();
+  static std::shared_ptr<Traceback> Get();
 
-  // Requires GIL.
+  // Safely destroy the traceback object regardless of whether GIL is held or
+  // not.
+  static void SafeDestroy(Traceback traceback);
+
+  // Require GIL.
   static bool enabled() { return enabled_; }
-  // Requires GIL.
+  // Require GIL.
   static void SetEnabled(bool enabled);
 
-  // Requires GIL. Don't call this directly, you're looking for Get().
+  // Require GIL.
   Traceback();
-  // Requires GIL.
+  // Require GIL.
   ~Traceback();
 
   Traceback(const Traceback&) = delete;
@@ -56,8 +58,8 @@ class Traceback {
   std::string ToString() const;
 
   struct Frame {
-    nanobind::str file_name;
-    nanobind::str function_name;
+    pybind11::str file_name;
+    pybind11::str function_name;
     int function_start_line;
     int line_num;
 
@@ -72,7 +74,7 @@ class Traceback {
 
   // Returns the traceback as a fake Python Traceback object, suitable for
   // using as an exception traceback.
-  nanobind::object AsPythonTraceback() const;
+  pybind11::object AsPythonTraceback() const;
 
   bool operator==(const Traceback& other) const {
     return frames_ == other.frames_;
@@ -93,15 +95,13 @@ class Traceback {
   static bool enabled_;
 };
 
-using nb_traceback = nb_class_ptr<Traceback>;
-
 template <typename H>
 H AbslHashValue(H h, const Traceback& traceback) {
   h = H::combine(std::move(h), traceback.raw_frames());
   return h;
 }
 
-void BuildTracebackSubmodule(nanobind::module_& m);
+void BuildTracebackSubmodule(pybind11::module& m);
 
 }  // namespace xla
 

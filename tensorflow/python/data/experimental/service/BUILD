@@ -35,7 +35,7 @@ py_strict_library(
     ],
     deps = [
         ":_pywrap_server_lib",
-        ":_pywrap_utils_exp",
+        ":_pywrap_utils",
         "//tensorflow/core:protos_all_py",
         "//tensorflow/python:pywrap_tensorflow",
         "//tensorflow/python/util:tf_export",
@@ -54,11 +54,11 @@ tf_py_strict_test(
 )
 
 tf_python_pybind_extension(
-    name = "_pywrap_utils_exp",
+    name = "_pywrap_utils",
     srcs = ["utils_wrapper.cc"],
     enable_stub_generation = True,
     pytype_srcs = [
-        "_pywrap_utils_exp.pyi",
+        "_pywrap_utils.pyi",
     ],
     deps = [
         "//tensorflow/core/data/service:py_utils",

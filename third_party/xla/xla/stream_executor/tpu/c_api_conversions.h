@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -128,7 +128,7 @@ SE_MaybeOwningDeviceMemory ToC(xla::MaybeOwningDeviceMemory& mem, bool aliased);
 
 // HloModule
 XLA_HloModule ToC(const xla::HloModule& module);
-absl::StatusOr<std::unique_ptr<xla::HloModule>> FromC(
+xla::StatusOr<std::unique_ptr<xla::HloModule>> FromC(
     const XLA_HloModule& c_module);
 void Destroy(XLA_HloModule* c_module);
 

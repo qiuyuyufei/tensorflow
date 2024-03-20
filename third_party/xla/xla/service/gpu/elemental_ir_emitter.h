@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,10 +17,7 @@ limitations under the License.
 #define XLA_SERVICE_GPU_ELEMENTAL_IR_EMITTER_H_
 
 #include <string>
-#include <vector>
 
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
@@ -29,7 +26,8 @@ limitations under the License.
 #include "xla/service/elemental_ir_emitter.h"
 #include "xla/service/gpu/ir_emitter_context.h"
 #include "xla/service/gpu/target_util.h"
-#include "xla/service/llvm_ir/ir_array.h"
+#include "xla/service/hlo_module_config.h"
+#include "xla/statusor.h"
 #include "xla/xla_data.pb.h"
 
 namespace xla {
@@ -44,61 +42,59 @@ class GpuElementalIrEmitter : public ElementalIrEmitter {
   llvm_ir::IrArray::Index GetSourceIndexOfBitcast(
       const llvm_ir::IrArray::Index& index, const HloInstruction* hlo) override;
 
-  absl::StatusOr<llvm::Value*> EmitFloatBinaryOp(
-      const HloInstruction* op, llvm::Value* lhs_value,
-      llvm::Value* rhs_value) override;
+  StatusOr<llvm::Value*> EmitFloatBinaryOp(const HloInstruction* op,
+                                           llvm::Value* lhs_value,
+                                           llvm::Value* rhs_value) override;
 
-  absl::StatusOr<llvm::Value*> EmitLog(PrimitiveType prim_type,
-                                       llvm::Value* value) override;
+  StatusOr<llvm::Value*> EmitLog(PrimitiveType prim_type,
+                                 llvm::Value* value) override;
 
-  absl::StatusOr<llvm::Value*> EmitLog1p(PrimitiveType prim_type,
-                                         llvm::Value* value) override;
+  StatusOr<llvm::Value*> EmitLog1p(PrimitiveType prim_type,
+                                   llvm::Value* value) override;
 
-  absl::StatusOr<llvm::Value*> EmitSin(PrimitiveType prim_type,
-                                       llvm::Value* value) override;
+  StatusOr<llvm::Value*> EmitSin(PrimitiveType prim_type,
+                                 llvm::Value* value) override;
 
-  absl::StatusOr<llvm::Value*> EmitCos(PrimitiveType prim_type,
-                                       llvm::Value* value) override;
+  StatusOr<llvm::Value*> EmitCos(PrimitiveType prim_type,
+                                 llvm::Value* value) override;
 
-  absl::StatusOr<llvm::Value*> EmitTan(PrimitiveType prim_type,
-                                       llvm::Value* value) override;
+  StatusOr<llvm::Value*> EmitTan(PrimitiveType prim_type,
+                                 llvm::Value* value) override;
 
-  absl::StatusOr<llvm::Value*> EmitExp(PrimitiveType prim_type,
-                                       llvm::Value* value,
-                                       absl::string_view name) override;
+  StatusOr<llvm::Value*> EmitExp(PrimitiveType prim_type, llvm::Value* value,
+                                 absl::string_view name) override;
 
-  absl::StatusOr<llvm::Value*> EmitExpm1(PrimitiveType prim_type,
-                                         llvm::Value* value) override;
+  StatusOr<llvm::Value*> EmitExpm1(PrimitiveType prim_type,
+                                   llvm::Value* value) override;
 
-  absl::StatusOr<llvm::Value*> EmitSqrt(PrimitiveType prim_type,
+  StatusOr<llvm::Value*> EmitSqrt(PrimitiveType prim_type,
+                                  llvm::Value* value) override;
+
+  StatusOr<llvm::Value*> EmitRsqrt(PrimitiveType prim_type,
+                                   llvm::Value* value) override;
+
+  StatusOr<llvm::Value*> EmitPow(PrimitiveType prim_type, llvm::Value* lhs,
+                                 llvm::Value* rhs,
+                                 absl::string_view name) override;
+
+  StatusOr<llvm::Value*> EmitAtan2(PrimitiveType prim_type, llvm::Value* lhs,
+                                   llvm::Value* rhs,
+                                   absl::string_view name) override;
+
+  StatusOr<llvm::Value*> EmitTanh(PrimitiveType prim_type,
+                                  llvm::Value* value) override;
+
+  StatusOr<llvm::Value*> EmitComplexAbs(PrimitiveType prim_type,
                                         llvm::Value* value) override;
 
-  absl::StatusOr<llvm::Value*> EmitRsqrt(PrimitiveType prim_type,
-                                         llvm::Value* value) override;
+  StatusOr<llvm::Value*> EmitCbrt(PrimitiveType prim_type,
+                                  llvm::Value* value) override;
 
-  absl::StatusOr<llvm::Value*> EmitPow(PrimitiveType prim_type,
-                                       llvm::Value* lhs, llvm::Value* rhs,
-                                       absl::string_view name) override;
-
-  absl::StatusOr<llvm::Value*> EmitAtan2(PrimitiveType prim_type,
-                                         llvm::Value* lhs, llvm::Value* rhs,
-                                         absl::string_view name) override;
-
-  absl::StatusOr<llvm::Value*> EmitTanh(PrimitiveType prim_type,
-                                        llvm::Value* value) override;
-
-  absl::StatusOr<llvm::Value*> EmitErf(PrimitiveType prim_type,
-                                       llvm::Value* value) override;
-
-  absl::StatusOr<llvm::Value*> EmitComplexAbs(PrimitiveType prim_type,
-                                              llvm::Value* value) override;
-
-  absl::StatusOr<llvm::Value*> EmitCbrt(PrimitiveType prim_type,
-                                        llvm::Value* value) override;
-
-  absl::StatusOr<std::vector<llvm::Value*>> EmitThreadLocalCall(
+  StatusOr<std::vector<llvm::Value*>> EmitThreadLocalCall(
       const HloComputation& callee, absl::Span<llvm::Value* const> parameters,
       absl::string_view, bool /*is_reducer*/) override;
+
+  llvm::Value* EmitThreadId() override;
 
   bool fast_min_max() override {
     return ir_emitter_context_.debug_options().xla_gpu_enable_fast_min_max();
@@ -106,21 +102,28 @@ class GpuElementalIrEmitter : public ElementalIrEmitter {
 
  private:
   // Emits IR for op, which must have opcode kPower.
-  absl::StatusOr<llvm::Value*> EmitPowerOp(const HloInstruction* op,
-                                           llvm::Value* lhs_value,
-                                           llvm::Value* rhs_value);
+  StatusOr<llvm::Value*> EmitPowerOp(const HloInstruction* op,
+                                     llvm::Value* lhs_value,
+                                     llvm::Value* rhs_value);
+
+  // Emits IR to call an LLVM intrinsic of type [T] -> T.  Adjusts
+  // callee_name according to T.  Returns the IR value that represents the
+  // return value of the function.
+  StatusOr<llvm::Value*> EmitLlvmIntrinsicMathCall(
+      const std::string& callee_name, absl::Span<llvm::Value* const> operands,
+      absl::Span<const PrimitiveType> input_types, PrimitiveType output_type);
 
   // Emits IR to call a device function of type [T] -> T.  Adjusts
   // callee_name according to T.  Returns the IR value that represents the
   // return value of the function.
-  absl::StatusOr<llvm::Value*> EmitDeviceMathCall(
+  StatusOr<llvm::Value*> EmitDeviceMathCall(
       TargetDeviceFunctionID funcid, absl::Span<llvm::Value* const> operands,
       absl::Span<const PrimitiveType> input_types, PrimitiveType output_type,
       absl::string_view name = "");
 
   // Emits IR to call a function of type [T] -> T.  Does not munge callee_name.
   // Returns the IR value that represents the return value of the function.
-  absl::StatusOr<llvm::Value*> EmitMathCall(
+  StatusOr<llvm::Value*> EmitMathCall(
       const std::string& callee_name, absl::Span<llvm::Value* const> operands,
       absl::Span<const PrimitiveType> input_types, PrimitiveType output_type,
       absl::string_view name = "");

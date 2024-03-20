@@ -59,7 +59,7 @@ Status InternalCompute(const RE2& regex, const string& rewrite,
     }
     output_flat(i) = std::move(buf);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 }  // namespace
 

@@ -23,6 +23,9 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
 #include "tsl/lib/gtl/map_util.h"
+#include "tsl/platform/logging.h"
+#include "tsl/platform/regexp.h"
+#include "tsl/platform/types.h"
 #include "tsl/profiler/utils/tf_op_utils.h"
 
 namespace tsl {
@@ -47,8 +50,8 @@ const absl::string_view kHostCpusPlaneName = "Host CPUs";
 const absl::string_view kSyscallsPlaneName = "Syscalls";
 
 const absl::string_view kStepLineName = "Steps";
-const absl::string_view kTensorFlowNameScopeLineName = "Framework Name Scope";
-const absl::string_view kTensorFlowOpLineName = "Framework Ops";
+const absl::string_view kTensorFlowNameScopeLineName = "TensorFlow Name Scope";
+const absl::string_view kTensorFlowOpLineName = "TensorFlow Ops";
 const absl::string_view kXlaModuleLineName = "XLA Modules";
 const absl::string_view kXlaOpLineName = "XLA Ops";
 const absl::string_view kXlaAsyncOpLineName = "Async XLA Ops";
@@ -59,8 +62,6 @@ const absl::string_view kCounterEventsLineName = "_counters_";
 const absl::string_view kDeviceVendorNvidia = "Nvidia";
 const absl::string_view kDeviceVendorAMD = "AMD";
 
-const absl::string_view kTaskEnvPlaneName = "Task Environment";
-
 namespace {
 
 constexpr int kNumHostEventTypes =
@@ -68,10 +69,6 @@ constexpr int kNumHostEventTypes =
 
 constexpr int kNumStatTypes =
     StatType::kLastStatType - StatType::kFirstStatType + 1;
-
-constexpr int kNumMegaScaleStatTypes =
-    MegaScaleStatType::kLastMegaScaleStatType -
-    MegaScaleStatType::kFirstMegaScaleStatType + 1;
 
 constexpr int kNumLineIdTypes =
     LineIdType::kLastLineIdType - LineIdType::kFirstLineIdType + 1;
@@ -81,10 +78,6 @@ using HostEventTypeStrMap =
     absl::flat_hash_map<HostEventType, absl::string_view>;
 using StatTypeMap = absl::flat_hash_map<absl::string_view, StatType>;
 using StatTypeStrMap = absl::flat_hash_map<StatType, absl::string_view>;
-using MegaScaleStatTypeMap =
-    absl::flat_hash_map<absl::string_view, MegaScaleStatType>;
-using MegaScaleStatTypeStrMap =
-    absl::flat_hash_map<MegaScaleStatType, absl::string_view>;
 using LineIdTypeMap = absl::flat_hash_map<absl::string_view, LineIdType>;
 using LineIdTypeStrMap = absl::flat_hash_map<LineIdType, absl::string_view>;
 
@@ -140,7 +133,6 @@ const HostEventTypeMap& GetHostEventTypeMap() {
       // Batching related.
       {"BatchingSessionRun", kBatchingSessionRun},
       {"ProcessBatch", kProcessBatch},
-      {"BrainSessionRun", kBrainSessionRun},
       {"ConcatInputTensors", kConcatInputTensors},
       {"MergeInputTensors", kMergeInputTensors},
       {"ScheduleWithoutSplit", kScheduleWithoutSplit},
@@ -268,7 +260,6 @@ const StatTypeMap& GetStatTypeMap() {
       {"tf_function_call", kTfFunctionCall},
       {"tracing_count", kTfFunctionTracingCount},
       {"flops", kFlops},
-      {"model_flops", kModelFlops},
       {"bytes_accessed", kBytesAccessed},
       {"memory_access_breakdown", kMemoryAccessBreakdown},
       {"source", kSourceInfo},
@@ -276,7 +267,6 @@ const StatTypeMap& GetStatTypeMap() {
       {"model_version", kModelVersion},
       {"bytes_transferred", kBytesTransferred},
       {"queue", kDmaQueue},
-      {"dcn_collective_info", kDcnCollectiveInfo},
       // Performance counter related.
       {"Raw Value", kRawValue},
       {"Scaled Value", kScaledValue},
@@ -333,35 +323,8 @@ const StatTypeMap& GetStatTypeMap() {
       {"dcn_destination_per_slice_device_id", kDcnDestinationPerSliceDeviceId},
       {"dcn_chunk", kDcnChunk},
       {"dcn_loop_index", kDcnLoopIndex},
-      {"dropped_traces", kDroppedTraces},
   });
   DCHECK_EQ(stat_type_map->size(), kNumStatTypes);
-  return *stat_type_map;
-}
-
-const MegaScaleStatTypeMap& GetMegaScaleStatTypeMap() {
-  static auto* stat_type_map = new MegaScaleStatTypeMap({
-      {"graph_key", kMegaScaleGraphKey},
-      {"local_device_id", kMegaScaleLocalDeviceId},
-      {"num_actions", kMegaScaleNumActions},
-      {"collective_type", kMegaScaleCollectiveType},
-      {"input_size", kMegaScaleInputSize},
-      {"slack_us", kMegaScaleSlackUs},
-      {"action_type", kMegaScaleActionType},
-      {"start_end_type", kMegaScaleStartEndType},
-      {"action_index", kMegaScaleActionIndex},
-      {"action_duration_ns", kMegaScaleActionDurationNs},
-      {"action_inputs", kMegaScaleActionInputs},
-      {"transfer_source", kMegaScaleTransferSource},
-      {"transfer_destinations", kMegaScaleTransferDestinations},
-      {"buffer_sizes", kMegaScaleBufferSizes},
-      {"compute_operation", kMegaScaleComputeOperation},
-      {"chunk", kMegaScaleChunk},
-      {"launch_id", kMegaScaleLaunchId},
-      {"loop_iteration", kMegaScaleLoopIteration},
-      {"graph_protos", kMegaScaleGraphProtos},
-  });
-  DCHECK_EQ(stat_type_map->size(), kNumMegaScaleStatTypes);
   return *stat_type_map;
 }
 
@@ -387,39 +350,10 @@ const StatTypeStrMap& GetStatTypeStrMap() {
   return *stat_type_str_map;
 }
 
-const MegaScaleStatTypeStrMap& GetMegaScaleStatTypeStrMap() {
-  static auto* stat_type_str_map = new MegaScaleStatTypeStrMap(
-      gtl::ReverseMap<MegaScaleStatTypeStrMap>(GetMegaScaleStatTypeMap()));
-  return *stat_type_str_map;
-}
-
 const LineIdTypeStrMap& GetLineIdTypeStrMap() {
   static auto* line_id_type_str_map = new LineIdTypeStrMap(
       gtl::ReverseMap<LineIdTypeStrMap>(GetLineIdTypeMap()));
   return *line_id_type_str_map;
-}
-
-using TaskEnvStatTypeMap =
-    absl::flat_hash_map<absl::string_view, TaskEnvStatType>;
-using TaskEnvStatTypeStrMap =
-    absl::flat_hash_map<TaskEnvStatType, absl::string_view>;
-
-constexpr int kNumTaskEnvStatTypes = TaskEnvStatType::kLastTaskEnvStatType -
-                                     TaskEnvStatType::kFirstTaskEnvStatType + 1;
-
-const TaskEnvStatTypeMap& GetTaskEnvStatTypeMap() {
-  static auto* task_env_stat_type_map = new TaskEnvStatTypeMap({
-      {"profile_start_time", kEnvProfileStartTime},
-      {"profile_stop_time", kEnvProfileStopTime},
-  });
-  DCHECK_EQ(task_env_stat_type_map->size(), kNumTaskEnvStatTypes);
-  return *task_env_stat_type_map;
-}
-
-const TaskEnvStatTypeStrMap& GetTaskEnvStatTypeStrMap() {
-  static auto* task_env_stat_type_str_map = new TaskEnvStatTypeStrMap(
-      gtl::ReverseMap<TaskEnvStatTypeStrMap>(GetTaskEnvStatTypeMap()));
-  return *task_env_stat_type_str_map;
 }
 
 }  // namespace
@@ -454,28 +388,6 @@ absl::string_view GetStatTypeStr(StatType stat_type) {
 
 std::optional<int64_t> FindStatType(absl::string_view stat_name) {
   if (auto stat_type = gtl::FindOrNull(GetStatTypeMap(), stat_name)) {
-    return *stat_type;
-  }
-  return std::nullopt;
-}
-
-absl::string_view GetMegaScaleStatTypeStr(MegaScaleStatType stat_type) {
-  return GetMegaScaleStatTypeStrMap().at(stat_type);
-}
-
-std::optional<int64_t> FindMegaScaleStatType(absl::string_view stat_name) {
-  if (auto stat_type = gtl::FindOrNull(GetMegaScaleStatTypeMap(), stat_name)) {
-    return *stat_type;
-  }
-  return std::nullopt;
-}
-
-absl::string_view GetTaskEnvStatTypeStr(TaskEnvStatType stat_type) {
-  return GetTaskEnvStatTypeStrMap().at(stat_type);
-}
-
-std::optional<int64_t> FindTaskEnvStatType(absl::string_view stat_name) {
-  if (auto stat_type = gtl::FindOrNull(GetTaskEnvStatTypeMap(), stat_name)) {
     return *stat_type;
   }
   return std::nullopt;
@@ -536,8 +448,6 @@ const absl::string_view kMegaScaleDcnReceive =
 const absl::string_view kMegaScaleDcnSend =
     "MegaScale: Communication Transport Send";
 const absl::string_view kMegaScaleDcnSendFinished = "MegaScale: Send Finished";
-const absl::string_view kMegaScaleDcnMemAllocate = "MegaScale: Memory Allocate";
-const absl::string_view kMegaScaleDcnMemCopy = "MegaScale: Memory Copy";
 const absl::string_view kMegaScaleTopologyDiscovery =
     "MegaScale: Communication Topology Discovery.";
 const absl::string_view kMegaScaleBarrier = "MegaScale: Barrier.";
@@ -550,9 +460,6 @@ const absl::string_view kMegaScaleH2DTransferStart =
     "MegaScale: Host to Device Action";
 const absl::string_view kMegaScaleH2DTransferFinished =
     "MegaScale: Host to Device Transfer Finished";
-const absl::string_view kMegaScaleReductionStart = "MegaScale: Reduction";
-const absl::string_view kMegaScaleReductionFinished =
-    "MegaScale: Reduction Finished";
 const char kXProfMetadataKey[] = "key";
 const char kXProfMetadataFlow[] = "flow";
 const char kXProfMetadataTransfers[] = "transfers";

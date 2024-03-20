@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -56,7 +55,7 @@ SchedulerConfig GetDefaultSchedulerConfig() {
   return scheduler_config;
 }
 
-absl::StatusOr<bool> RunScheduler(
+StatusOr<bool> RunScheduler(
     HloModule* module, const SchedulerConfig& sched_config,
     std::unique_ptr<LatencyEstimator> latency_estimator =
         std::make_unique<ApproximateLatencyEstimator>()) {
@@ -86,7 +85,7 @@ absl::StatusOr<bool> RunScheduler(
 
 class AnalyticalLatencyHidingSchedulerTest : public GpuCodegenTest {
  public:
-  absl::StatusOr<std::unique_ptr<HloModule>> ParseHloText(
+  StatusOr<std::unique_ptr<HloModule>> ParseHloText(
       absl::string_view hlo_string) {
     return ParseAndReturnVerifiedModule(hlo_string, GetModuleConfigForTest());
   }

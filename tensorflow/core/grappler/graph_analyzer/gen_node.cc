@@ -44,7 +44,7 @@ Status GenNode::BuildGraphInMap(const GraphDef& source, GenNodeMap* map) {
       return st;
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status GenNode::ParseInputs(const GenNodeMap* map) {
@@ -119,7 +119,7 @@ Status GenNode::ParseInputs(const GenNodeMap* map) {
     links_[this_port].emplace_back(LinkTarget(other_node, other_port));
     other_node->links_[other_port].emplace_back(LinkTarget(this, this_port));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 bool GenNode::IsMultiInput(Port port) const {

@@ -25,7 +25,7 @@ Status ValidateSparseMatrixShardingConfig(const Tensor& config) {
   if (TensorShapeUtils::IsScalar(config.shape())) {
     const float scalar_config = config.template scalar<float>()();
     if (0 < scalar_config && scalar_config <= 1.0) {
-      return absl::OkStatus();
+      return OkStatus();
     }
     return Status(
         absl::StatusCode::kInvalidArgument,
@@ -69,7 +69,7 @@ Status ValidateSparseMatrixShardingConfig(const Tensor& config) {
           config_matrix(i, 2), " in row ", i);
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 template <typename MatrixType, typename K>
@@ -89,7 +89,7 @@ Status ValidateScalarQuantityShardingConfig(const Tensor& config) {
   if (TensorShapeUtils::IsScalar(config.shape())) {
     const float scalar_config = config.template scalar<float>()();
     if (0 < scalar_config && scalar_config <= 1.0) {
-      return absl::OkStatus();
+      return OkStatus();
     }
     return Status(
         absl::StatusCode::kInvalidArgument,
@@ -126,7 +126,7 @@ Status ValidateScalarQuantityShardingConfig(const Tensor& config) {
           config_matrix(i, 1), " in row ", i);
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 template <typename MatrixType, typename K>

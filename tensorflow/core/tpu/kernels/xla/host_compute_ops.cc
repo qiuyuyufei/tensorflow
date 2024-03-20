@@ -18,15 +18,15 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include "tensorflow/compiler/tf2xla/mlir_xla_op_kernel.h"
+#include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
 #include "tensorflow/compiler/tf2xla/side_effect_util.h"
 #include "tensorflow/compiler/tf2xla/xla_context.h"
-#include "tensorflow/compiler/tf2xla/xla_helpers.h"
 #include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 #include "xla/client/sharding_builder.h"
 #include "xla/client/xla_builder.h"
+#include "xla/primitive_util.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/side_effect_util.h"
@@ -56,6 +56,7 @@ limitations under the License.
 #include "tensorflow/core/platform/types.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"  // IWYU pragma: keep
+#include "tsl/platform/macros.h"
 
 namespace tensorflow {
 
@@ -84,7 +85,7 @@ Status MakeXlaShapes(gtl::ArraySlice<TensorShape> shapes,
   // Remove the dummy output from the vector that will be used to copy real
   // outputs from host to device.
   xla_shapes->pop_back();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // This TensorFlow pseudo-op is used to record host-side computation.
@@ -179,7 +180,7 @@ class HostComputeOp : public XlaOpKernel {
     // Send values to the host.
     std::vector<xla::XlaOp> send_to_host_tokens;
     for (int i = 0; i < input_handles.size(); ++i) {
-      const string channel_name = GetDeviceToHostChannelName(send_key_, i);
+      const string channel_name = absl::StrCat(send_key_, "_dtoh_", i);
       xla::Shape xla_shape;
       OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(input_dtypes_[i],
                                                 input_shapes[i], &xla_shape));
@@ -241,7 +242,7 @@ class HostComputeOp : public XlaOpKernel {
     // Copy results to the device.
     std::vector<xla::XlaOp> recv_from_host_tokens;
     for (int i = 0; i < output_shapes->size(); ++i) {
-      const string channel_name = GetHostToDeviceChannelName(recv_key_, i);
+      const string channel_name = absl::StrCat(recv_key_, "_htod_", i);
       // Specify frontend attributes.
       xla::FrontendAttributes attrs;
       (*attrs.mutable_map())[xla::kXlaHostTransferRendezvousNameAttr] =
@@ -310,7 +311,7 @@ class HostComputeOp : public XlaOpKernel {
       }
     } while (modified);
 
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status InferOutputShapes(XlaOpKernelContext* ctx,
@@ -388,7 +389,7 @@ class HostComputeOp : public XlaOpKernel {
           TensorShapeProto shape_proto;
           shape_ctx->ShapeHandleToProto(handle, &shape_proto);
           (*output_shapes)[i] = TensorShape(shape_proto);
-          VLOG(2) << "Inferred shape " << shape_proto;
+          VLOG(2) << "Inferred shape " << shape_proto.DebugString();
         }
       }
     }
@@ -397,7 +398,7 @@ class HostComputeOp : public XlaOpKernel {
           "Shape inference for HostCompute ", ctx->op_kernel().name(),
           " failed: inference graph has no send from host node");
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   DataTypeVector input_dtypes_;
@@ -520,9 +521,8 @@ class RecvFromHostOp : public XlaOpKernel {
     xla::XlaOp result = xla::RecvFromHost(token, xla_shape, channel);
     // xla::RecvFromHost returns a tuple of (received data, token).
     ctx->SetOutput(0, xla::GetTupleElement(result, 0));
-    OP_REQUIRES_OK(ctx,
-                   compiler->SetNodeToken(original_node_name_,
-                                          xla::GetTupleElement(result, 1)));
+    OP_REQUIRES_OK(
+        ctx, compiler->SetNodeToken(name(), xla::GetTupleElement(result, 1)));
   }
 
  private:
@@ -538,7 +538,6 @@ class RecvFromHostOp : public XlaOpKernel {
 REGISTER_XLA_OP(Name("XlaHostCompute"), HostComputeOp);
 REGISTER_XLA_OP(Name("XlaSendToHost"), SendToHostOp);
 REGISTER_XLA_OP(Name("XlaRecvFromHost"), RecvFromHostOp);
-REGISTER_XLA_OP(Name("_XlaHostComputeMlir"), MlirXlaOpKernel);
 
 }  // anonymous namespace
 }  // namespace tensorflow

@@ -1623,11 +1623,13 @@ std::optional<Value> convertSoftmaxOp(PatternRewriter& rewriter, Operation* op,
       // 8-bit values is a 9-bit value. We only use the bottom 8 bits of each
       // table to avoid having the slope between two 16-bit table entries be
       // greater than 16 bits, causing potential interpolation errors
+      auto exp_func = [](double x) -> double { return std::exp(x); };
+
       Value exp_table_const_01, exp_table_const_02, exp_table_const_03,
           exp_table_const_04;
-      getTosaConst32bitSoftmaxExpTable(
-          rewriter, op, beta, in_quant_type.getScale(), exp_table_const_01,
-          exp_table_const_02, exp_table_const_03, exp_table_const_04);
+      getTosaConst32bitTable(rewriter, op, beta * in_quant_type.getScale(), 0,
+                             exp_func, exp_table_const_01, exp_table_const_02,
+                             exp_table_const_03, exp_table_const_04);
 
       Value op4_rescale_op3 =
           buildRescale(rewriter, op, int16_logits_type,
@@ -3512,26 +3514,21 @@ std::optional<Value> convertQuantizeOp(PatternRewriter& rewriter, Operation* op,
   }
 
   ShapedType output_fp_type = output_type.clone(rewriter.getF32Type());
-  Value result = CreateOpAndInfer<tosa::MulOp>(
+
+  Value zp_val =
+      getTosaConstTensorSingleF32(rewriter, op, static_cast<float>(zeropoint));
+
+  auto op1_mul_in = CreateOpAndInfer<tosa::MulOp>(
       rewriter, op->getLoc(), output_fp_type, input_value,
       getTosaConstTensorSingleF32(rewriter, op, static_cast<float>(scale)), 0);
 
-  if (zeropoint != 0) {
-    // cast to i32 to add zeropoint
-    ShapedType output_i32_type = output_type.clone(rewriter.getI32Type());
-    Value cast_i32 = CreateOpAndInfer<tosa::CastOp>(rewriter, op->getLoc(),
-                                                    output_i32_type, result);
+  auto op2_add_op1 = CreateOpAndInfer<tosa::AddOp>(
+      rewriter, op->getLoc(), output_fp_type, op1_mul_in.getResult(), zp_val);
 
-    Value zp_val = getTosaConstTensorSingleI32(rewriter, op, zeropoint);
+  auto op3_cast_op2 = CreateOpAndInfer<tosa::CastOp>(
+      rewriter, op->getLoc(), output_type, op2_add_op1.getResult());
 
-    result = CreateOpAndInfer<tosa::AddOp>(rewriter, op->getLoc(),
-                                           output_i32_type, cast_i32, zp_val);
-  }
-
-  Value final_result = CreateOpAndInfer<tosa::CastOp>(rewriter, op->getLoc(),
-                                                      output_type, result);
-
-  return final_result;
+  return op3_cast_op2.getResult();
 }
 
 // Lowers Dequantize to a sequence of TOSA dequantization ops.

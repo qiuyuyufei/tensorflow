@@ -17,7 +17,6 @@ tensorflow {
     *tsl*;
     *lite*;
     *TFL*;
-    *quantization*;
   local:
     *;
 };

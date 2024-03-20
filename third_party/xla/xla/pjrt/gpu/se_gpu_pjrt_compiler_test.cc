@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -76,8 +76,9 @@ TEST(StreamExecutorGpuCompilerTest, TopologyNotSameXla) {
   StreamExecutorGpuTopologyDescription topology(CudaId(), CudaName(),
                                                 "Fake_device", {0, 1});
 
-  TF_ASSERT_OK_AND_ASSIGN(auto client,
-                          GetStreamExecutorGpuClient(GpuClientOptions()));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto client, GetStreamExecutorGpuClient(true, /*allocator_config=*/{},
+                                              /*node_id=*/0));
   TF_ASSERT_OK_AND_ASSIGN(auto computation, GetXlaComputation(kProgram));
   EXPECT_THAT(compiler.Compile(xla::CompileOptions(), computation, topology,
                                client.get()),
@@ -87,8 +88,9 @@ TEST(StreamExecutorGpuCompilerTest, TopologyNotSameXla) {
 TEST(StreamExecutorGpuCompilerTest, SuccessXla) {
   StreamExecutorGpuCompiler compiler;
 
-  TF_ASSERT_OK_AND_ASSIGN(auto client,
-                          GetStreamExecutorGpuClient(GpuClientOptions()));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto client, GetStreamExecutorGpuClient(true, /*allocator_config=*/{},
+                                              /*node_id=*/0));
   TF_ASSERT_OK_AND_ASSIGN(auto computation, GetXlaComputation(kProgram));
   TF_ASSERT_OK_AND_ASSIGN(auto topology, client->GetTopologyDescription());
   TF_ASSERT_OK_AND_ASSIGN(auto executable,
@@ -140,8 +142,9 @@ TEST(StreamExecutorGpuCompilerTest, TopologyNotSameMlir) {
   StreamExecutorGpuTopologyDescription topology(CudaId(), CudaName(),
                                                 "Fake_device", {0, 1});
 
-  TF_ASSERT_OK_AND_ASSIGN(auto client,
-                          GetStreamExecutorGpuClient(GpuClientOptions()));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto client, GetStreamExecutorGpuClient(true, /*allocator_config=*/{},
+                                              /*node_id=*/0));
   EXPECT_THAT(compiler.Compile(xla::CompileOptions(), mlir_module.get(),
                                topology, client.get()),
               StatusIs(absl::StatusCode::kUnimplemented));
@@ -156,8 +159,9 @@ TEST(StreamExecutorGpuCompilerTest, SuccessMlir) {
   auto mlir_module =
       mlir::parseSourceString<mlir::ModuleOp>(mlir_str, &context);
 
-  TF_ASSERT_OK_AND_ASSIGN(auto client,
-                          GetStreamExecutorGpuClient(GpuClientOptions()));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto client, GetStreamExecutorGpuClient(true, /*allocator_config=*/{},
+                                              /*node_id=*/0));
   TF_ASSERT_OK_AND_ASSIGN(auto topology, client->GetTopologyDescription());
   TF_ASSERT_OK_AND_ASSIGN(
       auto executable,

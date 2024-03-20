@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,10 +26,11 @@ namespace xla {
 
 class XlaDebugInfoManagerTestPeer {
  public:
-  void RegisterModule(std::shared_ptr<const HloModule> hlo_module,
-                      BufferAssignmentProto buffer_assignment) {
+  void RegisterModule(
+      std::shared_ptr<const HloModule> hlo_module,
+      std::shared_ptr<const BufferAssignmentProto> buffer_assignment) {
     return xla_debug_info_manager_.RegisterModule(hlo_module,
-                                                  std::move(buffer_assignment));
+                                                  buffer_assignment);
   }
 
   void UnregisterModule(ModuleIdentifier module_id) {
@@ -73,6 +74,7 @@ class XlaDebugInfoManagerTest : public HloTestBase {
     // know which program is referenced (such as in UnregisterProgram).
     ModuleIdentifier unique_id;
     std::shared_ptr<HloModule> module;
+    std::shared_ptr<BufferAssignmentProto> buffer_assignment;
   };
 
   // Return unique id of this module.
@@ -80,10 +82,11 @@ class XlaDebugInfoManagerTest : public HloTestBase {
     DebugMetadata debug_info;
     HloModuleConfig config;
     debug_info.module = std::make_shared<HloModule>(module_name, config);
+    debug_info.buffer_assignment = nullptr;
     ModuleIdentifier unique_id = debug_info.module->unique_id();
     debug_info.unique_id = unique_id;
     xla_debug_info_manager_.RegisterModule(debug_info.module,
-                                           BufferAssignmentProto());
+                                           debug_info.buffer_assignment);
     external_references_.push_back(std::move(debug_info));
     return unique_id;
   }

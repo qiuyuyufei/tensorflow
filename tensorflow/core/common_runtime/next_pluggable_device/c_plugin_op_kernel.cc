@@ -16,7 +16,6 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/next_pluggable_device/c_plugin_op_kernel.h"
 
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -84,7 +83,7 @@ Status CPluginOpKernelConstruction::GetInt32AttrList(
                                       &total_size, status);
   TF_RETURN_IF_ERROR(StatusFromTF_Status(status));
 
-  value->resize(list_size);
+  value->reserve(list_size);
 
   TF_OpKernelConstruction_GetAttrInt32List(
       ctx_, attr_name.data(), value->data(), /*max_vals=*/list_size, status);
@@ -165,7 +164,7 @@ Status CPluginOpKernelContext::LookupOrCreateResource(
   return StatusFromTF_Status(status);
 }
 
-std::unique_ptr<PluginCoordinationServiceAgent>
+PluginCoordinationServiceAgent*
 CPluginOpKernelContext::GetPluginCoordinationServiceAgent() const {
   auto* agent = TF_GetCoordinationServiceAgent(ctx_);
   return CreatePluginCoordinationServiceAgent(agent);
@@ -250,11 +249,6 @@ std::string_view CPluginOpKernelContext::GetOpKernelRequestedInput(
 std::string_view CPluginOpKernelContext::GetOpKernelName() const {
   TF_StringView op_kernel_name = TF_GetOpKernelName(ctx_);
   return {op_kernel_name.data, op_kernel_name.len};
-}
-
-std::string_view CPluginOpKernelContext::GetDeviceName() const {
-  TF_StringView device_name = TF_GetDeviceName(ctx_);
-  return {device_name.data, device_name.len};
 }
 
 Status CPluginOpKernelContext::GetConfigProto(

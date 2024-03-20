@@ -1,51 +1,18 @@
-load("//xla:lit.bzl", "enforce_glob", "lit_test_suite")
 load("@local_tsl//tsl:tsl.default.bzl", "filegroup")
+load("//xla:glob_lit_test.bzl", "glob_lit_tests")
 
 package(
+    default_visibility = ["//visibility:public"],
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
 
-lit_test_suite(
+glob_lit_tests(
     name = "all_tests",
-    srcs = enforce_glob(
-        [
-            "add.mlir",
-            "case.mlir",
-            "dynamic.mlir",
-            "export-with-layouts.mlir",
-            "export.mlir",
-            "export_and_check_layouts.mlir",
-            "export_large_constants.mlir",
-            "export_replicas.mlir",
-            "frontend_attributes.mlir",
-            "fusion.mlir",
-            "if.mlir",
-            "input_output_aliasing.mlir",
-            "int4.mlir",
-            "layouts_and_names.mlir",
-            "location_to_op_metadata.mlir",
-            "location_to_stacktrace.mlir",
-            "missing_main.mlir",
-            "module_attributes.mlir",
-            "multiple_return_tuple.mlir",
-            "opaque_elements_attr.mlir",
-            "rng_get_and_update_state.mlir",
-            "sharding.mlir",
-            "simple.mlir",
-            "unsupported_type.mlir",
-            "while.mlir",
-        ],
-        include = [
-            "*.mlir",
-        ],
-    ),
-    cfg = "//xla:lit.cfg.py",
     data = [":test_utilities"],
-    tools = [
-        "//xla/translate:xla-translate",
-        "@llvm-project//llvm:FileCheck",
-        "@llvm-project//llvm:not",
+    driver = "@llvm-project//mlir:run_lit.sh",
+    test_file_exts = [
+        "mlir",
     ],
 )
 
@@ -53,4 +20,10 @@ lit_test_suite(
 filegroup(
     name = "test_utilities",
     testonly = True,
+    data = [
+        "//xla/translate:xla-translate",
+        "@llvm-project//llvm:FileCheck",
+        "@llvm-project//llvm:not",
+    ],
+    visibility = ["//visibility:public"],
 )

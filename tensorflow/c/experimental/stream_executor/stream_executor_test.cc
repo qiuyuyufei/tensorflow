@@ -20,13 +20,12 @@ limitations under the License.
 #include "tensorflow/c/experimental/stream_executor/stream_executor_internal.h"
 #include "tensorflow/c/experimental/stream_executor/stream_executor_test_util.h"
 #include "xla/stream_executor/event.h"
-#include "xla/stream_executor/platform_manager.h"
+#include "xla/stream_executor/multi_platform_manager.h"
 #include "xla/stream_executor/stream.h"
-#include "xla/stream_executor/stream_executor.h"
+#include "xla/stream_executor/stream_executor_pimpl.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/platform/test.h"
 #include "tensorflow/core/protobuf/error_codes.pb.h"
-#include "tsl/platform/statusor.h"
 
 namespace stream_executor {
 namespace {
@@ -43,7 +42,7 @@ TEST(StreamExecutor, SuccessfulRegistration) {
       InitStreamExecutorPlugin(plugin_init, &device_type, &platform_name);
   TF_ASSERT_OK(status);
   tsl::StatusOr<Platform*> maybe_platform =
-      PlatformManager::PlatformWithName("MY_DEVICE");
+      MultiPlatformManager::PlatformWithName("MY_DEVICE");
   TF_ASSERT_OK(maybe_platform.status());
   Platform* platform = std::move(maybe_platform).value();
   ASSERT_EQ(platform->Name(), test_util::kDeviceName);
@@ -201,11 +200,11 @@ TEST_F(StreamExecutorTest, HostMemoryAllocate) {
   };
   StreamExecutor* executor = GetExecutor(0);
   ASSERT_FALSE(allocate_called);
-  TF_ASSERT_OK_AND_ASSIGN(auto mem, executor->HostMemoryAllocate(8));
-  ASSERT_NE(mem->opaque(), nullptr);
+  void* mem = executor->HostMemoryAllocate(8);
+  ASSERT_NE(mem, nullptr);
   ASSERT_TRUE(allocate_called);
   ASSERT_FALSE(deallocate_called);
-  mem.reset();
+  executor->HostMemoryDeallocate(mem);
   ASSERT_TRUE(deallocate_called);
 }
 
@@ -281,10 +280,12 @@ TEST_F(StreamExecutorTest, CreateStream) {
 
   StreamExecutor* executor = GetExecutor(0);
   ASSERT_FALSE(stream_created);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream* stream = new Stream(executor);
+  stream->Init();
+  ASSERT_TRUE(stream->ok());
   ASSERT_TRUE(stream_created);
   ASSERT_FALSE(stream_deleted);
-  stream.reset();
+  delete stream;
   ASSERT_TRUE(stream_deleted);
 }
 
@@ -298,10 +299,12 @@ TEST_F(StreamExecutorTest, CreateStreamDependency) {
   };
 
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto dependent, executor->CreateStream());
-  TF_ASSERT_OK_AND_ASSIGN(auto other, executor->CreateStream());
+  Stream dependent(executor);
+  dependent.Init();
+  Stream other(executor);
+  other.Init();
   ASSERT_FALSE(create_stream_dependency_called);
-  TF_ASSERT_OK(dependent->WaitFor(other.get()));
+  dependent.ThenWaitFor(&other);
   ASSERT_TRUE(create_stream_dependency_called);
 }
 
@@ -317,11 +320,13 @@ TEST_F(StreamExecutorTest, StreamStatus) {
   };
 
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
-  TF_ASSERT_OK(stream->RefreshStatus());
+  Stream stream(executor);
+  stream.Init();
+  ASSERT_TRUE(stream.ok());
+  TF_ASSERT_OK(stream.RefreshStatus());
   status_ok = false;
-  auto updated_status = stream->RefreshStatus();
-  ASSERT_FALSE(stream->ok());
+  auto updated_status = stream.RefreshStatus();
+  ASSERT_FALSE(stream.ok());
   ASSERT_EQ(updated_status.message(), "Test error");
 }
 
@@ -406,12 +411,13 @@ TEST_F(StreamExecutorTest, RecordAndWaitForEvent) {
   StreamExecutor* executor = GetExecutor(0);
   Event event(executor);
   event.Init();
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   ASSERT_FALSE(record_called);
-  TF_ASSERT_OK(stream->RecordEvent(&event));
+  stream.ThenRecordEvent(&event);
   ASSERT_TRUE(record_called);
   ASSERT_FALSE(wait_called);
-  TF_ASSERT_OK(stream->WaitFor(&event));
+  stream.ThenWaitFor(&event);
   ASSERT_TRUE(wait_called);
 }
 
@@ -433,13 +439,15 @@ TEST_F(StreamExecutorTest, MemcpyToHost) {
   };
 
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   size_t size = sizeof(int);
   int src_data = 34;
   int dst_data = 2;
   DeviceMemoryBase device_src(&src_data, size);
-  TF_ASSERT_OK(stream->Memcpy(&dst_data, device_src, size));
+  Stream& stream_ref = stream.ThenMemcpy(&dst_data, device_src, size);
   ASSERT_EQ(dst_data, 34);
+  ASSERT_EQ(stream_ref.implementation(), stream.implementation());
 }
 
 TEST_F(StreamExecutorTest, MemcpyFromHost) {
@@ -452,12 +460,13 @@ TEST_F(StreamExecutorTest, MemcpyFromHost) {
   };
 
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   size_t size = sizeof(int);
   int src_data = 18;
   int dst_data = 0;
   DeviceMemoryBase device_dst(&dst_data, size);
-  TF_ASSERT_OK(stream->Memcpy(&device_dst, &src_data, size));
+  stream.ThenMemcpy(&device_dst, &src_data, size);
   ASSERT_EQ(dst_data, 18);
 }
 
@@ -471,13 +480,14 @@ TEST_F(StreamExecutorTest, MemcpyDeviceToDevice) {
   };
 
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   size_t size = sizeof(int);
   int src_data = 18;
   int dst_data = 0;
   DeviceMemoryBase device_dst(&dst_data, size);
   DeviceMemoryBase device_src(&src_data, size);
-  TF_ASSERT_OK(stream->Memcpy(&device_dst, device_src, size));
+  stream.ThenMemcpy(&device_dst, device_src, size);
   ASSERT_EQ(dst_data, 18);
 }
 
@@ -551,9 +561,10 @@ TEST_F(StreamExecutorTest, BlockHostForEvent) {
   };
 
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   ASSERT_FALSE(block_host_for_event_called);
-  TF_ASSERT_OK(stream->BlockHostUntilDone());
+  TF_ASSERT_OK(stream.BlockHostUntilDone());
   ASSERT_TRUE(block_host_for_event_called);
 }
 
@@ -575,9 +586,10 @@ TEST_F(StreamExecutorTest, BlockHostUntilDone) {
   };
 
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   ASSERT_FALSE(block_host_until_done_called);
-  TF_ASSERT_OK(stream->BlockHostUntilDone());
+  TF_ASSERT_OK(stream.BlockHostUntilDone());
   ASSERT_TRUE(block_host_until_done_called);
 }
 
@@ -606,11 +618,13 @@ TEST_F(StreamExecutorTest, HostCallbackOk) {
     return ok;
   };
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   std::function<absl::Status()> callback = []() -> absl::Status {
     return absl::OkStatus();
   };
-  TF_ASSERT_OK(stream->DoHostCallbackWithStatus(callback));
+  stream.ThenDoHostCallbackWithStatus(callback);
+  ASSERT_TRUE(stream.ok());
 }
 
 TEST_F(StreamExecutorTest, HostCallbackError) {
@@ -624,11 +638,13 @@ TEST_F(StreamExecutorTest, HostCallbackError) {
     return ok;
   };
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   std::function<tsl::Status()> callback = []() -> tsl::Status {
     return tsl::errors::Unimplemented("Unimplemented");
   };
-  ASSERT_FALSE(stream->DoHostCallbackWithStatus(callback).ok());
+  stream.ThenDoHostCallbackWithStatus(callback);
+  ASSERT_FALSE(stream.ok());
 }
 
 TEST_F(StreamExecutorTest, DeviceDescription) {
@@ -701,12 +717,14 @@ TEST_F(StreamExecutorTest, MemZero) {
   };
 
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   size_t size = sizeof(int);
   int data = 2;
   DeviceMemoryBase device_data(&data, size);
-  TF_ASSERT_OK(stream->MemZero(&device_data, size));
+  Stream& stream_ref = stream.ThenMemZero(&device_data, size);
   ASSERT_EQ(data, 0);
+  ASSERT_EQ(stream_ref.implementation(), stream.implementation());
 }
 
 TEST_F(StreamExecutorTest, Memset32) {
@@ -730,12 +748,14 @@ TEST_F(StreamExecutorTest, Memset32) {
   };
 
   StreamExecutor* executor = GetExecutor(0);
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  Stream stream(executor);
+  stream.Init();
   size_t size = sizeof(int);
   int data = 2;
   DeviceMemoryBase device_data(&data, size);
-  TF_ASSERT_OK(stream->Memset32(&device_data, 18, size));
+  Stream& stream_ref = stream.ThenMemset32(&device_data, 18, size);
   ASSERT_EQ(data, 18);
+  ASSERT_EQ(stream_ref.implementation(), stream.implementation());
 }
 
 }  // namespace

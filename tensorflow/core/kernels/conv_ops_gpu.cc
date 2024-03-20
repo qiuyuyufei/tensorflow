@@ -96,11 +96,7 @@ StatusOr<AutotuneEntry<se::dnn::FusedConvOp>> AutotuneFusedConv(
 
     std::vector<std::unique_ptr<const se::dnn::FusedConvRunner>> runners;
     auto element_type = se::dnn::ToDataType<T>::value;
-    auto dnn = stream->parent()->AsDnn();
-    if (dnn == nullptr) {
-      return absl::InvalidArgumentError("No DNN in stream executor.");
-    }
-    TF_RETURN_IF_ERROR(dnn->GetFusedConvolveRunners(
+    TF_RETURN_IF_ERROR(stream->parent()->GetFusedConvolveRunners(
         CudnnUseFrontend(), se::dnn::ConvolutionKind::FORWARD, element_type,
         element_type, element_type, conv_scale, side_input_scale,
         leakyrelu_alpha, stream, input_desc, filter_desc, bias_desc,
@@ -151,7 +147,7 @@ StatusOr<AutotuneEntry<se::dnn::FusedConvOp>> AutotuneFusedConv(
           << params.ToString();
       std::vector<std::unique_ptr<const se::dnn::FusedConvRunner>>
           fallback_runners;
-      TF_RETURN_IF_ERROR(dnn->GetFusedConvolveRunners(
+      TF_RETURN_IF_ERROR(stream->parent()->GetFusedConvolveRunners(
           CudnnUseFrontend(), se::dnn::ConvolutionKind::FORWARD, element_type,
           element_type, element_type, conv_scale, side_input_scale,
           leakyrelu_alpha, stream, input_desc, filter_desc, bias_desc,
@@ -283,11 +279,7 @@ StatusOr<AutotuneEntry<se::dnn::ConvOp>> AutotuneUnfusedConv(
 
     const auto element_type = se::dnn::ToDataType<T>::value;
     std::vector<std::unique_ptr<const se::dnn::ConvRunner>> runners;
-    auto dnn = stream->parent()->AsDnn();
-    if (dnn == nullptr) {
-      return absl::InvalidArgumentError("No DNN in stream executor.");
-    }
-    TF_RETURN_IF_ERROR(dnn->GetConvolveRunners(
+    TF_RETURN_IF_ERROR(stream->parent()->GetConvolveRunners(
         CudnnUseFrontend(), kind, element_type, element_type, stream,
         input_desc, input_ptr, filter_desc, filter_ptr, output_desc, output_ptr,
         conv_desc, /*use_fallback=*/false, &rz_allocator, GetNumericOptions(),
@@ -332,7 +324,7 @@ StatusOr<AutotuneEntry<se::dnn::ConvOp>> AutotuneUnfusedConv(
              "worked; trying fallback algorithms.  Conv: "
           << conv_parameters.ToString();
       std::vector<std::unique_ptr<const se::dnn::ConvRunner>> fallback_runners;
-      TF_RETURN_IF_ERROR(dnn->GetConvolveRunners(
+      TF_RETURN_IF_ERROR(stream->parent()->GetConvolveRunners(
           CudnnUseFrontend(), kind, element_type, element_type, stream,
           input_desc, input_ptr, filter_desc, filter_ptr, output_desc,
           output_ptr, conv_desc, /*use_fallback=*/true, &rz_allocator,
@@ -357,11 +349,7 @@ StatusOr<AutotuneEntry<se::dnn::ConvOp>> AutotuneUnfusedConv(
     DnnScratchAllocator scratch_allocator(scratch_size_limit, ctx);
 
     std::vector<se::dnn::ProfileResult> algorithms;
-    auto dnn = stream->parent()->AsDnn();
-    if (dnn == nullptr) {
-      return absl::InvalidArgumentError("No DNN in stream executor.");
-    }
-    if (!dnn->GetMIOpenConvolveAlgorithms(
+    if (!stream->parent()->GetMIOpenConvolveAlgorithms(
             kind, se::dnn::ToDataType<T>::value, stream, input_desc, input_ptr,
             filter_desc, filter_ptr, output_desc, output_ptr, conv_desc,
             &scratch_allocator, &algorithms)) {
@@ -385,9 +373,9 @@ StatusOr<AutotuneEntry<se::dnn::ConvOp>> AutotuneUnfusedConv(
       for (auto miopen_algorithm : algorithms) {
         auto profile_algorithm = miopen_algorithm.algorithm();
         se::dnn::ProfileResult profile_result;
-        auto miopen_launch_status = dnn->ConvolveWithAlgorithm(
-            stream, kind, input_desc, input_ptr, filter_desc, filter_ptr,
-            output_desc, output_ptr, conv_desc, &scratch_allocator,
+        auto miopen_launch_status = stream->ConvolveWithAlgorithm(
+            kind, input_desc, input_ptr, filter_desc, filter_ptr, output_desc,
+            output_ptr, conv_desc, &scratch_allocator,
             se::dnn::AlgorithmConfig(profile_algorithm,
                                      miopen_algorithm.scratch_size()),
             &profile_result);

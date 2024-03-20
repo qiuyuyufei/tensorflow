@@ -58,7 +58,7 @@ Status ShapeAnnotationsMatch(
     return errors::InvalidArgument("Missing shapes for nodes: ",
                                    absl::StrJoin(missing, ","));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void DeviceSetup::AddDevicesAndSetUp(

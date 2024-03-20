@@ -18,8 +18,6 @@ limitations under the License.
 
 #include <stddef.h>
 
-#include "absl/crc/crc32c.h"
-#include "absl/strings/string_view.h"
 #include "tsl/platform/cord.h"
 #include "tsl/platform/platform.h"
 #include "tsl/platform/types.h"
@@ -30,10 +28,7 @@ namespace crc32c {
 // Return the crc32c of concat(A, buf[0,size-1]) where init_crc is the
 // crc32c of some string A.  Extend() is often used to maintain the
 // crc32c of a stream of data.
-inline uint32 Extend(uint32 init_crc, const char* buf, size_t size) {
-  return static_cast<uint32>(absl::ExtendCrc32c(
-      static_cast<absl::crc32c_t>(init_crc), absl::string_view(buf, size)));
-}
+extern uint32 Extend(uint32 init_crc, const char* buf, size_t size);
 
 #if defined(TF_CORD_SUPPORT)
 extern uint32 Extend(uint32 init_crc, const absl::Cord& cord);

@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -221,7 +221,7 @@ Status HloInputOutputAliasConfig::Verify(
     TF_RET_CHECK(LayoutUtil::IsDenseArray(output_subshape));
 
     if (size_func(param_subshape) != size_func(output_subshape)) {
-      return Internal(
+      return InternalError(
           "Expected aliased input %lld at index %s and output at index %s to "
           "have the same size. Input sub-shape is %s with size %lld, output "
           "sub-shape is %s with size %lld",
@@ -334,7 +334,7 @@ Status HloBufferDonorConfig::Verify(const HloModule& module) const {
     TF_RET_CHECK(LayoutUtil::IsDenseArray(param_subshape));
 
     if (alias_config.ParameterHasAlias(donor.param_number, donor.param_index)) {
-      return Internal(
+      return InternalError(
           "Input %lld at index %s is registered as a buffer donor. However, it "
           "is also in the input output alias config.",
           donor.param_number, donor.param_index.ToString());

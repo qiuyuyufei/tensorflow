@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,15 +16,12 @@ limitations under the License.
 #ifndef XLA_PYTHON_PPROF_PROFILE_BUILDER_H_
 #define XLA_PYTHON_PPROF_PROFILE_BUILDER_H_
 
-#include <Python.h>
-
 #include <string>
-#include <string_view>
 #include <utility>
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/status/statusor.h"
-#include "third_party/nanobind/include/nanobind/nanobind.h"
+#include "pybind11/pybind11.h"  // from @pybind11
+#include "xla/statusor.h"
 #include "tsl/profiler/protobuf/profile.pb.h"
 
 namespace xla {
@@ -36,7 +33,7 @@ class PprofProfileBuilder {
   tensorflow::tfprof::pprof::Profile& profile() { return profile_; }
 
   // Adds or returns the ID of `s` in the table.
-  int StringId(std::string_view s);
+  int StringId(const std::string& s);
 
   // Adds or returns the ID of a function.
   int FunctionId(PyCodeObject* code);
@@ -59,10 +56,10 @@ class PprofProfileBuilder {
 // extensions that contain the same protocol buffer message. Instead, we accept
 // a JSON representation from Python and use this function to serialize it to
 // a uncompressed binary protocol buffer.
-absl::StatusOr<nanobind::bytes> JsonToPprofProfile(std::string json);
+StatusOr<pybind11::bytes> JsonToPprofProfile(std::string json);
 
 // The reverse, useful for testing.
-absl::StatusOr<std::string> PprofProfileToJson(nanobind::bytes binary_proto);
+StatusOr<std::string> PprofProfileToJson(pybind11::bytes binary_proto);
 
 }  // namespace xla
 

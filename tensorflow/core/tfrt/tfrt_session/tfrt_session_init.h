@@ -26,7 +26,7 @@ namespace tensorflow {
 // tfrt_session.h after we decouple TPU logic from TfrtSession.
 inline Status InitializeTfrtSession() {
   SetDefaultLocalSessionImpl(LocalSessionImpl::kTfrtSession);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

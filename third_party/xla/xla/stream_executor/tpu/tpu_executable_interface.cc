@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ limitations under the License.
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/status/status.h"
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_input_output_alias_config.h"
 #include "xla/layout_util.h"
@@ -60,9 +59,9 @@ static Status PopulateResultTupleBuffers(const ShapedBuffer& result,
     TF_RETURN_IF_ERROR(transfer_manager->WriteTupleIndexTablesAsync(
         transfer_stream ? transfer_stream : stream, result));
     if (transfer_stream && transfer_stream != stream) {
-      TF_RETURN_IF_ERROR(stream->WaitFor(transfer_stream));
+      stream->ThenWaitFor(transfer_stream);
     }
-    return absl::OkStatus();
+    return ::tsl::OkStatus();
   } else {
     return transfer_manager->WriteTupleIndexTablesAsync(stream, result);
   }
@@ -70,7 +69,7 @@ static Status PopulateResultTupleBuffers(const ShapedBuffer& result,
 
 }  // namespace
 
-absl::StatusOr<ExecutionOutput>
+StatusOr<ExecutionOutput>
 TpuExecutableInterface::AllocateOutputMemoryWithInputReuse(
     const Shape& shape, const HloInputOutputAliasConfig& alias_config,
     se::DeviceMemoryAllocator* allocator,
@@ -114,7 +113,7 @@ TpuExecutableInterface::AllocateOutputMemoryWithInputReuse(
                 alias->ToString());
           }
         }
-        return absl::OkStatus();
+        return ::tsl::OkStatus();
       }));
 
   if (VLOG_IS_ON(3)) {
@@ -142,7 +141,8 @@ TpuExecutableInterface::AllocateOutputMemoryWithInputReuse(
     // Return an InternalError if result_index is invalid. This avoids failing
     // the CHECK when calling GetAliasedParameter
     if (!ShapeUtil::IndexIsValid(alias_config.shape(), result_index)) {
-      return Internal("result_index is invalid: %s", result_index.ToString());
+      return InternalError("result_index is invalid: %s",
+                           result_index.ToString());
     }
 
     std::optional<HloInputOutputAliasConfig::Alias> alias =
@@ -204,7 +204,7 @@ TpuExecutableInterface::AllocateOutputMemoryWithInputReuse(
   return std::move(result);
 }
 
-absl::StatusOr<ExecutionOutput> TpuExecutableInterface::ExecuteAsyncOnStream(
+StatusOr<ExecutionOutput> TpuExecutableInterface::ExecuteAsyncOnStream(
     const ServiceExecutableRunOptions* run_options,
     std::vector<ExecutionInput> arguments,
     HloExecutionProfile* /*hlo_execution_profile*/) {

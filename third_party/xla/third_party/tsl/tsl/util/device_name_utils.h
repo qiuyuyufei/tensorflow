@@ -131,9 +131,9 @@ class DeviceNameUtils {
 
     template <typename H>
     friend H AbslHashValue(H h, const ParsedName& n) {
-      return H::combine(std::move(h), n.has_job ? n.job : "",
-                        n.has_replica ? n.replica : 0, n.has_task ? n.task : 0,
-                        n.has_type ? n.type : "", n.has_id ? n.id : 0);
+      return H::combine(std::move(h), n.has_job, n.job, n.has_replica,
+                        n.replica, n.has_task, n.task, n.has_type, n.type,
+                        n.has_id, n.id);
     }
 
     bool has_job = false;

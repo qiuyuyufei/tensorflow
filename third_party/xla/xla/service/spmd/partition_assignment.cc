@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ NoopPartitioning::NoopPartitioning(int64_t num_partitions)
           << num_partitions;
 }
 
-absl::StatusOr<bool> NoopPartitioning::Run(HloModule* module) const {
+StatusOr<bool> NoopPartitioning::Run(HloModule* module) const {
   VLOG(2) << "No-op algorithm was called to partition module: "
           << module->name();
   return false;
@@ -86,7 +86,7 @@ PartitionAssignment::ChoosePartitioningAlgorithm(
   return PartitioningAlgorithm::CreateNoopPartitioning(num_partitions());
 }
 
-absl::StatusOr<bool> PartitionAssignment::Run(
+StatusOr<bool> PartitionAssignment::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   VLOG(2) << "Running partition assignment on module " << module->name();

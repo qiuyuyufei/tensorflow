@@ -24,7 +24,6 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/flat_hash_set.h"
-#include "absl/status/status.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
@@ -1246,7 +1245,7 @@ void FunctionRecord::finalize() {
   }
 }
 
-absl::StatusOr<FunctionDef*> FunctionRecord::mutable_fdef() {
+StatusOr<FunctionDef*> FunctionRecord::mutable_fdef() {
   if (finalized_) {
     return Status(absl::StatusCode::kPermissionDenied,
                   "Can not mutate FunctionDef after finalization.");
@@ -1277,8 +1276,7 @@ FunctionLibraryDefinition::FunctionLibraryDefinition(
     key_value_pair.second->Ref();
   }
   func_grad_ = other.func_grad_;
-  optimized_function_graph_creator_map_ =
-      other.optimized_function_graph_creator_map_;
+  optimized_function_graph_map_ = other.optimized_function_graph_map_;
 }
 
 FunctionLibraryDefinition::FunctionLibraryDefinition(
@@ -1313,8 +1311,8 @@ FunctionLibraryDefinition& FunctionLibraryDefinition::operator=(
   default_registry_ = std::move(other.default_registry_);
   records_ = std::move(other.records_);
   func_grad_ = std::move(other.func_grad_);
-  optimized_function_graph_creator_map_ =
-      std::move(other.optimized_function_graph_creator_map_);
+  optimized_function_graph_map_ =
+      std::move(other.optimized_function_graph_map_);
   return *this;
 }
 
@@ -1427,13 +1425,6 @@ Status FunctionLibraryDefinition::AddFunctionDefHelper(
   return status;
 }
 
-Status FunctionLibraryDefinition::AddFunctionRecord(
-    core::RefCountPtr<FunctionRecord> record) TF_LOCKS_EXCLUDED(mu_) {
-  mutex_lock l(mu_);
-  bool added;
-  return AddHelper(record.get(), &added);
-}
-
 Status FunctionLibraryDefinition::AddHelper(FunctionRecord* registration,
                                             bool* added) {
   *added = false;
@@ -1484,16 +1475,12 @@ Status FunctionLibraryDefinition::CopyFunctionDefFrom(
           "Cannot copy function '", name,
           "' because a different function with the same name already "
           "exists.");
-    } else {
-      return OkStatus();
     }
-  } else if (other_record->finalized()) {
-    bool added;
-    mutex_lock l(mu_);
-    return AddHelper(other_record.get(), &added);
   } else {
-    return AddFunctionDef(other_record->fdef(), other_record->stack_traces());
+    TF_RETURN_IF_ERROR(
+        AddFunctionDef(other_record->fdef(), other_record->stack_traces()));
   }
+  return OkStatus();
 }
 
 Status FunctionLibraryDefinition::AddGradientDef(const GradientDef& grad) {
@@ -1967,20 +1954,6 @@ FunctionLibraryDefinition FunctionLibraryDefinition::ReachableDefinitions(
 FunctionLibraryDefinition FunctionLibraryDefinition::ReachableDefinitions(
     const FunctionDef& func) const {
   return ReachableFunctionLibraryDefinition(*this, func.node_def());
-}
-
-absl::StatusOr<FunctionLibraryDefinition>
-FunctionLibraryDefinition::ReachableDefinitions(
-    const std::string& function_name) const {
-  auto* func = Find(function_name);
-  if (func) {
-    FunctionLibraryDefinition ret =
-        ReachableFunctionLibraryDefinition(*this, func->node_def());
-    TF_RETURN_IF_ERROR(ret.CopyFunctionDefFrom(function_name, *this));
-    return ret;
-  } else {
-    return absl::NotFoundError(function_name);
-  }
 }
 
 string FunctionLibraryRuntime::Options::DebugString() const {

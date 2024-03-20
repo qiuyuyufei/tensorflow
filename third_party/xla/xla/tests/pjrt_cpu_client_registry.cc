@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,19 +13,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/pjrt/cpu/cpu_client.h"
+#include "xla/pjrt/tfrt_cpu_pjrt_client.h"
 #include "xla/tests/pjrt_client_registry.h"
 
 namespace xla {
 namespace {
 
 // Register a CPU PjRt client for tests.
-const bool kUnused = (RegisterPjRtClientTestFactory([]() {
-                        CpuClientOptions options;
-                        options.cpu_device_count = 4;
-                        return GetTfrtCpuClient(options);
-                      }),
-                      true);
+const bool kUnused =
+    (RegisterPjRtClientTestFactory([]() {
+       return GetTfrtCpuClient(/*asynchronous=*/true, /*cpu_device_count=*/4);
+     }),
+     true);
 
 }  // namespace
 }  // namespace xla

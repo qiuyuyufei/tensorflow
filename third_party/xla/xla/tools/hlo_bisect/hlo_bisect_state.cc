@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ Status MorphModuleWithOutputs(HloModule* module,
       module->compute_computation_layout();
 
   HloDCE dce;
-  absl::StatusOr<bool> dce_result = dce.Run(module);
+  StatusOr<bool> dce_result = dce.Run(module);
   return dce_result.status();
 }
 
@@ -127,7 +127,7 @@ Status MorphModuleWithLiterals(
   }
 
   xla::HloDCE dce;
-  absl::StatusOr<bool> dce_status = dce.Run(module);
+  StatusOr<bool> dce_status = dce.Run(module);
   return dce_status.status();
 }
 
@@ -144,12 +144,12 @@ bool InstructionNotReplaceableWithConstant(HloInstruction* instruction) {
 
 }  // namespace
 
-absl::StatusOr<bool> HloBisectState::ShouldProcess() {
+StatusOr<bool> HloBisectState::ShouldProcess() {
   // Running the unmodified module should trigger the bug checker.
   return RunModule(*module_);
 }
 
-absl::StatusOr<bool> HloBisectState::TrimEntryComputation() {
+StatusOr<bool> HloBisectState::TrimEntryComputation() {
   bool changed_in_loop = false;
   bool changed = false;
   for (int iter = 0; changed || iter < 2; iter++) {
@@ -172,11 +172,11 @@ std::unique_ptr<xla::HloModule>&& HloBisectState::GetResult() {
   return std::move(module_);
 }
 
-absl::StatusOr<bool> HloBisectState::RunModule(const HloModule& module) {
+StatusOr<bool> HloBisectState::RunModule(const HloModule& module) {
   VLOG(3) << "Modified module: " << module.ToString();
 
   // Run the modified module with the bug checker.
-  absl::StatusOr<bool> bug_result = bug_checker_->Run(module);
+  StatusOr<bool> bug_result = bug_checker_->Run(module);
   TF_RETURN_IF_ERROR(bug_result.status());
   VLOG(3) << "Bug checker result: " << bug_result.value();
 
@@ -192,7 +192,7 @@ absl::StatusOr<bool> HloBisectState::RunModule(const HloModule& module) {
   return bug_result;
 }
 
-absl::StatusOr<bool> HloBisectState::TrimByOutputs() {
+StatusOr<bool> HloBisectState::TrimByOutputs() {
   // Only available if the root instruction is a tuple.
   HloInstruction* root_instruction =
       module_->entry_computation()->root_instruction();
@@ -202,7 +202,7 @@ absl::StatusOr<bool> HloBisectState::TrimByOutputs() {
   }
 
   // Run the modified module and return the error state.
-  auto run_modified = [&](int64_t start, int64_t end) -> absl::StatusOr<bool> {
+  auto run_modified = [&](int64_t start, int64_t end) -> StatusOr<bool> {
     std::unique_ptr<HloModule> new_module = module_->Clone(/*suffix=*/"");
     HloInstruction* const* new_operands =
         new_module->entry_computation()->root_instruction()->operands().begin();
@@ -245,7 +245,7 @@ absl::StatusOr<bool> HloBisectState::TrimByOutputs() {
   return changed;
 }
 
-absl::StatusOr<bool> HloBisectState::TrimByInstructions() {
+StatusOr<bool> HloBisectState::TrimByInstructions() {
   HloComputation* computation = module_->entry_computation();
 
   // If the root instruction is a tuple, exclude it from the bisect range.
@@ -271,7 +271,7 @@ absl::StatusOr<bool> HloBisectState::TrimByInstructions() {
 
   // Sanity check for the bug checker.
   if (bisect_high == computation->num_parameters()) {
-    return Internal(
+    return InternalError(
         "The checker fails on an empty computation! Something is not right. "
         "Can't bisect.");
   }
@@ -285,7 +285,7 @@ absl::StatusOr<bool> HloBisectState::TrimByInstructions() {
   return changed;
 }
 
-absl::StatusOr<bool> HloBisectState::TrimByUsingConstants() {
+StatusOr<bool> HloBisectState::TrimByUsingConstants() {
   // Use random literals for the instructions which do not trigger the bug
   // checker and also didn't get a definitive value from it.
   absl::flat_hash_map<std::string, Literal> literal_map;
@@ -298,7 +298,7 @@ absl::StatusOr<bool> HloBisectState::TrimByUsingConstants() {
       auto it = foldable_instructions_values_.extract(instr->name());
       literal_map.insert(std::move(it));
     } else if (foldable_instructions_.contains(instr->name())) {
-      absl::StatusOr<Literal> literal_status = MakeFakeLiteral(instr->shape());
+      StatusOr<Literal> literal_status = MakeFakeLiteral(instr->shape());
       TF_RETURN_IF_ERROR(literal_status.status());
       literal_map[instr->name()] = std::move(literal_status).value();
       ++random_literals_count;
@@ -337,10 +337,11 @@ Status HloBisectState::ExpectModuleIsBuggy() {
     }
   }
   if (bug_count != 0) {
-    return InternalStrCat("The checker is non deterministic! (only ", bug_count,
-                          " failures seen in ", (retry_count + 1), " runs)");
+    return InternalErrorStrCat("The checker is non deterministic! (only ",
+                               bug_count, " failures seen in ",
+                               (retry_count + 1), " runs)");
   }
-  return Internal("We \"lost\" the bug while bisecting!");
+  return InternalError("We \"lost\" the bug while bisecting!");
 }
 
 }  // namespace bisect

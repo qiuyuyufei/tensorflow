@@ -1,4 +1,4 @@
-/* Copyright 2016 The OpenXLA Authors.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,11 +21,14 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+#include <vector>
 
-#include "absl/status/statusor.h"
 #include "xla/stream_executor/executor_cache.h"
+#include "xla/stream_executor/multi_platform_manager.h"
 #include "xla/stream_executor/platform.h"
+#include "xla/stream_executor/platform/port.h"
 #include "xla/stream_executor/stream_executor.h"
+#include "xla/stream_executor/trace_listener.h"
 
 namespace stream_executor {
 namespace host {
@@ -46,15 +49,15 @@ class HostPlatform : public Platform {
 
   const std::string& Name() const override;
 
-  absl::StatusOr<std::unique_ptr<DeviceDescription>> DescriptionForDevice(
+  tsl::StatusOr<std::unique_ptr<DeviceDescription>> DescriptionForDevice(
       int ordinal) const override;
 
-  absl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
+  tsl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
 
-  absl::StatusOr<StreamExecutor*> GetExecutor(
+  tsl::StatusOr<StreamExecutor*> GetExecutor(
       const StreamExecutorConfig& config) override;
 
-  absl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
+  tsl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
       const StreamExecutorConfig& config) override;
 
  private:

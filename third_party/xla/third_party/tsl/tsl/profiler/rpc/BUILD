@@ -1,15 +1,14 @@
-load("//tsl:tsl.bzl", "internal_visibility")
-load("//tsl:tsl.default.bzl", "tsl_grpc_cc_dependencies")
-load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
+load("//tsl/platform:rules_cc.bzl", "cc_library")
 load(
     "//tsl/profiler/builds:build_config.bzl",
     "tf_profiler_copts",
     "tf_profiler_pybind_cc_library_wrapper",
 )
+load("//tsl:tsl.default.bzl", "tsl_grpc_cc_dependencies")
+load("//tsl:tsl.bzl", "set_external_visibility")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = internal_visibility(["//tsl/profiler:internal"]),
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -19,14 +18,7 @@ cc_library(
     srcs = ["profiler_service_impl.cc"],
     hdrs = ["profiler_service_impl.h"],
     copts = tf_profiler_copts(),
-    visibility = internal_visibility([
-        "//tensorflow/core/data/service:__pkg__",
-        "//tensorflow/core/distributed_runtime/rpc:__pkg__",
-        "//tensorflow/core/profiler/rpc:__pkg__",
-        "//tensorflow/python:__pkg__",
-        "//tsl/profiler/rpc/client:__pkg__",
-        "//tensorflow_serving/model_servers:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:env",
         "//tsl/platform:env_time",
@@ -53,7 +45,7 @@ cc_library(
 tf_profiler_pybind_cc_library_wrapper(
     name = "profiler_server_for_pybind",
     actual = ":profiler_server_impl",
-    visibility = internal_visibility(["//tensorflow/python/profiler/internal:__pkg__"]),
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -61,14 +53,7 @@ cc_library(
     srcs = ["profiler_server.cc"],
     hdrs = ["profiler_server.h"],
     copts = tf_profiler_copts(),
-    visibility = internal_visibility([
-        "@local_xla//xla:__subpackages__",
-        "//tensorflow/core/profiler/rpc:__pkg__",
-        "//tensorflow/python:__pkg__",
-        "//tensorflow/python/profiler/internal:__pkg__",
-        "//tsl/profiler:internal",
-        "//tsl/profiler/rpc/client:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         ":profiler_service_impl",
         "//tsl/platform:logging",

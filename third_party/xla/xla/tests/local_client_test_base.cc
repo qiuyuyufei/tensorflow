@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -39,9 +39,10 @@ namespace xla {
 
 /* static */ TestAllocator* LocalClientTestBase::allocator_;
 
-absl::StatusOr<se::OwningDeviceMemory> TestAllocator::Allocate(
-    int device_ordinal, uint64_t size, bool retry_on_failure,
-    int64_t memory_space) {
+StatusOr<se::OwningDeviceMemory> TestAllocator::Allocate(int device_ordinal,
+                                                         uint64_t size,
+                                                         bool retry_on_failure,
+                                                         int64_t memory_space) {
   VLOG(2) << "Allocate(" << device_ordinal << ", " << size << ")";
   {
     absl::MutexLock lock(&count_mutex_);
@@ -172,14 +173,14 @@ ScopedShapedBuffer LocalClientTestBase::ExecuteLocallyOrDie(
       .value();
 }
 
-absl::StatusOr<ScopedShapedBuffer> LocalClientTestBase::ExecuteLocally(
+StatusOr<ScopedShapedBuffer> LocalClientTestBase::ExecuteLocally(
     const XlaComputation& computation,
     absl::Span<const ShapedBuffer* const> arguments) {
   return ExecuteLocally(computation, arguments, DefaultExecutableBuildOptions(),
                         DefaultExecutableRunOptions());
 }
 
-absl::StatusOr<ScopedShapedBuffer> LocalClientTestBase::ExecuteLocally(
+StatusOr<ScopedShapedBuffer> LocalClientTestBase::ExecuteLocally(
     const XlaComputation& computation,
     absl::Span<const ShapedBuffer* const> arguments,
     const ExecutableBuildOptions& build_options,
@@ -207,12 +208,12 @@ absl::StatusOr<ScopedShapedBuffer> LocalClientTestBase::ExecuteLocally(
   return std::move(ret);
 }
 
-absl::StatusOr<std::unique_ptr<VerifiedHloModule>>
+StatusOr<std::unique_ptr<VerifiedHloModule>>
 LocalClientTestBase::ParseAndReturnVerifiedModule(absl::string_view hlo_text) {
   return ParseAndReturnVerifiedModule(hlo_text, HloModuleConfig());
 }
 
-absl::StatusOr<std::unique_ptr<VerifiedHloModule>>
+StatusOr<std::unique_ptr<VerifiedHloModule>>
 LocalClientTestBase::ParseAndReturnVerifiedModule(
     absl::string_view hlo_text, const HloModuleConfig& config) {
   auto module = std::make_unique<VerifiedHloModule>(

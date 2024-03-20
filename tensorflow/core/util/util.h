@@ -62,14 +62,8 @@ std::string SliceDebugString(const TensorShape& shape, int64_t flat);
 // Check if MKL is enabled in runtime
 bool IsMKLEnabled();
 
-// Flag a warning if input type is unsupported on CPU when oneDNN is enabled
-void DataTypeUnsupportedWarning(const DataType& dt);
-
-// Check if input type is supported on CPU when oneDNN is enabled
-bool IsDataTypeSupportedByOneDNNOnThisCPU(const DataType& dt);
-
-// Check if input type supports AMX on CPU when oneDNN is enabled
-bool IsAMXDataTypeSupportedByOneDNNOnThisCPU(const DataType& dt);
+// Check if BF16 is supported
+bool IsBF16SupportedByOneDNNOnThisCPU();
 
 }  // namespace tensorflow
 

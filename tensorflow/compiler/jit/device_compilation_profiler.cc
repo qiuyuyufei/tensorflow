@@ -72,7 +72,7 @@ DeviceCompilationProfiler::~DeviceCompilationProfiler() {
   cluster_compile_stats_.clear();
 }
 
-absl::StatusOr<DeviceCompilationProfiler::ClusterCompileStats>
+StatusOr<DeviceCompilationProfiler::ClusterCompileStats>
 DeviceCompilationProfiler::GetCompileStats(const NameAttrList& function) const {
   mutex_lock lock(mu_);
 

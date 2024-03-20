@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/llvm_ir/llvm_util.h"
-#include "xla/service/llvm_ir/math_ops.h"
 #include "xla/types.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
@@ -34,7 +33,7 @@ using xla::llvm_ir::IrArray;
 namespace xla {
 namespace cpu {
 
-absl::StatusOr<llvm::Value*> CpuElementalIrEmitter::EmitAtan2(
+StatusOr<llvm::Value*> CpuElementalIrEmitter::EmitAtan2(
     PrimitiveType prim_type, llvm::Value* lhs, llvm::Value* rhs,
     absl::string_view /*name*/) {
   std::string function_name;
@@ -71,8 +70,8 @@ absl::StatusOr<llvm::Value*> CpuElementalIrEmitter::EmitAtan2(
   return result;
 }
 
-absl::StatusOr<llvm::Value*> CpuElementalIrEmitter::EmitTanh(
-    PrimitiveType prim_type, llvm::Value* value) {
+StatusOr<llvm::Value*> CpuElementalIrEmitter::EmitTanh(PrimitiveType prim_type,
+                                                       llvm::Value* value) {
   bool cast_result_to_fp16 = false;
   std::string function_name;
   switch (prim_type) {
@@ -104,33 +103,6 @@ absl::StatusOr<llvm::Value*> CpuElementalIrEmitter::EmitTanh(
     result = FPCast(result, b()->getHalfTy());
   }
   return result;
-}
-
-absl::StatusOr<llvm::Value*> CpuElementalIrEmitter::EmitErf(
-    PrimitiveType prim_type, llvm::Value* value) {
-  if (prim_type == F64) {
-    std::string function_name = "erf";
-    // Create a function declaration.
-    llvm::Function* function = llvm::dyn_cast<llvm::Function>(
-        module()
-            ->getOrInsertFunction(function_name, value->getType(),
-                                  value->getType())
-            .getCallee());
-    function->setCallingConv(llvm::CallingConv::C);
-    function->setDoesNotThrow();
-    function->setDoesNotAccessMemory();
-    // Create an instruction to call the function.
-    llvm::Value* result = Call(function, value);
-    return result;
-  }
-  // Upcast F16 to F32 if necessary.
-  llvm::Type* type = prim_type == F16 ? b()->getFloatTy() : value->getType();
-  if (type == b()->getFloatTy()) {
-    llvm::Value* x = FPCast(value, type);
-    auto* result = llvm_ir::EmitErfF32(b(), x);
-    return FPCast(result, value->getType());
-  }
-  return Unimplemented("erf");
 }
 
 }  // namespace cpu

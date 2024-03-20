@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,7 +32,6 @@ limitations under the License.
 #include "xla/shape_util.h"
 #include "tsl/platform/blocking_counter.h"
 #include "tsl/platform/logging.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 
@@ -50,7 +49,7 @@ HloRunner::HloRunner(se::Platform* platform, int intra_op_parallelism_threads) {
 
 HloRunner::~HloRunner() {}
 
-absl::StatusOr<ScopedShapedBuffer> HloRunner::TransferLiteralToDevice(
+StatusOr<ScopedShapedBuffer> HloRunner::TransferLiteralToDevice(
     const Literal& literal, int64_t param_no) {
   auto shape_representation_fn = [this, param_no](const Shape& shape) {
     Shape new_shape = device_shape_representation_fn_(shape);
@@ -90,8 +89,8 @@ absl::StatusOr<ScopedShapedBuffer> HloRunner::TransferLiteralToDevice(
   return std::move(buffer);
 }
 
-absl::StatusOr<std::vector<ScopedShapedBuffer>>
-HloRunner::TransferLiteralsToDevice(absl::Span<const Literal* const> literals) {
+StatusOr<std::vector<ScopedShapedBuffer>> HloRunner::TransferLiteralsToDevice(
+    absl::Span<const Literal* const> literals) {
   std::vector<ScopedShapedBuffer> buffers;
   buffers.reserve(literals.size());
   for (auto i = 0; i < literals.size(); i++) {
@@ -104,8 +103,8 @@ HloRunner::TransferLiteralsToDevice(absl::Span<const Literal* const> literals) {
   return std::move(buffers);
 }
 
-absl::StatusOr<std::vector<ScopedShapedBuffer>>
-HloRunner::TransferLiteralsToDevice(absl::Span<const Literal> literals) {
+StatusOr<std::vector<ScopedShapedBuffer>> HloRunner::TransferLiteralsToDevice(
+    absl::Span<const Literal> literals) {
   std::vector<const Literal*> literal_pointers;
   literal_pointers.reserve(literals.size());
   for (const auto& literal : literals) {
@@ -114,7 +113,7 @@ HloRunner::TransferLiteralsToDevice(absl::Span<const Literal> literals) {
   return TransferLiteralsToDevice(literal_pointers);
 }
 
-absl::StatusOr<Literal> HloRunner::TransferLiteralFromDevice(
+StatusOr<Literal> HloRunner::TransferLiteralFromDevice(
     const ShapedBuffer& buffer) {
   TF_ASSIGN_OR_RETURN(
       auto stream, backend().BorrowStream(backend().default_stream_executor()));
@@ -139,10 +138,10 @@ absl::StatusOr<Literal> HloRunner::TransferLiteralFromDevice(
                                                                  shaped_buffer);
 }
 
-absl::StatusOr<Literal> HloRunner::Execute(
-    std::unique_ptr<HloModule> module,
-    absl::Span<const Literal* const> arguments, bool run_hlo_passes,
-    ExecutionProfile* profile) {
+StatusOr<Literal> HloRunner::Execute(std::unique_ptr<HloModule> module,
+                                     absl::Span<const Literal* const> arguments,
+                                     bool run_hlo_passes,
+                                     ExecutionProfile* profile) {
   xla::UpdateEntryComputationLayout(module.get(),
                                     device_shape_representation_fn_);
   entry_computation_layout_ = &(module->entry_computation_layout());
@@ -158,7 +157,7 @@ absl::StatusOr<Literal> HloRunner::Execute(
   return TransferLiteralFromDevice(result.Result());
 }
 
-absl::StatusOr<Literal> HloRunner::ExecuteWithBufferAssignment(
+StatusOr<Literal> HloRunner::ExecuteWithBufferAssignment(
     std::unique_ptr<HloModule> module,
     const BufferAssignmentProto* buffer_assignment_proto,
     absl::Span<const Literal* const> arguments, bool run_hlo_passes,
@@ -177,7 +176,7 @@ absl::StatusOr<Literal> HloRunner::ExecuteWithBufferAssignment(
   return TransferLiteralFromDevice(result.Result());
 }
 
-absl::StatusOr<Literal> HloRunner::ExecuteWithExecutable(
+StatusOr<Literal> HloRunner::ExecuteWithExecutable(
     Executable* executable, absl::Span<const Literal* const> arguments,
     ExecutionProfile* profile) {
   entry_computation_layout_ =
@@ -274,7 +273,7 @@ static void ExecutionInputsFromMovedScopedShapedBuffers(
   }
 }
 
-absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithDeviceBuffers(
+StatusOr<ExecutionOutput> HloRunner::ExecuteWithDeviceBuffers(
     std::unique_ptr<HloModule> module,
     absl::Span<ScopedShapedBuffer const> arguments, bool run_hlo_passes,
     ExecutionProfile* profile) {
@@ -283,7 +282,7 @@ absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithDeviceBuffers(
   return ExecuteWithDeviceBuffers(executable.get(), arguments, profile);
 }
 
-absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithDeviceBuffers(
+StatusOr<ExecutionOutput> HloRunner::ExecuteWithDeviceBuffers(
     Executable* executable, absl::Span<ScopedShapedBuffer const> arguments,
     ExecutionProfile* profile) {
   std::vector<ExecutionInput> execution_arguments =
@@ -295,7 +294,7 @@ absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithDeviceBuffers(
                                     profile);
 }
 
-absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithMovedDeviceBuffers(
+StatusOr<ExecutionOutput> HloRunner::ExecuteWithMovedDeviceBuffers(
     std::unique_ptr<HloModule> module,
     std::vector<ScopedShapedBuffer> arguments, bool run_hlo_passes,
     ExecutionProfile* profile) {
@@ -304,7 +303,7 @@ absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithMovedDeviceBuffers(
       std::move(arguments), run_hlo_passes, profile);
 }
 
-absl::StatusOr<ExecutionOutput>
+StatusOr<ExecutionOutput>
 HloRunner::ExecuteWithMovedDeviceBuffersAndBufferAssignment(
     std::unique_ptr<HloModule> module,
     const BufferAssignmentProto* buffer_assignment_proto,
@@ -318,7 +317,7 @@ HloRunner::ExecuteWithMovedDeviceBuffersAndBufferAssignment(
                                        profile);
 }
 
-absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithMovedDeviceBuffers(
+StatusOr<ExecutionOutput> HloRunner::ExecuteWithMovedDeviceBuffers(
     Executable* executable, std::vector<ScopedShapedBuffer> arguments,
     ExecutionProfile* profile) {
   std::vector<ExecutionInput> execution_arguments;
@@ -342,28 +341,28 @@ absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithMovedDeviceBuffers(
   return retval;
 }
 
-absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithExecutionInputs(
+StatusOr<ExecutionOutput> HloRunner::ExecuteWithExecutionInputs(
     Executable* executable, std::vector<ExecutionInput> arguments,
     ExecutionProfile* profile) {
   xla::UpdateEntryComputationLayout(&executable->module(),
                                     device_shape_representation_fn_);
 
   // Get service run options.
-  TF_ASSIGN_OR_RETURN(auto stream,
-                      backend().default_stream_executor()->CreateStream());
+  se::Stream stream(backend().default_stream_executor());
+  stream.Init();
   ServiceExecutableRunOptions service_run_options =
-      GetServiceRunOptionsForDevice(backend().default_device_ordinal(),
-                                    stream.get(), nullptr, RunId());
+      GetServiceRunOptionsForDevice(backend().default_device_ordinal(), &stream,
+                                    nullptr, RunId());
   service_run_options.mutable_run_options()->set_execution_profile(profile);
 
   TF_ASSIGN_OR_RETURN(ExecutionOutput retval,
                       executable->ExecuteOnStreamWrapper(&service_run_options,
                                                          std::move(arguments)));
-  TF_RETURN_IF_ERROR(stream->BlockHostUntilDone());
+  TF_RETURN_IF_ERROR(stream.BlockHostUntilDone());
   return std::move(retval);
 }
 
-absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
+StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
     std::unique_ptr<HloModule> module, const ReplicatedExecuteOptions& options,
     DeviceAssignment* device_assignment) {
   TF_ASSIGN_OR_RETURN(
@@ -372,8 +371,8 @@ absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
   return ExecuteReplicated(executable.get(), options, device_assignment);
 }
 
-absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicatedImpl(
-    std::function<absl::StatusOr<std::vector<ScopedShapedBuffer>>(
+StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicatedImpl(
+    std::function<StatusOr<std::vector<ScopedShapedBuffer>>(
         const std::vector<ServiceExecutableRunOptions>&,
         const std::vector<absl::Span<const ShapedBuffer* const>>&)>
         execution_helper,
@@ -410,8 +409,8 @@ absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicatedImpl(
         (*device_assignment)(i / num_partitions, i % num_partitions);
     TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
                         backend().stream_executor(device));
-    TF_ASSIGN_OR_RETURN(auto stream, executor->CreateStream());
-    streams.emplace_back(std::move(stream));
+    streams.push_back(std::make_unique<se::Stream>(executor));
+    streams.back()->Init();
     service_run_options.emplace_back(GetServiceRunOptionsForDevice(
         device, streams.back().get(), device_assignment, run_id));
 
@@ -510,14 +509,14 @@ absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicatedImpl(
   return std::move(exec_results);
 }
 
-absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
+StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
     Executable* executable, const ReplicatedExecuteOptions& options,
     DeviceAssignment* device_assignment, ExecutionProfile* profile) {
   return ExecuteReplicatedImpl(
       [&](const std::vector<ServiceExecutableRunOptions>& service_run_options,
           const std::vector<absl::Span<const ShapedBuffer* const>>&
               argument_buffer_slices)
-          -> absl::StatusOr<std::vector<ScopedShapedBuffer>> {
+          -> StatusOr<std::vector<ScopedShapedBuffer>> {
         std::vector<ScopedShapedBuffer> results;
         if (!options.use_threads) {
           TF_ASSIGN_OR_RETURN(
@@ -559,7 +558,7 @@ absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
       options, device_assignment);
 }
 
-absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
+StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
     std::function<Executable*(int64_t)> executable_provider,
     std::function<int64_t(int64_t)> argument_count_provider,
     std::function<const Literal*(int64_t, int64_t)> argument_provider,
@@ -577,7 +576,7 @@ absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
       [&](const std::vector<ServiceExecutableRunOptions>& service_run_options,
           const std::vector<absl::Span<const ShapedBuffer* const>>&
               argument_buffer_slices)
-          -> absl::StatusOr<std::vector<ScopedShapedBuffer>> {
+          -> StatusOr<std::vector<ScopedShapedBuffer>> {
         TF_RET_CHECK(options.use_threads);
         std::vector<ScopedShapedBuffer> results;
         absl::Mutex mutex;
@@ -614,7 +613,7 @@ absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
       argument_count_provider, argument_provider, options, device_assignment);
 }
 
-absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
+StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
     std::unique_ptr<HloModule> module,
     const ReplicatedExecuteOptions& options) {
   TF_ASSIGN_OR_RETURN(
@@ -623,14 +622,14 @@ absl::StatusOr<std::vector<Literal>> HloRunner::ExecuteReplicated(
   return ExecuteReplicated(std::move(module), options, &device_assignment);
 }
 
-absl::StatusOr<std::unique_ptr<Executable>> HloRunner::CreateExecutable(
+StatusOr<std::unique_ptr<Executable>> HloRunner::CreateExecutable(
     std::unique_ptr<HloModule> module, bool run_hlo_passes) {
   return CreateExecutableWithBufferAssignment(
       std::move(module),
       /*buffer_assignment_proto=*/nullptr, run_hlo_passes);
 }
 
-absl::StatusOr<std::unique_ptr<Executable>>
+StatusOr<std::unique_ptr<Executable>>
 HloRunner::CreateExecutableWithBufferAssignment(
     std::unique_ptr<HloModule> module,
     const BufferAssignmentProto* buffer_assignment_proto, bool run_hlo_passes) {
@@ -640,11 +639,6 @@ HloRunner::CreateExecutableWithBufferAssignment(
     if (buffer_assignment_proto != nullptr) {
       LOG(WARNING) << "Ignoring buffer assignment provided because hlo passes "
                       "are enabled.";
-    }
-    // Setup intra-op threads in module config
-    if (backend().eigen_intra_op_thread_pool() != nullptr) {
-      module->mutable_config().set_intra_op_parallelism_threads(
-          backend().eigen_intra_op_thread_pool()->NumThreads());
     }
     auto module_group = std::make_unique<HloModuleGroup>(std::move(module));
     TF_ASSIGN_OR_RETURN(

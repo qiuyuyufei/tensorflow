@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ namespace {
 // If the sort instruction has a tuple shape then looks for unused output
 // values and removes them from the sort instruction. Returns true if the
 // graph has been modified.
-absl::StatusOr<bool> RemoveUnusedOperandFromSort(HloInstruction* sort) {
+StatusOr<bool> RemoveUnusedOperandFromSort(HloInstruction* sort) {
   if (!sort->shape().IsTuple()) {
     return false;
   }
@@ -135,7 +135,7 @@ absl::StatusOr<bool> RemoveUnusedOperandFromSort(HloInstruction* sort) {
 }
 }  // namespace
 
-absl::StatusOr<bool> SortSimplifier::Run(
+StatusOr<bool> SortSimplifier::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   VLOG(2) << "HLO module before SortSimplifier:";

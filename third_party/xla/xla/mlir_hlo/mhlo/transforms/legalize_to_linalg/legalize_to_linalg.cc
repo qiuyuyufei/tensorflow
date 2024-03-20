@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -1471,7 +1471,6 @@ class IotaConverter : public OpConversionPattern<OpTy> {
       ConversionPatternRewriter& rewriter) const final {
     ShapedType resultShapedType = getHloOpResultType(iotaOp);
     if (!resultShapedType) return failure();
-    Type targetElementType = resultShapedType.getElementType();
     resultShapedType = this->typeConverter->convertType(resultShapedType)
                            .template dyn_cast<ShapedType>();
 
@@ -1504,9 +1503,9 @@ class IotaConverter : public OpConversionPattern<OpTy> {
               nestedBuilder.getIntegerType(
                   unwrappedResultElementType.getIntOrFloatBitWidth()),
               indexOp);
-          castOp = mhlo::MhloOpToStdScalarOp::mapConvertOpToStdScalarOp(
-              nestedLoc, targetElementType, resultElementType, castOp.getType(),
-              {castOp}, &nestedBuilder);
+          castOp = mhlo::MhloOpToStdScalarOp::mapOpOfType<mhlo::ConvertOp>(
+              nestedLoc, resultElementType, castOp.getType(), {castOp},
+              &nestedBuilder);
           nestedBuilder.create<linalg::YieldOp>(nestedLoc, castOp);
         },
         linalg::getPrunedAttributeList(iotaOp));
@@ -1525,7 +1524,6 @@ class IotaToMapConverter : public OpConversionPattern<OpTy> {
       ConversionPatternRewriter& rewriter) const final {
     ShapedType resultTy = getHloOpResultType(iotaOp);
     if (!resultTy) return failure();
-    Type targetElementType = resultTy.getElementType();
     resultTy = this->typeConverter->convertType(resultTy)
                    .template dyn_cast<ShapedType>();
 
@@ -1540,9 +1538,10 @@ class IotaToMapConverter : public OpConversionPattern<OpTy> {
               nestedLoc, iotaOp.getIotaDimension());
           index = nestedBuilder.create<arith::IndexCastOp>(
               nestedLoc, nestedBuilder.getI64Type(), index);
-          Value result = mhlo::MhloOpToStdScalarOp::mapConvertOpToStdScalarOp(
-              nestedLoc, targetElementType, resultTy.getElementType(),
-              index.getType(), {ValueRange{index}}, &nestedBuilder);
+          Value result =
+              mhlo::MhloOpToStdScalarOp::mapOpOfType<mhlo::ConvertOp>(
+                  nestedLoc, resultTy.getElementType(), index.getType(),
+                  {ValueRange{index}}, &nestedBuilder);
           nestedBuilder.create<linalg::YieldOp>(nestedLoc, ValueRange{result});
         },
         linalg::getPrunedAttributeList(iotaOp));
@@ -3264,7 +3263,7 @@ struct ConvolutionOpGeneralConversion
 
     // Finally, create the computation
     auto inferredMaps =
-        AffineMap::inferFromExprList({srcExprs, windowExprs, dstExprs}, ctx);
+        AffineMap::inferFromExprList({srcExprs, windowExprs, dstExprs});
 
     Value emptyTensor = rewriter.create<tensor::EmptyOp>(
         loc, reshapedResultShape, resultType.getElementType());
@@ -3579,7 +3578,7 @@ struct ReduceWindowOpOnTensorsGenericConversion
     SmallVector<AffineMap, 4> inferredMaps(3, AffineMap::get(ctx));
     if (rank > 0)
       inferredMaps =
-          AffineMap::inferFromExprList({srcExprs, windowExprs, dstExprs}, ctx);
+          AffineMap::inferFromExprList({srcExprs, windowExprs, dstExprs});
 
     SmallVector<AffineMap, 4> indexingMaps;
 
@@ -4505,7 +4504,6 @@ void populateHloToLinalgConversionPattern(MLIRContext* context,
       PointwiseToLinalgMapConverter<mhlo::CopyOp>,
       PointwiseToLinalgMapConverter<mhlo::CosineOp>,
       PointwiseToLinalgMapConverter<mhlo::DivOp>,
-      PointwiseToLinalgMapConverter<mhlo::ErfOp>,
       PointwiseToLinalgMapConverter<mhlo::ExpOp>,
       PointwiseToLinalgMapConverter<mhlo::Expm1Op>,
       PointwiseToLinalgMapConverter<mhlo::FloorOp>,
@@ -4565,7 +4563,6 @@ void populateHloToLinalgConversionPattern(MLIRContext* context,
       PointwiseToLinalgConverter<mhlo::CopyOp>,
       PointwiseToLinalgConverter<mhlo::CosineOp>,
       PointwiseToLinalgConverter<mhlo::DivOp>,
-      PointwiseToLinalgConverter<mhlo::ErfOp>,
       PointwiseToLinalgConverter<mhlo::ExpOp>,
       PointwiseToLinalgConverter<mhlo::Expm1Op>,
       PointwiseToLinalgConverter<mhlo::FloorOp>,

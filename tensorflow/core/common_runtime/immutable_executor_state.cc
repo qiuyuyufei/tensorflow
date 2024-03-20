@@ -347,7 +347,7 @@ Status ImmutableExecutorState::BuildControlFlowInfo(const Graph* g,
     }
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void ImmutableExecutorState::InitializePending(const Graph* graph,

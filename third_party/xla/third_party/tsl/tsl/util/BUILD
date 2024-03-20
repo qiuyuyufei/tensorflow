@@ -5,9 +5,13 @@
 #   to other TF components outside of TSL.
 
 load(
+    "//tsl/platform:rules_cc.bzl",
+    "cc_library",
+)
+load(
     "//tsl:tsl.bzl",
     "check_deps",
-    "internal_visibility",
+    "set_external_visibility",
     "tsl_copts",
 )
 load("//tsl:tsl.default.bzl", "filegroup", "get_compatible_with_portable")
@@ -19,16 +23,9 @@ load(
     "//tsl/platform:build_config.bzl",
     "tsl_cc_test",
 )
-load(
-    "@local_tsl//tsl/platform:rules_cc.bzl",
-    "cc_library",
-)
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = [
-        "//visibility:public",
-    ],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -38,6 +35,7 @@ filegroup(
         "byte_swap_array.cc",
         "byte_swap_array.h",
     ],
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -54,6 +52,7 @@ filegroup(
         "use_cudnn.cc",
         "use_cudnn.h",
     ],
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -62,10 +61,7 @@ filegroup(
         "determinism.h",
     ],
     compatible_with = get_compatible_with_portable(),
-    visibility = internal_visibility([
-        "//tensorflow:__subpackages__",
-        "//tensorflow/core/util:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -79,6 +75,7 @@ filegroup(
         "stats_calculator.h",
         "use_cudnn.h",
     ],
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -86,6 +83,7 @@ filegroup(
     srcs = [
         "use_cudnn.cc",
     ],
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -95,10 +93,7 @@ filegroup(
         "env_var.h",
         "use_cudnn.h",
     ],
-    visibility = internal_visibility([
-        "//tensorflow/core:__pkg__",
-        "//tensorflow/core/util:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -107,10 +102,7 @@ filegroup(
         "determinism.h",
     ],
     compatible_with = get_compatible_with_portable(),
-    visibility = internal_visibility([
-        "//tensorflow:__subpackages__",
-        "//tensorflow/core/util:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -120,12 +112,14 @@ filegroup(
         "stat_summarizer_options.h",
         "use_cudnn.h",
     ],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "byte_swap_array",
     srcs = ["byte_swap_array.cc"],
     hdrs = ["byte_swap_array.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:byte_order",
         "//tsl/platform:errors",
@@ -137,7 +131,6 @@ cc_library(
     name = "determinism_hdr_lib",
     hdrs = [":determinism_hdr"],
     compatible_with = get_compatible_with_portable(),
-    # TODO(b/298501506): narrow this in a way that won't break TAP
     visibility = ["//visibility:public"],
 )
 
@@ -148,7 +141,7 @@ cc_library(
     srcs = ["determinism.cc"],
     hdrs = ["determinism.h"],
     copts = tsl_copts(),
-    visibility = internal_visibility(["//tensorflow:__subpackages__"]),
+    visibility = ["//visibility:public"],
     deps = [
         ":env_var",
         "//tsl/platform:mutex",
@@ -171,7 +164,7 @@ cc_library(
 alias(
     name = "determinism_for_kernels",
     actual = if_static(":determinism", ":determinism_hdr_lib"),
-    visibility = internal_visibility(["//tensorflow:__subpackages__"]),
+    visibility = ["//visibility:public"],
 )
 
 check_deps(
@@ -192,6 +185,7 @@ cc_library(
         # whenever determinism tests are run.
         ":determinism_check_deps",
     ],
+    visibility = ["//visibility:public"],
     deps = [":determinism"],
 )
 
@@ -199,6 +193,7 @@ cc_library(
     name = "env_var",
     srcs = ["env_var.cc"],
     hdrs = ["env_var.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:errors",
         "//tsl/platform:logging",
@@ -215,10 +210,7 @@ cc_library(
     name = "reporter",
     srcs = ["reporter.cc"],
     hdrs = ["reporter.h"],
-    visibility = internal_visibility([
-        "//tensorflow/core:__subpackages__",
-        "//tsl:__subpackages__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:env",
         "//tsl/platform:env_impl",
@@ -241,14 +233,13 @@ cc_library(
         "stats_calculator.h",
     ],
     copts = tsl_copts(),
-    visibility = internal_visibility([
-        "//tsl:internal",
-    ]),
+    visibility = ["//visibility:public"],
 )
 
 tsl_cc_test(
     name = "stats_calculator_test",
     srcs = ["stats_calculator_test.cc"],
+    visibility = ["//visibility:public"],
     deps = [
         ":stats_calculator_portable",
         "//tsl/platform:test",
@@ -260,6 +251,7 @@ cc_library(
     name = "device_name_utils",
     srcs = ["device_name_utils.cc"],
     hdrs = ["device_name_utils.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:errors",
         "//tsl/platform:status",
@@ -271,6 +263,7 @@ tsl_cc_test(
     name = "device_name_utils_test",
     size = "small",
     srcs = ["device_name_utils_test.cc"],
+    visibility = ["//visibility:public"],
     deps = [
         ":device_name_utils",
         "//tsl/lib/core:status_test_util",
@@ -286,13 +279,13 @@ cc_library(
     name = "command_line_flags",
     srcs = ["command_line_flags.cc"],
     hdrs = ["command_line_flags.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:logging",
         "//tsl/platform:str_util",
         "//tsl/platform:stringpiece",
         "//tsl/platform:stringprintf",
         "//tsl/platform:types",
-        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -302,7 +295,7 @@ filegroup(
     srcs = [
         "reporter.h",
     ],
-    visibility = internal_visibility(["//tensorflow/core/util:__pkg__"]),
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -310,12 +303,7 @@ filegroup(
     srcs = [
         "onednn_threadpool.h",
     ],
-    visibility = internal_visibility([
-        "@local_xla//xla:__subpackages__",
-        "//tensorflow/core:__pkg__",
-        "//tensorflow/core/framework:__pkg__",
-        "//tensorflow/core/util:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -324,10 +312,7 @@ filegroup(
     srcs = [
         "reporter.h",
     ],
-    visibility = internal_visibility([
-        "//tensorflow/core:__pkg__",
-        "//tensorflow/core/util:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -337,8 +322,5 @@ filegroup(
         "reporter.cc",
         ":android_test_hdrs",
     ],
-    visibility = internal_visibility([
-        "//tensorflow/core:__pkg__",
-        "//tensorflow/core/util:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
 )

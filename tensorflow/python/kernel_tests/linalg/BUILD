@@ -256,7 +256,7 @@ cuda_py_strict_test(
     name = "linear_operator_circulant_test",
     size = "medium",
     srcs = ["linear_operator_circulant_test.py"],
-    shard_count = 50,
+    shard_count = 32,
     tags = [
         "no_cuda11",  # TODO(b/197522782): reenable test after fixing.
         "optonly",  # times out, b/79171797
@@ -412,7 +412,7 @@ cuda_py_strict_test(
     name = "linear_operator_low_rank_update_test",
     size = "medium",
     srcs = ["linear_operator_low_rank_update_test.py"],
-    shard_count = 15,
+    shard_count = 10,
     tags = ["optonly"],
     deps = [
         "//tensorflow/python/framework:config",
@@ -516,14 +516,12 @@ cuda_py_strict_test(
     name = "linear_operator_tridiag_test",
     size = "medium",
     srcs = ["linear_operator_tridiag_test.py"],
-    shard_count = 10,
+    shard_count = 5,
     tags = [
         "no_windows_gpu",
         "optonly",
     ],
-    # TODO(b/313470344): XLA temporarily disabled due to empty shards on 3.12.
-    xla_enable_strict_auto_jit = False,
-    xla_enabled = False,
+    xla_enable_strict_auto_jit = True,
     deps = [
         "//tensorflow/python/framework:config",
         "//tensorflow/python/framework:test_lib",
@@ -627,7 +625,6 @@ tf_py_strict_test(
 cuda_py_strict_test(
     name = "matrix_inverse_op_test",
     size = "small",
-    timeout = "moderate",
     srcs = ["matrix_inverse_op_test.py"],
     tags = ["optonly"],
     deps = [
@@ -884,7 +881,7 @@ cuda_py_strict_test(
     name = "tridiagonal_matmul_op_test",
     size = "medium",
     srcs = ["tridiagonal_matmul_op_test.py"],
-    shard_count = 5,
+    shard_count = 10,
     deps = [
         "//tensorflow/python/client:session",
         "//tensorflow/python/eager:context",

@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -47,9 +47,9 @@ class TestAllocator : public se::StreamExecutorMemoryAllocator {
       : se::StreamExecutorMemoryAllocator(
             platform, PlatformUtil::GetStreamExecutors(platform).value()) {}
 
-  absl::StatusOr<se::OwningDeviceMemory> Allocate(
-      int device_ordinal, uint64_t size, bool retry_on_failure,
-      int64_t memory_space) override;
+  StatusOr<se::OwningDeviceMemory> Allocate(int device_ordinal, uint64_t size,
+                                            bool retry_on_failure,
+                                            int64_t memory_space) override;
   Status Deallocate(int device_ordinal, se::DeviceMemoryBase mem) override;
 
   // Return the number of allocations that have been performed.
@@ -93,10 +93,10 @@ class LocalClientTestBase : public ManifestCheckingTest {
 
   // Execute the given computation on the local client. With and without
   // options.
-  absl::StatusOr<ScopedShapedBuffer> ExecuteLocally(
+  StatusOr<ScopedShapedBuffer> ExecuteLocally(
       const XlaComputation& computation,
       absl::Span<const ShapedBuffer* const> arguments);
-  absl::StatusOr<ScopedShapedBuffer> ExecuteLocally(
+  StatusOr<ScopedShapedBuffer> ExecuteLocally(
       const XlaComputation& computation,
       absl::Span<const ShapedBuffer* const> arguments,
       const ExecutableBuildOptions& build_options,
@@ -112,11 +112,10 @@ class LocalClientTestBase : public ManifestCheckingTest {
       const ExecutableRunOptions& run_options);
 
   // Parses the given string and returns module as a VerifiedHloModule.
-  absl::StatusOr<std::unique_ptr<VerifiedHloModule>>
-  ParseAndReturnVerifiedModule(absl::string_view hlo_text);
-  absl::StatusOr<std::unique_ptr<VerifiedHloModule>>
-  ParseAndReturnVerifiedModule(absl::string_view hlo_text,
-                               const HloModuleConfig& config);
+  StatusOr<std::unique_ptr<VerifiedHloModule>> ParseAndReturnVerifiedModule(
+      absl::string_view hlo_text);
+  StatusOr<std::unique_ptr<VerifiedHloModule>> ParseAndReturnVerifiedModule(
+      absl::string_view hlo_text, const HloModuleConfig& config);
 
   // Returns a default set of execute options.
   ExecutableBuildOptions DefaultExecutableBuildOptions() const;

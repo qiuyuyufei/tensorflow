@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,15 +41,14 @@ import os
 import subprocess
 import re
 import sys
-import shlex
+import pipes
 
 # Template values set by cuda_autoconf.
 CPU_COMPILER = ('%{cpu_compiler}')
-HOST_COMPILER_PATH = ('%{host_compiler_path}')
+GCC_HOST_COMPILER_PATH = ('%{gcc_host_compiler_path}')
 
 NVCC_PATH = '%{nvcc_path}'
-PREFIX_DIR = os.path.dirname(HOST_COMPILER_PATH)
-USE_CLANG_COMPILER = '%{use_clang_compiler}'
+PREFIX_DIR = os.path.dirname(GCC_HOST_COMPILER_PATH)
 NVCC_VERSION = '%{cuda_version}'
 
 def Log(s):
@@ -254,23 +253,13 @@ def InvokeNvcc(argv, log=False):
   # Force C++17 dialect (note, everything in just one string!)
   nvccopts += ' --std c++17 '
   nvccopts += fatbin_options
-  # The option `-allow-unsupported-compiler` is required for the combination of
-  # NVCC+clang compilers. 
-  # The following message appears if this option is not provided:
-  # unsupported clang version! clang version must be less than 16 and greater
-  # than 3.2 . The nvcc flag '-allow-unsupported-compiler' can be used
-  # to override this version check; however, using an unsupported host compiler
-  # may cause compilation failure or incorrect run time execution.
-  # Use at your own risk.
-  if USE_CLANG_COMPILER:
-    nvccopts += ' -allow-unsupported-compiler --expt-extended-lambda --expt-relaxed-constexpr '
 
   if depfiles:
     # Generate the dependency file
     depfile = depfiles[0]
     cmd = (NVCC_PATH + ' ' + nvccopts +
            ' --compiler-options "' + host_compiler_options + '"' +
-           ' --compiler-bindir=' + HOST_COMPILER_PATH +
+           ' --compiler-bindir=' + GCC_HOST_COMPILER_PATH +
            ' -I .' +
            ' -x cu ' + opt + includes + ' ' + srcs + ' -M -o ' + depfile)
     if log: Log(cmd)
@@ -280,7 +269,7 @@ def InvokeNvcc(argv, log=False):
 
   cmd = (NVCC_PATH + ' ' + nvccopts +
          ' --compiler-options "' + host_compiler_options + ' -fPIC"' +
-         ' --compiler-bindir=' + HOST_COMPILER_PATH +
+         ' --compiler-bindir=' + GCC_HOST_COMPILER_PATH +
          ' -I .' +
          ' -x cu ' + opt + includes + ' -c ' + srcs + out)
 
@@ -299,7 +288,7 @@ def main():
 
   if args.x and args.x[0] == 'cuda':
     if args.cuda_log: Log('-x cuda')
-    leftover = [shlex.quote(s) for s in leftover]
+    leftover = [pipes.quote(s) for s in leftover]
     if args.cuda_log: Log('using nvcc')
     return InvokeNvcc(leftover, log=args.cuda_log)
 

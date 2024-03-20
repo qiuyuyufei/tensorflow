@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "tensorflow/core/framework/metrics.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -27,20 +26,10 @@ limitations under the License.
 #include "tsl/lib/monitoring/gauge.h"
 #include "tsl/lib/monitoring/sampler.h"
 #include "tsl/platform/types.h"
-#include "tsl/protobuf/error_codes.pb.h"
 
 namespace tensorflow {
 namespace metrics {
 namespace {
-
-auto* persistent_cache_load_count = tsl::monitoring::Counter<0>::New(
-    "/tensorflow/core/persistent_cache_load_count",
-    "The number of times a binary is loaded from the persistent cache.");
-
-auto* aot_bef_mlir_load_count = tsl::monitoring::Counter<0>::New(
-    "/tensorflow/core/aot_bef_mlir_load_count",
-    "The number of times BEF and MLIR are deserialized instead of generated "
-    "and used.");
 
 auto* graph_runs = tsl::monitoring::Counter<0>::New(
     "/tensorflow/core/graph_runs",
@@ -273,37 +262,9 @@ auto* tf_data_filename_counter = tsl::monitoring::Counter<2>::New(
     "/tensorflow/data/filename", "The file name read by a tf.data Dataset.",
     "name", "filename");
 
-auto* tf_data_file_logger_attempts_counter = tsl::monitoring::Counter<0>::New(
-    "/tensorflow/data/file_logger_attempts",
-    "The number of times a file logger attempted to log filenames.");
-
-auto* tf_data_file_logger_errors_counter = tsl::monitoring::Counter<2>::New(
-    "/tensorflow/data/file_logger_errors",
-    "The number of times file logger got error of this type and message.",
-    "error_code", "error_message");
-
-auto* tf_data_file_logger_attempted_num_files_counter =
-    tsl::monitoring::Counter<0>::New(
-        "/tensorflow/data/file_logger_attempts_num_files",
-        "The number of files that were attempted to be logged by the file "
-        "logger.");
-
-auto* tf_data_file_logger_errors_num_files_counter =
-    tsl::monitoring::Counter<2>::New(
-        "/tensorflow/data/file_logger_errors_num_files",
-        "The number of files that encountered errors of this type and message "
-        "during logging by the file logger.",
-        "error_code", "error_message");
-
 auto* tf_data_model_gauge =
     tsl::monitoring::Gauge<std::function<std::string()>, 1>::New(
         "/tensorflow/data/model", "tf.data autotuning model proto.", "id");
-
-auto* tf_data_pipeline_processing_time = tsl::monitoring::Gauge<double, 1>::New(
-    "/tensorflow/data/pipeline_processing_time",
-    "The total processing time of the slowest stage in the input pipeline "
-    "in microseconds",
-    "id");
 
 auto* tf_data_auto_shard = tsl::monitoring::Gauge<int64, 2>::New(
     "/tensorflow/data/autoshard", "tf.data autoshard statistics.", "id",
@@ -330,18 +291,10 @@ auto* tf_data_autotune_stopping_criteria_counter =
         "algorithm stopping criterion is met.",
         "name");
 
-auto* tf_data_debug = tsl::monitoring::Counter<1>::New(
-    "/tensorflow/data/debug",
-    "The number of times this event occured, for debugging.", "event");
-
 auto* tf_data_error = tsl::monitoring::Counter<2>::New(
     "/tensorflow/data/error",
     "The number of times an error of this type occurred with this status code.",
     "error_type", "status_code");
-
-auto* tf_data_framework_type = tsl::monitoring::Counter<1>::New(
-    "/tensorflow/data/framework_type",
-    "The framework type used to build the tf.data.Dataset.", "framework_type");
 
 auto* parse_dense_feature_counter = tsl::monitoring::Counter<0>::New(
     "/tensorflow/data/dense_feature",
@@ -454,13 +407,6 @@ auto* mlir_second_phase_count = tensorflow::monitoring::Counter<1>::New(
     "the MLIR or the old bridge will be used" /* metric description */,
     "status" /* metric label */);
 
-auto* phase_2_xla_compiler_count = tensorflow::monitoring::Counter<1>::New(
-    "/tensorflow/compiler/tf2xla/xla_compiler/"
-    "compilation_status" /*metric_name*/,
-    "Counts the number of times the xla builder vs mlir was "
-    "used for XlaCompiler entry points." /* metric description*/,
-    "status" /* metric label */);
-
 auto* tf1_features_by_graph_count = tsl::monitoring::Counter<5>::New(
     "/tensorflow/core/tf1_features_by_graph_count",
     "Marks which tf1 feature (if any) a graph contains.", "device", "context",
@@ -519,11 +465,6 @@ tsl::monitoring::CounterCell* GetTFDataElementsCounter(const string& name) {
 tsl::monitoring::GaugeCell<std::function<std::string()>>* GetTFDataModelGauge(
     const string& id) {
   return tf_data_model_gauge->GetCell(id);
-}
-
-tsl::monitoring::GaugeCell<double>* GetTFDataPipelineProcessingTimeGauge(
-    const string& id) {
-  return tf_data_pipeline_processing_time->GetCell(id);
 }
 
 void RecordTFDataBytesFetched(int64_t num_bytes) {
@@ -692,30 +633,6 @@ void RecordTFDataFilename(const string& name, const string& filename) {
   tf_data_filename_counter->GetCell(name, filename)->IncrementBy(1);
 }
 
-void RecordTFDataFileLoggerAttempts() {
-  tf_data_file_logger_attempts_counter->GetCell()->IncrementBy(1);
-}
-
-void RecordTFDataFileLoggerErrors(error::Code error_code,
-                                  const string& error_message) {
-  tf_data_file_logger_errors_counter
-      ->GetCell(error::Code_Name(error_code), error_message)
-      ->IncrementBy(1);
-}
-
-void RecordTFDataFileLoggerAttemptedNumFiles(size_t num_files) {
-  tf_data_file_logger_attempted_num_files_counter->GetCell()->IncrementBy(
-      num_files);
-}
-
-void RecordTFDataFileLoggerErrorsNumFiles(size_t num_files,
-                                          error::Code error_code,
-                                          const string& error_message) {
-  tf_data_file_logger_errors_num_files_counter
-      ->GetCell(error::Code_Name(error_code), error_message)
-      ->IncrementBy(num_files);
-}
-
 void RecordTFDataAutoShard(const string& id, data::AutoShardPolicy policy,
                            int64 num_workers, int64 num_replicas) {
   tf_data_auto_shard->GetCell(id, "policy")->Set(static_cast<int64_t>(policy));
@@ -738,16 +655,8 @@ void RecordTFDataAutotuneStoppingCriteria(const string& name) {
   tf_data_autotune_stopping_criteria_counter->GetCell(name)->IncrementBy(1);
 }
 
-void RecordTFDataDebug(const string& event) {
-  tf_data_debug->GetCell(event)->IncrementBy(1);
-}
-
 void RecordTFDataError(const string& error_type, const string& status_code) {
   tf_data_error->GetCell(error_type, status_code)->IncrementBy(1);
-}
-
-void RecordTFDataFrameworkType(const std::string& framework_type) {
-  tf_data_framework_type->GetCell(framework_type)->IncrementBy(1);
 }
 
 void RecordParseDenseFeature(int64 num_features) {
@@ -783,18 +692,6 @@ void RecordGraphOutputTensors(const size_t size) {
 void RecordTPUXlaSpmdCoresPerReplica(int64_t cores_per_replica) {
   xla_tpu_spmd_cores_per_replica->GetCell(absl::StrCat(cores_per_replica))
       ->IncrementBy(1);
-}
-
-void UpdatePersistentCacheLoadCount() {
-  static auto* persistent_cache_load_count_cell =
-      persistent_cache_load_count->GetCell();
-  persistent_cache_load_count_cell->IncrementBy(1);
-}
-
-void UpdateAotBefMlirLoadCount() {
-  static auto* aot_bef_mlir_load_count_cell =
-      aot_bef_mlir_load_count->GetCell();
-  aot_bef_mlir_load_count_cell->IncrementBy(1);
 }
 
 void UpdateGraphExecTime(const uint64 running_time_usecs) {
@@ -925,11 +822,6 @@ void RecordUnusedOutput(const string& op_name) {
   graph_unused_outputs->GetCell(op_name)->IncrementBy(1);
 }
 
-void RecordPipelineProcessingTime(const string& id,
-                                  double pipeline_processing_time_usec) {
-  GetTFDataPipelineProcessingTimeGauge(id)->Set(pipeline_processing_time_usec);
-}
-
 void IncrementTestCounter(const string& name, const string& label) {
   test_counters->GetCell(name, label)->IncrementBy(1);
 }
@@ -990,31 +882,6 @@ void IncrementTfMlirBridgeSecondPhaseCounter(
 
   mlir_second_phase_count
       ->GetCell(std::string(mlir_bridge_second_phase_metric_names->at(metric)))
-      ->IncrementBy(1);
-}
-
-void IncrementPhase2XlaCompilerCounter(Phase2XlaCompilerMetric metric) {
-  static auto* metric_names =
-      new absl::flat_hash_map<Phase2XlaCompilerMetric, absl::string_view>{
-          {Phase2XlaCompilerMetric::kCompileSingleOpXlaBuilderSuccess,
-           "kCompileSingleOpXlaBuilderSuccess"},
-          {Phase2XlaCompilerMetric::kCompileSingleOpXlaBuilderFailure,
-           "kCompileSingleOpXlaBuilderFailure"},
-          {Phase2XlaCompilerMetric::kCompileSingleOpMlirSuccess,
-           "kCompileSingleOpMlirSuccess"},
-          {Phase2XlaCompilerMetric::kCompileSingleOpMlirFailure,
-           "kCompileSingleOpMlirFailure"},
-          {Phase2XlaCompilerMetric::kCompileFunctionXlaBuilderSuccess,
-           "kCompileFunctionXlaBuilderSuccess"},
-          {Phase2XlaCompilerMetric::kCompileFunctionXlaBuilderFailure,
-           "kCompileFunctionXlaBuilderFailure"},
-          {Phase2XlaCompilerMetric::kCompileFunctionMlirSuccess,
-           "kCompileFunctionMlirSuccess"},
-          {Phase2XlaCompilerMetric::kCompileFunctionMlirFailure,
-           "kCompileFunctionMlirFailure"},
-      };
-
-  phase_2_xla_compiler_count->GetCell(std::string(metric_names->at(metric)))
       ->IncrementBy(1);
 }
 

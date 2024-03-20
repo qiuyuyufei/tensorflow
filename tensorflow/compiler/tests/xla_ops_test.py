@@ -1270,13 +1270,13 @@ class XlaOpsShapeInferenceTest(xla_test.XLATestCase, parameterized.TestCase):
     ):
       reduce_with_shapes((None, 4, 5), (3, None, 5), (13, 4, 5))
 
-  @parameterized.product(
-      algorithm=[random_ops_util.Algorithm.THREEFRY,
-                 random_ops_util.Algorithm.PHILOX,
-                 random_ops_util.Algorithm.AUTO_SELECT],
-      dtype=[np.uint8, np.uint64],
+  @parameterized.parameters(
+      random_ops_util.Algorithm.THREEFRY,
+      random_ops_util.Algorithm.PHILOX,
+      random_ops_util.Algorithm.AUTO_SELECT,
   )
-  def testRngBitGenerator(self, algorithm, dtype):
+  def testRngBitGenerator(self, algorithm):
+    dtype = np.uint64
     initial_state = array_ops.placeholder(np.uint64, shape=(2,))
     shape = (2, 3)
     res = xla.rng_bit_generator(algorithm, initial_state, shape, dtype=dtype)

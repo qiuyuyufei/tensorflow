@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ using std::string;
 namespace xla {
 namespace tools {
 
-absl::StatusOr<std::string> ToJson(const tsl::protobuf::Message& message) {
+StatusOr<std::string> ToJson(const tsl::protobuf::Message& message) {
   std::string json_output;
   tsl::protobuf::util::JsonPrintOptions json_options;
   json_options.add_whitespace = true;
@@ -50,8 +50,8 @@ absl::StatusOr<std::string> ToJson(const tsl::protobuf::Message& message) {
   auto status = tsl::protobuf::util::MessageToJsonString(message, &json_output,
                                                          json_options);
   if (!status.ok()) {
-    return Internal("MessageToJsonString failed: %s",
-                    std::string{status.message()});
+    return InternalError("MessageToJsonString failed: %s",
+                         std::string{status.message()});
   }
   return json_output;
 }

@@ -25,7 +25,6 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/arg_ret_placement.h"
 #include "tensorflow/core/common_runtime/graph_constructor.h"
 #include "tensorflow/core/framework/function.h"
-#include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/graph/graph_partition.h"
@@ -68,7 +67,6 @@ Status PartitionFunctionGraph(
   };
   partition_options.control_flow_added = false;
   partition_options.get_tensor_name_attr = get_tensor_name_attr;
-  partition_options.can_make_destructive_changes = true;
 
   return Partition(partition_options, graph, partitions);
 }
@@ -110,7 +108,7 @@ Status MakeSendRecvDependencyExplicit(Graph* graph) {
     }
     graph->AddControlEdge(send_recv_pair.send_node, send_recv_pair.recv_node);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
@@ -124,14 +122,12 @@ Status PartitionFunctionGraph(
       PartitionFunctionGraph(device_set, graph.get(), &partitions,
                              /*node_to_loc=*/nullptr, get_tensor_name_attr));
 
-  const OpRegistryInterface* default_registry =
-      graph->flib_def().default_registry();
-  graph.reset();
   for (auto& partition : partitions) {
     const string& device = partition.first;
     GraphDef& graph_def = partition.second;
     // Each partition gets a new graph.
-    auto subgraph = std::make_unique<Graph>(default_registry);
+    std::unique_ptr<Graph> subgraph(
+        new Graph(graph->flib_def().default_registry()));
     GraphConstructorOptions opts;
     opts.allow_internal_ops = true;
     opts.expect_device_spec = true;
@@ -140,7 +136,7 @@ Status PartitionFunctionGraph(
     subgraphs->emplace(device, std::move(subgraph));
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 StatusOr<std::unique_ptr<Graph>> InsertTransferOps(
@@ -263,7 +259,7 @@ Status UpdateArgAndRetvalMetadata(
         ret_nodes, ints_on_device, *ret_alloc_attrs));
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 string FunctionNameGenerator::GetName() {

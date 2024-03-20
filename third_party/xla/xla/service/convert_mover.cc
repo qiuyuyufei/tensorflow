@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,11 +30,11 @@ static bool IsLosslesslyConvertibleTo(const Literal& literal,
 
   // The only reason Convert() should fail is if we don't support converting
   // from x to y, which indeed means it's not losslessly-convertible.
-  absl::StatusOr<Literal> converted1 = literal.Convert(dst_ty);
+  StatusOr<Literal> converted1 = literal.Convert(dst_ty);
   if (!converted1.ok()) {
     return false;
   }
-  absl::StatusOr<Literal> converted2 = converted1->Convert(orig_ty);
+  StatusOr<Literal> converted2 = converted1->Convert(orig_ty);
   if (!converted2.ok()) {
     return false;
   }
@@ -64,7 +64,7 @@ bool OpCommutesWithConvert(HloOpcode opcode) {
   }
 }
 
-absl::StatusOr<bool> MoveConvertPrecisionOps(HloComputation* comp) {
+StatusOr<bool> MoveConvertPrecisionOps(HloComputation* comp) {
   bool changed = false;
 
   // Move increase_precision "down" the graph:
@@ -196,7 +196,7 @@ absl::StatusOr<bool> MoveConvertPrecisionOps(HloComputation* comp) {
 
 }  // anonymous namespace
 
-absl::StatusOr<bool> ConvertMover::Run(
+StatusOr<bool> ConvertMover::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

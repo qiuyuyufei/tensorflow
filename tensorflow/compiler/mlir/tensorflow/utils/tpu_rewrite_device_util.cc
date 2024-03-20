@@ -37,7 +37,6 @@ limitations under the License.
 #include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "mlir/IR/TypeUtilities.h"  // from @llvm-project
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
-#include "tensorflow/compiler/jit/flags.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_device.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_structs.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.h"
@@ -190,22 +189,10 @@ std::string GetTPUCompilationDevice(ParsedDevice system_device) {
 }
 
 // Find the host CPU device for a given TPU device with `DEVICE_CPU` as its
-// type. If multiple local cpu devices are disabled, always assign id 0. If
-// set, use the same id as the tpu device.
-StatusOr<std::string> GetCPUHostDeviceForTPUDevice(ParsedDevice tpu_device,
-                                                   ParsedDevices devices) {
+// type and `id` 0.
+std::string GetCPUHostDeviceForTPUDevice(ParsedDevice tpu_device) {
   tpu_device.type = DEVICE_CPU;
-  bool enable_multiple_local_cpu_devices =
-      tensorflow::GetMlirCommonFlags()
-          ->tf_mlir_enable_multiple_local_cpu_devices;
-  if (!enable_multiple_local_cpu_devices) {
-    tpu_device.id = 0;
-  }
-  if (FindMatchingDevices(devices, tpu_device).empty()) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "Can't find device: ", DeviceNameUtils::ParsedNameToString(tpu_device),
-        " in the devices list."));
-  }
+  tpu_device.id = 0;
   return DeviceNameUtils::ParsedNameToString(tpu_device);
 }
 
@@ -216,8 +203,7 @@ StatusOr<std::string> GetCPUHostDeviceForTPUDevice(ParsedDevice tpu_device,
 // number of TPU devices available, and `num_cores_per_replica` must be 1.
 StatusOr<TPUDevicesAndHosts> GetFullMeshTPUExecutionDeviceAssignment(
     int num_replicas, int num_cores_per_replica,
-    llvm::ArrayRef<llvm::SmallVector<ParsedDevice, 8>> tpu_devices,
-    ParsedDevices devices) {
+    llvm::ArrayRef<llvm::SmallVector<ParsedDevice, 8>> tpu_devices) {
   const int num_tasks = tpu_devices.size();
   const int num_tpus_per_task = tpu_devices[0].size();
   const int num_tpu_devices = num_tasks * num_tpus_per_task;
@@ -240,7 +226,7 @@ StatusOr<TPUDevicesAndHosts> GetFullMeshTPUExecutionDeviceAssignment(
     const auto& tpu_device = tpu_devices[task][device];
     devices_and_hosts.push_back({TPUDeviceAndHost(
         /*device=*/tensorflow::DeviceNameUtils::ParsedNameToString(tpu_device),
-        /*host=*/*GetCPUHostDeviceForTPUDevice(tpu_device, devices))});
+        /*host=*/GetCPUHostDeviceForTPUDevice(tpu_device))});
   }
 
   return devices_and_hosts;
@@ -379,7 +365,7 @@ StatusOr<std::pair<TPUDevicesAndHosts, xla::DeviceAssignmentProto>>
 GetGeneralTPUExecutionDeviceAssignment(
     int num_replicas, int num_cores_per_replica,
     llvm::ArrayRef<llvm::SmallVector<ParsedDevice, 8>> tpu_devices,
-    ParsedDevices devices, llvm::StringRef topology_attr,
+    llvm::StringRef topology_attr,
     llvm::ArrayRef<int64_t> device_assignment_attr) {
   const int num_tasks = tpu_devices.size();
   const int num_tpus_per_task = tpu_devices[0].size();
@@ -445,7 +431,7 @@ GetGeneralTPUExecutionDeviceAssignment(
       auto& device_and_host = devices_and_hosts[replica][logical_core];
       const auto& tpu_device = tpu_devices[task][device];
       device_and_host.device = DeviceNameUtils::ParsedNameToString(tpu_device);
-      device_and_host.host = *GetCPUHostDeviceForTPUDevice(tpu_device, devices);
+      device_and_host.host = GetCPUHostDeviceForTPUDevice(tpu_device);
     }
   }
 
@@ -640,10 +626,9 @@ StatusOr<TPUDeviceAssignment> GetTPUCompilationAndExecutionDevices(
           absl::StrCat("'", kDeviceAssignmentAttr, "' must not be set when '",
                        kTopologyAttr, "' is not set"));
 
-    TF_ASSIGN_OR_RETURN(
-        auto execution_devices,
-        GetFullMeshTPUExecutionDeviceAssignment(
-            num_replicas, num_cores_per_replica, tpu_devices, devices));
+    TF_ASSIGN_OR_RETURN(auto execution_devices,
+                        GetFullMeshTPUExecutionDeviceAssignment(
+                            num_replicas, num_cores_per_replica, tpu_devices));
     return TPUDeviceAssignment(compilation_device,
                                std::move(execution_devices));
   }
@@ -651,7 +636,7 @@ StatusOr<TPUDeviceAssignment> GetTPUCompilationAndExecutionDevices(
   TF_ASSIGN_OR_RETURN(auto devices_and_ids,
                       GetGeneralTPUExecutionDeviceAssignment(
                           num_replicas, num_cores_per_replica, tpu_devices,
-                          devices, topology_attr, device_assignment_attr));
+                          topology_attr, device_assignment_attr));
   return TPUDeviceAssignment(compilation_device,
                              std::move(devices_and_ids.first),
                              std::move(devices_and_ids.second));

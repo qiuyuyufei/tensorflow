@@ -98,7 +98,7 @@ class ListDiffOp : public XlaOpKernel {
                        xla::ConstantR1<Tval>(context->builder(), val_output));
     context->SetOutput(1,
                        xla::ConstantR1<Tidx>(context->builder(), idx_output));
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   template <typename Tval>

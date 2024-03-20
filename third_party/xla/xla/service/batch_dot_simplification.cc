@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,20 +16,13 @@ limitations under the License.
 #include "xla/service/batch_dot_simplification.h"
 
 #include "absl/algorithm/container.h"
-#include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_computation.h"
-#include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/hlo_creation_utils.h"
 
 namespace xla {
-absl::StatusOr<bool>
+StatusOr<bool>
 BatchDotSimplification::ElideDegenerateBatchDimensionFromBatchDot(
     HloInstruction* batch_dot) {
-  // Sparse dots are not supported on CPU.
-  if (Cast<HloDotInstruction>(batch_dot)->sparse_operands()) {
-    return false;
-  }
-
   // This pass assumes the lhs and rhs batch dimensions are equal and strictly
   // ascending.
   const auto& is_iota = [](absl::Span<const int64_t> dims) {
@@ -115,7 +108,7 @@ absl::string_view BatchDotSimplification::name() const {
   return "batch-dot-simplification";
 }
 
-absl::StatusOr<bool> BatchDotSimplification::Run(
+StatusOr<bool> BatchDotSimplification::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

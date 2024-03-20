@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,16 +24,8 @@ limitations under the License.
 
 namespace xla {
 
-std::string OpMetadataToString(const OpMetadata& metadata, bool only_op_name) {
+std::string OpMetadataToString(const OpMetadata& metadata) {
   std::vector<std::string> result;
-  if (only_op_name) {
-    if (!metadata.op_name().empty()) {
-      return absl::StrCat("op_name=\"", absl::CEscape(metadata.op_name()),
-                          "\"");
-    } else {
-      return "";
-    }
-  }
   if (!metadata.op_type().empty()) {
     result.push_back(
         absl::StrCat("op_type=\"", absl::CEscape(metadata.op_type()), "\""));

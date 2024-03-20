@@ -135,17 +135,22 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
   size_t bytes = std::min(curr_region_allocation_bytes_, available_bytes);
   size_t bytes_received;
   void* mem_addr = sub_allocator_->Alloc(alignment, bytes, &bytes_received);
-  if (mem_addr == nullptr) {
+  if (mem_addr == nullptr && !started_backpedal_) {
+    // Only backpedal once.
+    started_backpedal_ = true;
+
     static constexpr float kBackpedalFactor = 0.9;
 
     // Try allocating less memory.
     while (mem_addr == nullptr) {
       bytes = RoundedBytes(bytes * kBackpedalFactor);
-      if (bytes < rounded_bytes) {
-        return false;
-      }
+      if (bytes < rounded_bytes) break;
       mem_addr = sub_allocator_->Alloc(alignment, bytes, &bytes_received);
     }
+  }
+
+  if (mem_addr == nullptr) {
+    return false;
   }
 
   if (!increased_allocation) {
@@ -306,8 +311,6 @@ void* BFCAllocator::AllocateRaw(size_t unused_alignment, size_t num_bytes,
     }
   }();
   VLOG(3) << "AllocateRaw " << Name() << "  " << num_bytes << " " << result;
-  VLOG(4) << "[mem-debug] AllocateRaw," << Name() << "," << num_bytes << ","
-          << result << "," << tsl::CurrentStackTrace();
   return result;
 }
 
@@ -681,9 +684,6 @@ void BFCAllocator::SplitChunk(BFCAllocator::ChunkHandle h, size_t num_bytes) {
 void BFCAllocator::DeallocateRaw(void* ptr) {
   VLOG(3) << "DeallocateRaw " << Name() << " "
           << (ptr ? RequestedSize(ptr) : 0);
-  VLOG(4) << "[mem-debug] DeallocateRaw," << Name() << ","
-          << (ptr ? RequestedSize(ptr) : 0) << "," << ptr << ","
-          << tsl::CurrentStackTrace();
   DeallocateRawInternal(ptr);
   retry_helper_.NotifyDealloc();
 }

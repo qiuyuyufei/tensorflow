@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,45 +13,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <array>
-#include <cstdint>
-#include <memory>
 #include <string>
 #include <tuple>
 #include <utility>
-#include <variant>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/functional/any_invocable.h"
-#include "absl/status/statusor.h"
+#include <gtest/gtest.h>
 #include "absl/strings/str_replace.h"
-#include "absl/strings/string_view.h"
-#include "absl/types/span.h"
-#include "xla/error_spec.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_module.h"
-#include "xla/hlo/ir/hlo_opcode.h"
-#include "xla/service/buffer_assignment.h"
-#include "xla/service/executable.h"
 #include "xla/service/gpu/gemm_rewriter.h"
 #include "xla/service/gpu/gpu_executable.h"
 #include "xla/service/gpu/tests/gpu_codegen_test.h"
-#include "xla/service/gpu/variant_visitor.h"
 #include "xla/service/hlo_module_config.h"
 #include "xla/service/pattern_matcher.h"
 #include "xla/service/pattern_matcher_gmock.h"
-#include "xla/stream_executor/device_description.h"
-#include "xla/test.h"
+#include "xla/statusor.h"
 #include "xla/tests/filecheck.h"
 #include "xla/xla.pb.h"
 #include "tsl/lib/core/status_test_util.h"
-#include "tsl/platform/statusor.h"
 
 #if GOOGLE_CUDA
 #include "third_party/gpus/cuda/include/cuda.h"
-#elif TENSORFLOW_USE_ROCM
-#include "rocm/rocm_config.h"
 #endif
 
 namespace xla {
@@ -62,98 +45,16 @@ namespace {
 namespace m = ::xla::match;
 
 class GemmRewriteTest : public GpuCodegenTest {
-  const auto& device_desc() {
-    return backend().default_stream_executor()->GetDeviceDescription();
-  }
-
  public:
-  const se::GpuComputeCapability& GpuComputeComp() {
-    return device_desc().gpu_compute_capability();
-  }
-  se::GpuComputeCapability CudaHopperOrRocmMI300() {
-    return std::visit(
-        VariantVisitor{[](const se::CudaComputeCapability&) {
-                         return se::GpuComputeCapability{
-                             se::CudaComputeCapability{
-                                 se::CudaComputeCapability::HOPPER, 0}};
-                       },
-                       [](const se::RocmComputeCapability&) {
-                         return se::GpuComputeCapability{
-                             se::RocmComputeCapability{"gfx942"}};
-                       }},
-        GpuComputeComp());
-  }
-
-  enum class Switch : uint32_t {
-    False,  // check always fails
-    True,   // check always succeeds
-  };
-  // Switch based on GPU platform only: true/false for both
-  bool CudaOrRocmCheck(Switch cuda_set, Switch rocm_set) {
-    return CudaOrRocmCheck(
-        [cuda_set](const se::CudaComputeCapability&) {
-          return cuda_set == Switch::True;
-        },
-        [rocm_set](const se::RocmComputeCapability&) {
-          return rocm_set == Switch::True;
-        });
-  }
-  // Major version check for CUDA and true/false for ROCM
-  bool CudaOrRocmCheck(int cuda_major, Switch rocm_set) {
-    return CudaOrRocmCheck(cuda_major, 0, rocm_set);
-  }
-  // Full version check for CUDA and true/false for ROCM
-  bool CudaOrRocmCheck(int cuda_major, int cuda_minor, Switch rocm_set) {
-    return CudaOrRocmCheck(cuda_major, cuda_minor,
-                           [rocm_set](const se::RocmComputeCapability&) {
-                             return rocm_set == Switch::True;
-                           });
-  }
-  // Full version check for CUDA and generic version for ROCM
-  bool CudaOrRocmCheck(
-      int cuda_major, int cuda_minor,
-      absl::AnyInvocable<bool(const se::RocmComputeCapability&)> rocm_fun) {
-    return CudaOrRocmCheck(
-        [cuda_major, cuda_minor](const se::CudaComputeCapability& cc) {
-          return cc.IsAtLeast(cuda_major, cuda_minor);
-        },
-        std::move(rocm_fun));
-  }
-  // The most generic version for both platforms
-  bool CudaOrRocmCheck(
-      absl::AnyInvocable<bool(const se::CudaComputeCapability&)> cuda_fun,
-      absl::AnyInvocable<bool(const se::RocmComputeCapability&)> rocm_fun) {
-    return std::visit(VariantVisitor{std::move(cuda_fun), std::move(rocm_fun)},
-                      GpuComputeComp());
-  }
-
-  DebugOptions GetDebugOptionsForTest() override {
-    DebugOptions debug_options = GpuCodegenTest::GetDebugOptionsForTest();
-    // These tests test the cuBLAS rewriter so we have to make sure that we use
-    // cuBLAS for them.
-    debug_options.set_xla_gpu_enable_triton_gemm(false);
-    debug_options.set_xla_gpu_gemm_rewrite_size_threshold(0);
-    return debug_options;
-  }
-
-  bool SkipGpuBlasLtTest() {
-    return CudaOrRocmCheck(
-        [](const se::CudaComputeCapability&) {  // never skip gpublas-lt tests
-                                                // for CUDA
-          return false;
-        },
-        [this](const se::RocmComputeCapability& rocm) {
-          bool blaslt = GetDebugOptionsForTest().xla_gpu_enable_cublaslt();
-          return (blaslt && !rocm.has_hipblaslt());
-        });
+  se::CudaComputeCapability GetCudaComputeCapability() {
+    return backend()
+        .default_stream_executor()
+        ->GetDeviceDescription()
+        .cuda_compute_capability();
   }
 };
 
 TEST_F(GemmRewriteTest, CheckCustomCallTarget) {
-  if (SkipGpuBlasLtTest()) {
-    GTEST_SKIP() << "BlasLt is not supported on this GPU architecture";
-  }
-
   const char* hlo_text = R"(
 HloModule SimpleGemm
 
@@ -164,6 +65,7 @@ ENTRY AddDotsFunc {
 }
 
 )";
+
   DebugOptions debug_options = GetDebugOptionsForTest();
   if (debug_options.xla_gpu_enable_cublaslt()) {
     MatchOptimizedHlo(hlo_text,
@@ -174,9 +76,9 @@ ENTRY AddDotsFunc {
   }
 }
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#if GOOGLE_CUDA
 TEST_F(GemmRewriteTest, TestBatchedAutotuning) {
-  if (CudaOrRocmCheck(se::CudaComputeCapability::AMPERE, Switch::False)) {
+  if (GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::AMPERE)) {
     GTEST_SKIP()
         << "There is no autotuning starting with the Nvidia Ampere generation";
   }
@@ -199,10 +101,6 @@ ENTRY %test {
 #endif
 
 TEST_F(GemmRewriteTest, SimpleRewriteDeterministic) {
-  if (SkipGpuBlasLtTest()) {
-    GTEST_SKIP() << "BlasLt is not supported on this GPU architecture";
-  }
-
   const char* hlo_text = R"(
 HloModule SimpleGemm
 
@@ -236,9 +134,8 @@ ENTRY AddDotsFunc {
           *get_module(), backend().default_stream_executor(),
           backend().default_stream_executor()->GetAllocator()));
 
-  absl::StatusOr<bool> filecheck_result =
-      RunFileCheck(optimized_module->ToString(),
-                   R"(
+  StatusOr<bool> filecheck_result = RunFileCheck(optimized_module->ToString(),
+                                                 R"(
 ; CHECK:    custom_call_target="__cublas${{(lt\$matmul|gemm)}}"
     )");
   TF_ASSERT_OK(filecheck_result.status());
@@ -257,32 +154,18 @@ ENTRY bf16gemm {
 }
   )";
 
-  if (CudaOrRocmCheck(9, 0, Switch::False)) {
-    // The Hopper optimized HLO has a BF16 multiply instruction since Hopper has
-    // native BF16 multiply support.
-    MatchOptimizedHlo(hlo_text, R"(
-  ; CHECK:  [[P0:%[^ ]+]] = bf16[3]{0} parameter(0)
-  ; CHECK:  [[P1:%[^ ]+]] = bf16[3]{0} parameter(1)
-  ; CHECK:  [[INSTR_2:%[^ ]+]] = bf16[3]{0} multiply([[P0]], [[P1]])
-  ; CHECK:  [[INSTR_3:%[^ ]+]] = f32[3]{0} convert([[INSTR_2]])
-  ; CHECK:  [[INSTR_4:%[^ ]+]] = f32[] constant(0)
-  ; CHECK:  [[INSTR_5:%[^ ]+]] = f32[] reduce([[INSTR_3]], [[INSTR_4]]), dimensions={0}, to_apply=[[INSTR_6:%[^ ]+]]
-  ; CHECK:  ROOT [[INSTR_7:%[^ ]+]] = bf16[] convert([[INSTR_5]])
-    )");
-  } else {
-    MatchOptimizedHlo(hlo_text, R"(
-  ; CHECK:  [[P1:%[^ ]+]] = bf16[3]{0} parameter(1)
-  ; CHECK:  [[INSTR_1:%[^ ]+]] = f32[3]{0} convert([[P1]])
-  ; CHECK:  [[P0:%[^ ]+]] = bf16[3]{0} parameter(0)
-  ; CHECK:  [[INSTR_3:%[^ ]+]] = f32[3]{0} convert([[P0]])
-  ; CHECK:  [[INSTR_4:%[^ ]+]] = f32[3]{0} multiply([[INSTR_1]], [[INSTR_3]])
-  ; CHECK:  [[INSTR_5:%[^ ]+]] = f32[] constant(0)
-  ; CHECK:  [[INSTR_6:%[^ ]+]] = f32[] reduce([[INSTR_4]], [[INSTR_5]]), dimensions={0}, to_apply=[[INSTR_7:%[^ ]+]]
-  ; CHECK:  ROOT [[INSTR_8:%[^ ]+]] = bf16[] convert([[INSTR_6]])
-    )");
-  }
+  MatchOptimizedHlo(hlo_text, R"(
+; CHECK:  [[P1:%[^ ]+]] = bf16[3]{0} parameter(1)
+; CHECK:  [[INSTR_1:%[^ ]+]] = f32[3]{0} convert([[P1]])
+; CHECK:  [[P0:%[^ ]+]] = bf16[3]{0} parameter(0)
+; CHECK:  [[INSTR_3:%[^ ]+]] = f32[3]{0} convert([[P0]])
+; CHECK:  [[INSTR_4:%[^ ]+]] = f32[3]{0} multiply([[INSTR_1]], [[INSTR_3]])
+; CHECK:  [[INSTR_5:%[^ ]+]] = f32[] constant(0)
+; CHECK:  [[INSTR_6:%[^ ]+]] = f32[] reduce([[INSTR_4]], [[INSTR_5]]), dimensions={0}, to_apply=[[INSTR_7:%[^ ]+]]
+; CHECK:  ROOT [[INSTR_8:%[^ ]+]] = bf16[] convert([[INSTR_6]])
+  )");
 
-  EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-4, 1e-4}));
+  EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
 }
 
 TEST_F(GemmRewriteTest, BF16Transpose) {
@@ -303,7 +186,7 @@ ENTRY broadcast {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
 }
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#if GOOGLE_CUDA
 // A test fixture class for tests which should have similar results with legacy
 // cublas and cublasLt
 class ParameterizedGemmRewriteTest
@@ -331,13 +214,6 @@ class ParameterizedGemmRewriteTest
   }
 
  protected:
-  void SetUp() override {
-    if (SkipGpuBlasLtTest()) {
-      GTEST_SKIP() << "BlasLt is not supported on this GPU architecture";
-    }
-  }
-
- protected:
   absl::flat_hash_map<absl::string_view, absl::string_view> replacements_;
 
  private:
@@ -360,10 +236,10 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,4]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -398,10 +274,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,3], {{.*}}: f32[3,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,3], y: f32[3,4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,4]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -438,12 +314,12 @@ ENTRY AddDotsFunc {
                     R"(
 ; CHECK-NOT:     copy
 ;
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[3,4,2], {{.*}}: f32[3,4,5]) -> f32[2,5] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[3,4,2], y: f32[3,4,5]) -> f32[2,5] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[3,4,2]{2,1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[3,4,5]{2,1,0} parameter(1)
 ; CHECK-DAG:     [[BITCAST0:%[^ ]+]] = f32[2,12]{0,1} bitcast([[P0]])
 ; CHECK-DAG:     [[BITCAST1:%[^ ]+]] = f32[12,5]{1,0} bitcast([[P1]])
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[BITCAST0]], [[BITCAST1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,5]{1,0} custom-call([[BITCAST0]], [[BITCAST1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -479,10 +355,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[3,2], {{.*}}: f32[3,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[3,2], y: f32[3,4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[3,2]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,4]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -518,10 +394,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[5,3,2], {{.*}}: f32[5,3,4]) -> f32[5,2,4] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[5,3,2], y: f32[5,3,4]) -> f32[5,2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[5,3,2]{2,1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[5,3,4]{2,1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[5,2,4]{2,1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -557,10 +433,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{2.5e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,5,3], {{.*}}: f32[5,3,4]) -> f32[5,2,4] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,5,3], y: f32[5,3,4]) -> f32[5,2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,5,3]{2,1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[5,3,4]{2,1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[5,2,4]{2,1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -596,11 +472,11 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{2.5e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[3,2,5], {{.*}}: f32[5,3,4]) -> f32[5,2,4] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[3,2,5], y: f32[5,3,4]) -> f32[5,2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[3,2,5]{2,1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[5,3,4]{2,1,0} parameter(1)
 ; CHECK-DAG:     [[FUSION:%[^ ]+]] = f32[5,2,3]{2,1,0} transpose([[P0]])
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[FUSION]], [[P1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[5,2,4]{2,1,0} custom-call([[FUSION]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -637,12 +513,12 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[20000,4,3,2], {{.*}}: f32[20000,4,3,4]) -> f32[20000,4,2,4] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[20000,4,3,2], y: f32[20000,4,3,4]) -> f32[20000,4,2,4] {
 ; CHECK:    [[P0:%[^ ]+]] = f32[20000,4,3,2]{3,2,1,0} parameter(0)
 ; CHECK:    [[BC0:%[^ ]+]] = f32[80000,3,2]{2,1,0} bitcast([[P0]])
 ; CHECK:    [[P1:%[^ ]+]] = f32[20000,4,3,4]{3,2,1,0} parameter(1)
 ; CHECK:    [[BC1:%[^ ]+]] = f32[80000,3,4]{2,1,0} bitcast([[P1]])
-; CHECK:    [[GEMM:%[^ ]+]] = (f32[80000,2,4]{2,1,0}, s8[{{[0-9]+}}]{0}) custom-call([[BC0]], [[BC1]]),
+; CHECK:    [[OUT:%[^ ]+]] = f32[80000,2,4]{2,1,0} custom-call([[BC0]], [[BC1]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -658,7 +534,6 @@ ENTRY AddDotsFunc {
 ; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
 ; CHECK-DAG:         }
 ; CHECK:           }
-; CHECK:   [[OUT:%[^ ]+]] = f32[80000,2,4]{2,1,0} get-tuple-element([[GEMM]]), index=0
 ; CHECK:   ROOT {{[^ ]+}} = f32[20000,4,2,4]{3,2,1,0} bitcast([[OUT]])
 )");
 }
@@ -679,10 +554,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,3], {{.*}}: f32[3,4]) -> f32[4,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,3], y: f32[3,4]) -> f32[4,2] {
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P1]], [[P0]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[4,2]{1,0} custom-call([[P1]], [[P0]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -718,10 +593,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{2.5e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[5,2,3], {{.*}}: f32[5,3,4]) -> f32[2,5,4] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[5,2,3], y: f32[5,3,4]) -> f32[2,5,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[5,2,3]{2,1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[5,3,4]{2,1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    [[GEMM:%[^ ]+]] = f32[5,2,4]{2,0,1} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -738,7 +613,7 @@ ENTRY AddDotsFunc {
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
-; CHECK:         ROOT [[OUT:%[^ ]+]] = f32[2,5,4]{2,1,0} bitcast
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,5,4]{2,1,0} bitcast([[GEMM]])
 )");
 }
 
@@ -758,10 +633,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{2.5e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[5,2,3], {{.*}}: f32[5,3,4]) -> f32[2,4,5] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[5,2,3], y: f32[5,3,4]) -> f32[2,4,5] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[5,2,3]{2,1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[5,3,4]{2,1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    [[GEMM:%[^ ]+]] = f32[5,2,4]{2,1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -778,7 +653,7 @@ ENTRY AddDotsFunc {
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
-; CHECK:         ROOT [[OUT:%[^ ]+]] = f32[2,4,5]{2,1,0} [[OP:[^ ]+]]
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,4,5]{2,1,0} [[OP:[^ ]+]]([[GEMM]])
 )");
 }
 
@@ -800,10 +675,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,2], {{.*}}: f32[2,2]) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,2], y: f32[2,2]) -> f32[2,2] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,2]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[2,2]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,2]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":3
@@ -824,13 +699,6 @@ ENTRY AddDotsFunc {
 }
 
 TEST_P(ParameterizedGemmRewriteTest, ComplexAlphaSimpleRewrite) {
-  if (CudaOrRocmCheck(
-          [](se::CudaComputeCapability) { return false; },
-          [this](se::RocmComputeCapability rocm) {
-            return GetDebugOptionsForTest().xla_gpu_enable_cublaslt();
-          })) {
-    GTEST_SKIP() << "TODO: Unsupported C64 gpublas-lt datatype on ROCM";
-  }
   const char* hlo_text = R"(
 HloModule ComplexAlphaSimpleRewrite
 
@@ -848,10 +716,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-4, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: c64[2,2], {{.*}}: c64[2,2]) -> c64[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: c64[2,2], y: c64[2,2]) -> c64[2,2] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = c64[2,2]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = c64[2,2]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = c64[2,2]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":3
@@ -890,7 +758,7 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK:    {{[^ ]+}} = {{.*}} custom-call({{[^,]+}}, {{[^)]+}}),
+; CHECK:    {{[^ ]+}} = f32[2,2]{1,0} custom-call({{[^,]+}}, {{[^)]+}}),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -927,10 +795,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,2], {{.*}}: f32[2,2]) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,2], y: f32[2,2]) -> f32[2,2] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,2]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[2,2]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    [[OUT:%[^ ]+]] = f32[2,2]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -962,16 +830,16 @@ ENTRY bf16gemm {
   )";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
 
-  if (CudaOrRocmCheck(se::CudaComputeCapability::AMPERE, Switch::True)) {
+  if (GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::AMPERE)) {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} custom-call(bf16[16,8]{1,0} {{.*}}, bf16[8,8]{1,0} {{.*}}), custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
+; CHECK: bf16[16,8]{1,0} custom-call(bf16[16,8]{1,0} {{.*}}, bf16[8,8]{1,0} {{.*}}), custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
   )",
                       /*print_operand_shape=*/true);
   } else {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} custom-call(bf16[12,4]{1,0} [[P0:%[^ ]+]], bf16[4,8]{1,0} [[P1:%[^ ]+]]), custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
+; CHECK: bf16[12,8]{1,0} custom-call(bf16[12,4]{1,0} [[P0:%[^ ]+]], bf16[4,8]{1,0} [[P1:%[^ ]+]]), custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
   )",
                       /*print_operand_shape=*/true);
   }
@@ -990,22 +858,16 @@ ENTRY bf16gemm {
   )";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
 
-  if (CudaOrRocmCheck(se::CudaComputeCapability::AMPERE, Switch::True)) {
+  if (GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::AMPERE)) {
     MatchOptimizedHlo(hlo_text,
                       R"(
-    ; CHECK: {{.*}} custom-call(bf16[3,8,8]{2,1,0} {{.*}}, bf16[3,8,8]{2,1,0} {{.*}}), custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
-    )",
-                      /*print_operand_shape=*/true);
-  } else if (GetParam()) {
-    MatchOptimizedHlo(hlo_text,
-                      R"(
-    ; CHECK: ROOT [[OUT:%[^ ]+]] = bf16[3,4,2]{2,1,0} custom-call(bf16[3,3,4]{2,1,0} [[A:%[^ ]+]], bf16[3,3,2]{2,1,0} [[B:%[^ ]+]]), custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
+    ; CHECK: bf16[3,8,8]{2,1,0} custom-call(bf16[3,8,8]{2,1,0} {{.*}}, bf16[3,8,8]{2,1,0} {{.*}}), custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
     )",
                       /*print_operand_shape=*/true);
   } else {
     MatchOptimizedHlo(hlo_text,
                       R"(
-    ; CHECK: {{.*}} custom-call(bf16[3,3,4]{2,1,0} [[A:%[^ ]+]], bf16[3,3,2]{2,1,0} [[B:%[^ ]+]]), custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
+    ; CHECK: ROOT [[OUT:%[^ ]+]] = bf16[3,4,2]{2,1,0} custom-call(bf16[3,3,4]{2,1,0} [[A:%[^ ]+]], bf16[3,3,2]{2,1,0} [[B:%[^ ]+]]), custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
     )",
                       /*print_operand_shape=*/true);
   }
@@ -1023,16 +885,16 @@ ENTRY int8gemm {
   )";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
 
-  if (CudaOrRocmCheck(se::CudaComputeCapability::VOLTA, Switch::True)) {
+  if (GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::VOLTA)) {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} custom-call(s8[12,4]{1,0} [[A:%[^ ]+]], s8[4,8]{0,1} [[B:%[^ ]+]]), custom_call_target="__cublas$gemm"
+; CHECK: s32[12,8]{1,0} custom-call(s8[12,4]{1,0} [[A:%[^ ]+]], s8[4,8]{0,1} [[B:%[^ ]+]]), custom_call_target="__cublas$gemm"
   )",
                       /*print_operand_shape=*/true);
   } else {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} dot(s32[12,4]{1,0} [[A:%[^ ]+]], s32[4,8]{1,0} [[B:%[^ ]+]]), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+; CHECK: s32[12,8]{1,0} dot(s32[12,4]{1,0} [[A:%[^ ]+]], s32[4,8]{1,0} [[B:%[^ ]+]]), lhs_contracting_dims={1}, rhs_contracting_dims={0}
 
   )",
                       /*print_operand_shape=*/true);
@@ -1040,10 +902,6 @@ ENTRY int8gemm {
 }
 
 TEST_F(GemmRewriteTest, Int8GemmRankGreaterThanTwo) {
-  if (CudaOrRocmCheck(Switch::False, Switch::True)) {
-    GTEST_SKIP() << "DoBlasGemmWithAlgorithm is not yet implemented on ROCm";
-  }
-
   const char* hlo_text = R"(
 HloModule int8gemm
 
@@ -1057,10 +915,11 @@ ENTRY main.4 {
 
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
 
-  if (CudaOrRocmCheck(se::CudaComputeCapability::VOLTA, Switch::True)) {
+  if (GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::VOLTA)) {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: [[GEMM:%[^ ]+]] = (s32[8,4]{1,0}, s8[{{[0-9]+}}]{0}) custom-call(s8[8,4]{1,0} %{{.*}}, s8[4,4]{0,1} %{{.*}}), custom_call_target="__cublas$gemm",
+; CHECK %custom-call = s32[8,4]{1,0} custom-call(s8[8,4]{1,0} %fusion.1, s8[4,4]{0,1} %bitcast.13), custom_call_target="__cublas$gemm", backend_config={"selected_algorithm":"0","alpha_real":1,"beta":0,"dot_dimension_numbers":{"lhs_contracting_dimensions":["1"],"rhs_contracting_dimensions":["0"],"lhs_batch_dimensions":[],"rhs_batch_dimensions":[]},"alpha_imag":0,"precision_config":{"operand_precision":["DEFAULT","DEFAULT"]},"epilogue":"DEFAULT"}
+; CHECK: ROOT %bitcast.1 = s32[1,8,4]{2,1,0} bitcast(s32[8,4]{1,0} %custom-call)
   )",
                       /*print_operand_shape=*/true);
   }
@@ -1081,10 +940,10 @@ ENTRY int8gemm {
   )";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
 
-  if (CudaOrRocmCheck(se::CudaComputeCapability::VOLTA, Switch::True)) {
+  if (GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::VOLTA)) {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} custom-call(s8[12,4]{1,0} [[A:%[^ ]+]], s8[4,8]{0,1} [[B:%[^ ]+]]),
+; CHECK: s32[12,8]{1,0} custom-call(s8[12,4]{1,0} [[A:%[^ ]+]], s8[4,8]{0,1} [[B:%[^ ]+]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
 ; CHECK:           backend_config={
 ; CHECK-DAG:       "alpha_real":1
@@ -1094,7 +953,7 @@ ENTRY int8gemm {
   } else {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} dot(s32[12,4]{1,0} [[A:%[^ ]+]], s32[4,8]{1,0} [[B:%[^ ]+]]), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+; CHECK: s32[12,8]{1,0} dot(s32[12,4]{1,0} [[A:%[^ ]+]], s32[4,8]{1,0} [[B:%[^ ]+]]), lhs_contracting_dims={1}, rhs_contracting_dims={0}
 
   )",
                       /*print_operand_shape=*/true);
@@ -1115,10 +974,10 @@ ENTRY int8gemm {
   )";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
 
-  if (CudaOrRocmCheck(se::CudaComputeCapability::VOLTA, Switch::True)) {
+  if (GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::VOLTA)) {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} custom-call(s8[12,4]{1,0} [[A:%[^ ]+]], s8[4,8]{0,1} [[B:%[^ ]+]]),
+; CHECK: s32[12,8]{1,0} custom-call(s8[12,4]{1,0} [[A:%[^ ]+]], s8[4,8]{0,1} [[B:%[^ ]+]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
 ; CHECK:           backend_config={
 ; CHECK-DAG:       "alpha_real":1
@@ -1129,7 +988,7 @@ ENTRY int8gemm {
   } else {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} dot(s32[12,4]{1,0} [[A:%[^ ]+]], s32[4,8]{1,0} [[B:%[^ ]+]]), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+; CHECK: s32[12,8]{1,0} dot(s32[12,4]{1,0} [[A:%[^ ]+]], s32[4,8]{1,0} [[B:%[^ ]+]]), lhs_contracting_dims={1}, rhs_contracting_dims={0}
 
   )",
                       /*print_operand_shape=*/true);
@@ -1137,10 +996,6 @@ ENTRY int8gemm {
 }
 
 TEST_P(ParameterizedGemmRewriteTest, Int8GemmNotMultipleOfFour) {
-  if (CudaOrRocmCheck(Switch::False, Switch::True)) {
-    GTEST_SKIP() << "DoBlasGemmWithAlgorithm is not yet implemented on ROCm";
-  }
-
   const char* hlo_text = R"(
 HloModule int8gemm
 
@@ -1152,16 +1007,16 @@ ENTRY int8gemm {
   )";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
 
-  if (CudaOrRocmCheck(se::CudaComputeCapability::VOLTA, Switch::True)) {
+  if (GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::VOLTA)) {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} custom-call(s8[16,4]{1,0} [[A:%[^ ]+]], s8[4,12]{0,1} [[B:%[^ ]+]]), custom_call_target="__cublas$gemm"
+; CHECK: s32[16,12]{1,0} custom-call(s8[16,4]{1,0} [[A:%[^ ]+]], s8[4,12]{0,1} [[B:%[^ ]+]]), custom_call_target="__cublas$gemm"
   )",
                       /*print_operand_shape=*/true);
   } else {
     MatchOptimizedHlo(hlo_text,
                       R"(
-; CHECK: {{.*}} dot(s32[13,4]{1,0} [[A:%[^ ]+]], s32[4,9]{1,0} [[B:%[^ ]+]]), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+; CHECK: s32[13,9]{1,0} dot(s32[13,4]{1,0} [[A:%[^ ]+]], s32[4,9]{1,0} [[B:%[^ ]+]]), lhs_contracting_dims={1}, rhs_contracting_dims={0}
 
   )",
                       /*print_operand_shape=*/true);
@@ -1169,10 +1024,6 @@ ENTRY int8gemm {
 }
 
 TEST_P(ParameterizedGemmRewriteTest, GemmTypeCombinationCheck) {
-  if (CudaOrRocmCheck(Switch::False, Switch::True)) {
-    GTEST_SKIP() << "DoBlasGemmWithAlgorithm is not yet implemented on ROCm";
-  }
-
   std::vector<std::tuple<absl::string_view, absl::string_view, bool>>
       type_combinations = {{"s8", "s8", true},
                            {"s32", "s32", true},
@@ -1188,7 +1039,7 @@ TEST_P(ParameterizedGemmRewriteTest, GemmTypeCombinationCheck) {
                            {"f16", "f32", true},
                            {"bf16", "f32", true}};
 
-  if (CudaOrRocmCheck(se::CudaComputeCapability::VOLTA, Switch::True)) {
+  if (GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::VOLTA)) {
     // For compute capabilities before volta, we always do upcasting, so it
     // would be impossible for this test to fail. That is why we only add these
     // cases when the compute capability is at least Volta.
@@ -1252,15 +1103,14 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
   // This is a type combination which is not supported by cublasLt, expect
   // GemmRewriter to choose legacy cublas.
-  EXPECT_THAT(
-      module->entry_computation()->root_instruction(),
-      GmockMatch(m::GetTupleElement(m::CustomCall({"__cublas$gemm"}), 0)));
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              GmockMatch(m::CustomCall({"__cublas$gemm"})));
 }
 
 TEST_P(ParameterizedGemmRewriteTest, UpcastingC64ToC128) {
@@ -1276,15 +1126,14 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
   // This is a type combination which is not supported by cublasLt, expect
   // GemmRewriter to choose legacy cublas.
-  EXPECT_THAT(
-      module->entry_computation()->root_instruction(),
-      GmockMatch(m::GetTupleElement(m::CustomCall({"__cublas$gemm"}), 0)));
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              GmockMatch(m::CustomCall({"__cublas$gemm"})));
 }
 
 TEST_P(ParameterizedGemmRewriteTest, UpcastingF16ToF32) {
@@ -1300,18 +1149,12 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
-  if (GetParam()) {
-    EXPECT_THAT(module->entry_computation()->root_instruction(),
-                GmockMatch(m::CustomCall({CustomCallTarget()})));
-  } else {
-    EXPECT_THAT(
-        module->entry_computation()->root_instruction(),
-        GmockMatch(m::GetTupleElement(m::CustomCall({CustomCallTarget()}), 0)));
-  }
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              GmockMatch(m::CustomCall({CustomCallTarget()})));
 }
 
 TEST_P(ParameterizedGemmRewriteTest, UpcastingF16ToF64) {
@@ -1327,15 +1170,14 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
   // This is a type combination which is not supported by cublasLt, expect
   // GemmRewriter to choose legacy cublas.
-  EXPECT_THAT(
-      module->entry_computation()->root_instruction(),
-      GmockMatch(m::GetTupleElement(m::CustomCall({"__cublas$gemm"}), 0)));
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              GmockMatch(m::CustomCall({"__cublas$gemm"})));
 }
 
 TEST_P(ParameterizedGemmRewriteTest, UpcastingF32ToF64) {
@@ -1351,15 +1193,14 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
   // This is a type combination which is not supported by cublasLt, expect
   // GemmRewriter to choose legacy cublas.
-  EXPECT_THAT(
-      module->entry_computation()->root_instruction(),
-      GmockMatch(m::GetTupleElement(m::CustomCall({"__cublas$gemm"}), 0)));
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              GmockMatch(m::CustomCall({"__cublas$gemm"})));
 }
 
 TEST_P(ParameterizedGemmRewriteTest, DoNotUpconvertOutput) {
@@ -1379,20 +1220,14 @@ ENTRY main {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
   // input fp16 and output fp32 combination is supported by legacy cublas and
   // cublasLt, expect GemmRewriter to fuse the convert into gemm.
-  if (GetParam()) {
-    EXPECT_THAT(module->entry_computation()->root_instruction(),
-                GmockMatch(m::Convert(m::CustomCall({CustomCallTarget()}))));
-  } else {
-    EXPECT_THAT(module->entry_computation()->root_instruction(),
-                GmockMatch(m::Convert(m::GetTupleElement(
-                    m::CustomCall({CustomCallTarget()}), 0))));
-  }
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              GmockMatch(m::Convert(m::CustomCall({CustomCallTarget()}))));
 }
 
 TEST_P(ParameterizedGemmRewriteTest, UnsupportedMixTypeGemm) {
@@ -1412,20 +1247,14 @@ ENTRY main {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
   // u8 is not supported by legacy cublas and cublasLt, expect
   // GemmRewriter to not fuse the convert into gemm.
-  if (GetParam()) {
-    EXPECT_THAT(module->entry_computation()->root_instruction(),
-                GmockMatch(m::Convert(m::CustomCall({CustomCallTarget()}))));
-  } else {
-    EXPECT_THAT(module->entry_computation()->root_instruction(),
-                GmockMatch(m::Convert(m::GetTupleElement(
-                    m::CustomCall({CustomCallTarget()}), 0))));
-  }
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              GmockMatch(m::Convert(m::CustomCall({CustomCallTarget()}))));
 }
 
 TEST_P(ParameterizedGemmRewriteTest, CheckIsGemmAliasedBeforeFusion) {
@@ -1447,21 +1276,15 @@ ENTRY main {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
   // input fp16 and output fp32 combination is supported by legacy cublas and
   // cublasLt, but gemm output is already aliased with one of the input expect
   // GemmRewriter to not fuse the convert into gemm.
-  if (GetParam()) {
-    EXPECT_THAT(module->entry_computation()->root_instruction(),
-                GmockMatch(m::Convert(m::CustomCall({CustomCallTarget()}))));
-  } else {
-    EXPECT_THAT(module->entry_computation()->root_instruction(),
-                GmockMatch(m::Convert(m::GetTupleElement(
-                    m::CustomCall({CustomCallTarget()}), 0))));
-  }
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              GmockMatch(m::Convert(m::CustomCall({CustomCallTarget()}))));
 }
 
 INSTANTIATE_TEST_SUITE_P(CublasTestsBothLegacyAndLt,
@@ -1507,14 +1330,12 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,2], {{.*}}: f32[2,2], {{.*}}: f32[2,2]) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,2], y: f32[2,2], param_2: f32[2,2]) -> f32[2,2] {
 ; CHECK-DAG:     [[X:%[^ ]+]] = f32[2,2]{1,0} parameter(0)
 ; CHECK-DAG:     [[Y:%[^ ]+]] = f32[2,2]{1,0} parameter(1)
-; CHECK:         [[O:%[^ ]+]] = (f32[2,2]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[X]], [[Y]], {{[^,)]+}}),
+; CHECK:         ROOT [[OUT:%[^ ]+]] = f32[2,2]{1,0} custom-call([[X]], [[Y]], {{[^,)]+}}),
 ; CHECK:           custom_call_target="__cublas$gemm",
-; CHECK:           output_to_operand_aliasing={
-; CHECK-SAME:        {0}: (2, {})
-; CHECK-SAME:      }
+; CHECK:           output_to_operand_aliasing={{{{}: \(2, {}\)}}},
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":3
 ; CHECK-DAG:         "alpha_imag":0
@@ -1530,7 +1351,6 @@ ENTRY AddDotsFunc {
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
-; CHECK:         ROOT [[OUT:%[^ ]+]] = f32[2,2]{1,0} get-tuple-element([[O]]), index=0
 )");
 }
 
@@ -1554,10 +1374,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,2], {{.*}}: f32[2,2], {{.*}}: f32[2,2]) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,2], y: f32[2,2], bias: f32[2,2]) -> f32[2,2] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,2]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[2,2]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = (f32[2,2]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    [[GEMM:%[^ ]+]] = f32[2,2]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":3
@@ -1593,10 +1413,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,2], {{.*}}: f32[2,2], {{.*}}: f32[2,2]) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,2], y: f32[2,2], bias: f32[2,2]) -> f32[2,2] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,2]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[2,2]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = (f32[2,2]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    [[GEMM:%[^ ]+]] = f32[2,2]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -1633,17 +1453,15 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,2], {{.*}}: f32[2,2], {{.*}}: (f32[2,2], f32[3,3])) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,2], y: f32[2,2], param_2: (f32[2,2], f32[3,3])) -> f32[2,2] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,2]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[2,2]{1,0} parameter(1)
 ; CHECK-DAG:     [[P2:%[^ ]+]] = (f32[2,2]{1,0}, f32[3,3]{1,0}) parameter(2)
 ; CHECK-DAG:     [[BIAS:%[^ ]+]] = f32[2,2]{1,0} get-tuple-element([[P2]]), index=0
 ; CHECK-DAG:     [[BIAS_COPY:%[^ ]+]] = f32[2,2]{1,0} copy([[BIAS]])
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = (f32[2,2]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[P0]], [[P1]], [[BIAS_COPY]]),
+; CHECK-NEXT:    [[GEMM:%[^ ]+]] = f32[2,2]{1,0} custom-call([[P0]], [[P1]], [[BIAS_COPY]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
-; CHECK:           output_to_operand_aliasing={
-; CHECK-SAME:        {0}: (2, {})
-; CHECK-SAME:      }
+; CHECK:           output_to_operand_aliasing={{{{}: \(2, {}\)}}},
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
 ; CHECK-DAG:         "alpha_imag":0
@@ -1682,15 +1500,13 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,2], {{.*}}: f32[2,2], {{.*}}: f32[2,2]) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,2], y: f32[2,2], bias: f32[2,2]) -> f32[2,2] {
 ; CHECK-DAG:     [[X:%[^ ]+]] = f32[2,2]{1,0} parameter(0)
 ; CHECK-DAG:     [[Y:%[^ ]+]] = f32[2,2]{1,0} parameter(1)
 ; CHECK-DAG:     [[BIAS:%[^ ]+]] = f32[2,2]{1,0} parameter(2)
-; CHECK:         [[GEMM:%[^ ]+]] = (f32[2,2]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[X]], [[Y]], [[BIAS]]),
+; CHECK:         ROOT [[OUT:%[^ ]+]] = f32[2,2]{1,0} custom-call([[X]], [[Y]], [[BIAS]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
-; CHECK:           output_to_operand_aliasing={
-; CHECK-SAME:        {0}: (2, {})
-; CHECK-SAME:      }
+; CHECK:           output_to_operand_aliasing={{{{}: \(2, {}\)}}},
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":3
 ; CHECK-DAG:         "alpha_imag":0
@@ -1727,10 +1543,10 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[1024,1024], {{.*}}: f32[1024,1024], {{.*}}: f32[1024,1024]) -> f32[1024,1024] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[1024,1024], y: f32[1024,1024], bias: f32[1024,1024]) -> f32[1024,1024] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[1024,1024]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[1024,1024]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = (f32[1024,1024]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    [[GEMM:%[^ ]+]] = f32[1024,1024]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -1772,14 +1588,12 @@ ENTRY BF16GemmWithBias {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{2e-3, 2e-3}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %BF16GemmWithBias ({{.*}}: bf16[8,8], {{.*}}: bf16[8,8], {{.*}}: bf16[8,8]) -> bf16[8,8] {
+; CHECK-LABEL: ENTRY %BF16GemmWithBias (x: bf16[8,8], y: bf16[8,8], param_2: bf16[8,8]) -> bf16[8,8] {
 ; CHECK-DAG:    [[X:%[^ ]+]] = bf16[8,8]{1,0} parameter(0)
 ; CHECK-DAG:    [[Y:%[^ ]+]] = bf16[8,8]{1,0} parameter(1)
-; CHECK:        [[GEMM:%[^ ]+]] = (bf16[8,8]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[X]], [[Y]], {{[^,)]+}}),
+; CHECK:        ROOT [[GEMM:%[^ ]+]] = bf16[8,8]{1,0} custom-call([[X]], [[Y]], {{[^,)]+}}),
 ; CHECK:           custom_call_target="__cublas$gemm",
-; CHECK:           output_to_operand_aliasing={
-; CHECK-SAME:        {0}: (2, {})
-; CHECK-SAME:      }
+; CHECK:           output_to_operand_aliasing={{{{}: \(2, {}\)}}},
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
 ; CHECK-DAG:         "alpha_imag":0
@@ -1821,14 +1635,12 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[2,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], param_2: f32[2,4]) -> f32[2,4] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
-; CHECK:         [[GEMM:%[^ ]+]] = (f32[2,4]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[P0]], [[P1]], {{[^,)]+}}),
+; CHECK:         ROOT [[GEMM:%[^ ]+]] = f32[2,4]{1,0} custom-call([[P0]], [[P1]], {{[^,)]+}}),
 ; CHECK:           custom_call_target="__cublas$gemm",
-; CHECK:           output_to_operand_aliasing={
-; CHECK-SAME:        {0}: (2, {})
-; CHECK-SAME:      }
+; CHECK:           output_to_operand_aliasing={{{{}: \(2, {}\)}}},
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
 ; CHECK-DAG:         "alpha_imag":0
@@ -1866,12 +1678,12 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[2,3], {{.*}}: f32[3,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (w: f32[2,3], x: f32[3,4], y: f32[2,3], z: f32[3,4]) -> f32[2,4] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-DAG:     [[P2:%[^ ]+]] = f32[2,3]{1,0} parameter(2)
 ; CHECK-DAG:     [[P3:%[^ ]+]] = f32[3,4]{1,0} parameter(3)
-; CHECK-NEXT:    [[FIRST_GEMM:%[^ ]+]] = (f32[2,4]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[P0]], [[P1]]),
+; CHECK-NEXT:    [[FIRST_GEMM:%[^ ]+]] = f32[2,4]{1,0} custom-call([[P0]], [[P1]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -1888,12 +1700,9 @@ ENTRY test {
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
-; CHECK:         [[FIRST_GEMM_OUT:%[^ ]+]] = f32[2,4]{1,0} get-tuple-element([[FIRST_GEMM]]), index=0
-; CHECK-NEXT:    [[SECOND_GEMM:%[^ ]+]] = (f32[2,4]{1,0}, s8[{{[0-9]+}}]{0}) custom-call([[P2]], [[P3]], [[FIRST_GEMM_OUT]]),
+; CHECK-NEXT:    ROOT [[SECOND_GEMM:%[^ ]+]] = f32[2,4]{1,0} custom-call([[P2]], [[P3]], [[FIRST_GEMM]]),
 ; CHECK:           custom_call_target="__cublas$gemm",
-; CHECK:           output_to_operand_aliasing={
-; CHECK-SAME:        {0}: (2, {})
-; CHECK-SAME:      }
+; CHECK:           output_to_operand_aliasing={{{{}: \(2, {}\)}}},
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
 ; CHECK-DAG:         "alpha_imag":0
@@ -1912,7 +1721,7 @@ ENTRY test {
 )");
 }
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#if GOOGLE_CUDA
 // Test gemm matrix bias add fusion with mix type
 TEST_F(LegacyCublasGemmRewriteTest, MatrixBiasMixType) {
   std::vector<std::tuple<absl::string_view, absl::string_view>>
@@ -1944,10 +1753,8 @@ ENTRY test {
     TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> optimized_module,
                             GetOptimizedModule(hlo_text));
     EXPECT_THAT(optimized_module->entry_computation()->root_instruction(),
-                GmockMatch(m::GetTupleElement(
-                    m::CustomCall(m::Parameter(0), m::Parameter(1),
-                                  m::Negate(m::Parameter(2))),
-                    0)));
+                GmockMatch(m::CustomCall(m::Parameter(0), m::Parameter(1),
+                                         m::Negate(m::Parameter(2)))));
   }
 }
 
@@ -1981,15 +1788,13 @@ ENTRY test {
     TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> optimized_module,
                             GetOptimizedModule(hlo_text));
     EXPECT_THAT(optimized_module->entry_computation()->root_instruction(),
-                GmockMatch(m::GetTupleElement(
-                    m::CustomCall(m::Parameter(0), m::Parameter(1),
-                                  m::Negate(m::Parameter(2))),
-                    0)));
+                GmockMatch(m::CustomCall(m::Parameter(0), m::Parameter(1),
+                                         m::Negate(m::Parameter(2)))));
   }
 }
 #endif
 
-// Test batch gemm matrix bias add fusion with mix type that is not supported.
+// Test batch gemm matrix bias add fusion with mix type that is not supported
 TEST_F(LegacyCublasGemmRewriteTest, MatrixBiasMixTypeNotSupported) {
   const char* hlo_text = R"(
 HloModule test
@@ -2009,15 +1814,15 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> optimized_module,
                           GetOptimizedModule(hlo_text));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK:        %[[custom_call:.*]] = {{.*}} custom-call{{.*}}__cublas$gemm
-; CHECK:        %[[gte:.*]] = {{.*}} get-tuple-element{{.*}}%[[custom_call]]
-; CHECK:        ROOT {{.*}} fusion({{.*}}%[[gte]]
-)");
+  EXPECT_THAT(
+      optimized_module->entry_computation()->root_instruction(),
+      GmockMatch(m::Fusion(
+          m::Parameter(2),
+          m::CustomCall({"__cublas$gemm"}, m::Parameter(0), m::Parameter(1)))));
 }
 
 // Test batch gemm matrix bias add fusion with mix type that is not supported
-// because there are consumers of bias add.
+// cuz there are consumers of bias add
 TEST_F(LegacyCublasGemmRewriteTest, MatrixBiasMixTypeAddWithMoreConsumers) {
   const char* hlo_text = R"(
 HloModule test
@@ -2038,11 +1843,11 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> optimized_module,
                           GetOptimizedModule(hlo_text));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK:        %[[custom_call:.*]] = {{.*}} custom-call{{.*}}__cublas$gemm
-; CHECK:        %[[gte:.*]] = {{.*}} get-tuple-element{{.*}}%[[custom_call]]
-; CHECK:        ROOT {{.*}} fusion({{.*}}%[[gte]]
-)");
+  EXPECT_THAT(
+      optimized_module->entry_computation()->root_instruction(),
+      GmockMatch(m::Fusion(
+          m::Parameter(2),
+          m::CustomCall({"__cublas$gemm"}, m::Parameter(0), m::Parameter(1)))));
 }
 
 TEST_F(LegacyCublasGemmRewriteTest, MergeBitcastAndAdd) {
@@ -2059,7 +1864,7 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
@@ -2067,11 +1872,8 @@ ENTRY test {
       module->entry_computation()->root_instruction(),
       GmockMatch(
           m::Bitcast(
-              m::GetTupleElement(
-                  m::CustomCall(
-                      {"__cublas$gemm"}, m::Parameter(0), m::Parameter(1),
-                      m::Bitcast(m::Parameter(2)).WithShape(F32, {2, 2})),
-                  0))
+              m::CustomCall({"__cublas$gemm"}, m::Parameter(0), m::Parameter(1),
+                            m::Bitcast(m::Parameter(2)).WithShape(F32, {2, 2})))
               .WithShape(F32, {4})));
 }
 
@@ -2109,7 +1911,7 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   SCOPED_TRACE(module->ToString());
   EXPECT_TRUE(changed);
@@ -2117,21 +1919,14 @@ ENTRY test {
   EXPECT_THAT(
       module->entry_computation()->root_instruction(),
       GmockMatch(m::Tuple(
-          m::GetTupleElement(m::CustomCall(m::Parameter(0), m::Parameter(1),
-                                           m::Negate(m::Parameter(2))),
-                             0),
-          m::GetTupleElement(
-              m::CustomCall(m::Parameter(0), m::Parameter(1), m::Constant()),
-              0),
-          m::GetTupleElement(
-              m::CustomCall(m::Parameter(0), m::Parameter(1), m::Constant()),
-              0),
-          m::GetTupleElement(
-              m::CustomCall(m::Parameter(0), m::Parameter(1), m::Constant()),
-              0))));
+          m::CustomCall(m::Parameter(0), m::Parameter(1),
+                        m::Negate(m::Parameter(2))),
+          m::CustomCall(m::Parameter(0), m::Parameter(1), m::Constant()),
+          m::CustomCall(m::Parameter(0), m::Parameter(1), m::Constant()),
+          m::CustomCall(m::Parameter(0), m::Parameter(1), m::Constant()))));
 }
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#if GOOGLE_CUDA
 // A test fixture class for tests which are specific to cublasLt
 class CublasLtGemmRewriteTest : public GemmRewriteTest {
  public:
@@ -2140,13 +1935,6 @@ class CublasLtGemmRewriteTest : public GemmRewriteTest {
     debug_options.set_xla_gpu_enable_cublaslt(true);
     debug_options.set_xla_gpu_enable_triton_gemm(false);
     return debug_options;
-  }
-
- protected:
-  void SetUp() override {
-    if (SkipGpuBlasLtTest()) {
-      GTEST_SKIP() << "BlasLt is not supported on this GPU architecture";
-    }
   }
 };
 
@@ -2170,7 +1958,7 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,2], {{.*}}: f32[2,2], {{.*}}: f32[2,2]) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,2], y: f32[2,2], bias: f32[2,2]) -> f32[2,2] {
 ; CHECK-DAG:     [[X:%[^ ]+]] = f32[2,2]{1,0} parameter(0)
 ; CHECK-DAG:     [[Y:%[^ ]+]] = f32[2,2]{1,0} parameter(1)
 ; CHECK-DAG:     [[BIAS:%[^ ]+]] = f32[2,2]{1,0} parameter(2)
@@ -2214,7 +2002,7 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[2,2], {{.*}}: f32[2,2], {{.*}}: f32[2,2]) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[2,2], y: f32[2,2], bias: f32[2,2]) -> f32[2,2] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,2]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[2,2]{1,0} parameter(1)
 ; CHECK-DAG:     [[BIAS:%[^ ]+]] = f32[2,2]{1,0} parameter(2)
@@ -2257,7 +2045,7 @@ ENTRY AddDotsFunc {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %AddDotsFunc ({{.*}}: f32[1024,1024], {{.*}}: f32[1024,1024], {{.*}}: f32[1024,1024]) -> f32[1024,1024] {
+; CHECK-LABEL: ENTRY %AddDotsFunc (x: f32[1024,1024], y: f32[1024,1024], bias: f32[1024,1024]) -> f32[1024,1024] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[1024,1024]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[1024,1024]{1,0} parameter(1)
 ; CHECK-DAG:     [[BIAS:%[^ ]+]] = f32[1024,1024]{1,0} parameter(2)
@@ -2298,7 +2086,7 @@ ENTRY BF16GemmWithBias {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %BF16GemmWithBias ({{.*}}: bf16[8,8], {{.*}}: bf16[8,8], {{.*}}: bf16[8,8]) -> bf16[8,8] {
+; CHECK-LABEL: ENTRY %BF16GemmWithBias (x: bf16[8,8], y: bf16[8,8], bias: bf16[8,8]) -> bf16[8,8] {
 ; CHECK-DAG:    [[X:%[^ ]+]] = bf16[8,8]{1,0} parameter(0)
 ; CHECK-DAG:    [[Y:%[^ ]+]] = bf16[8,8]{1,0} parameter(1)
 ; CHECK-DAG:    [[BIAS:%[^ ]+]] = bf16[8,8]{1,0} parameter(2)
@@ -2339,7 +2127,7 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[2,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[2,4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[2,4]{1,0} parameter(2)
@@ -2382,7 +2170,7 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[2,3], {{.*}}: f32[3,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (w: f32[2,3], x: f32[3,4], y: f32[2,3], z: f32[3,4]) -> f32[2,4] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-DAG:     [[P2:%[^ ]+]] = f32[2,3]{1,0} parameter(2)
@@ -2443,7 +2231,7 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[4]{0} parameter(2)
@@ -2498,7 +2286,7 @@ ENTRY test {
 ; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[4,4]{1,0} add([[P0]], [[P2]])
 }
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[4,4], {{.*}}: f32[4,4], {{.*}}: f32[4]) -> f32[4,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[4,4], y: f32[4,4], z: f32[4]) -> f32[4,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[4,4]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[4,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[MATMUL0:%[^ ]+]] = f32[4,4]{1,0} custom-call([[P0]], [[P1]]),
@@ -2520,7 +2308,9 @@ ENTRY test {
 ; CHECK:           }
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[4]{0} parameter(2)
 ; CHECK-NEXT:    [[FUSION:%[^ ]+]] = f32[4,4]{1,0} fusion([[MATMUL0]], [[P2]]), kind=kLoop, calls=[[FUSED_COMPUTATION]]
-; CHECK:         [[MATMUL1:%[^ ]+]] = f32[4,4]{1,0} custom-call([[MATMUL0]]
+; CHECK-NEXT:    [[C0:%[^ ]+]] = f32[] constant(5)
+; CHECK-NEXT:    [[C0_BCAST:%[^ ]+]] = f32[4,4]{1,0} broadcast([[C0]]), dimensions={}
+; CHECK-NEXT:    [[MATMUL1:%[^ ]+]] = f32[4,4]{1,0} custom-call([[MATMUL0]], [[C0_BCAST]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -2576,8 +2366,15 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3,4], {{.*}}: f32[4,5,6], {{.*}}: f32[3,5,6]) -> f32[2,3,5,6] {
-; CHECK:         [[MATMUL:%[^ ]+]] = f32[6,30]{1,0} custom-call(
+; CHECK-LABEL: ENTRY %test (x: f32[2,3,4], y: f32[4,5,6], z: f32[3,5,6]) -> f32[2,3,5,6] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3,4]{2,1,0} parameter(0)
+; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = f32[6,4]{1,0} bitcast([[P0]])
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[4,5,6]{2,1,0} parameter(1)
+; CHECK-NEXT:    [[P1_BITCAST:%[^ ]+]] = f32[4,30]{1,0}
+; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[3,5,6]{2,1,0} parameter(2)
+; CHECK-NEXT:    [[BROADCAST:%[^ ]+]] = f32[2,3,5,6]{3,2,1,0} broadcast([[P2]]), dimensions={1,2,3}
+; CHECK-NEXT:    [[BITCAST:%[^ ]+]] = f32[6,30]{1,0} bitcast([[BROADCAST]])
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = f32[6,30]{1,0} custom-call([[P0_BITCAST]], [[P1_BITCAST]], [[BITCAST]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul",
 ; CHECK:           output_to_operand_aliasing={{[{][{]}}}: (2, {})},
 ; CHECK:           backend_config={
@@ -2618,8 +2415,15 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3,4], {{.*}}: f32[4,5,6], {{.*}}: f32[6]) -> f32[2,3,5,6] {
-; CHECK:         [[MATMUL:%[^ ]+]] = f32[6,30]{1,0} custom-call(
+; CHECK-LABEL: ENTRY %test (x: f32[2,3,4], y: f32[4,5,6], z: f32[6]) -> f32[2,3,5,6] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3,4]{2,1,0} parameter(0)
+; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = f32[6,4]{1,0} bitcast([[P0]])
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[4,5,6]{2,1,0} parameter(1)
+; CHECK-NEXT:    [[P1_BITCAST:%[^ ]+]] = f32[4,30]{1,0}
+; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[6]{0} parameter(2)
+; CHECK-NEXT:    [[BROADCAST:%[^ ]+]] = f32[2,3,5,6]{3,2,1,0} broadcast([[P2]]), dimensions={3}
+; CHECK-NEXT:    [[BITCAST:%[^ ]+]] = f32[6,30]{1,0} bitcast([[BROADCAST]])
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = f32[6,30]{1,0} custom-call([[P0_BITCAST]], [[P1_BITCAST]], [[BITCAST]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul",
 ; CHECK:           output_to_operand_aliasing={{[{][{]}}}: (2, {})},
 ; CHECK:           backend_config={
@@ -2660,7 +2464,7 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[2]) -> f32[4,2] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[2]) -> f32[4,2] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[2]{0} parameter(2)
@@ -2705,7 +2509,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[4,3], {{.*}}: f32[3,4], {{.*}}: f32[3]) -> f32[2,3] {
+; CHECK-LABEL: ENTRY %test (x: f32[4,3], y: f32[3,4], z: f32[3]) -> f32[2,3] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[4,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[3]{0} parameter(2)
@@ -2754,7 +2558,16 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[2]) -> f32[2,2] {
+
+; CHECK:        [[FUSED_COMPUTATION:%[^ ]+]] ([[DUMMY0:[^ ]+]]: f32[2], [[DUMMY1:[^ ]+]]: f32[2,4]) -> f32[2,2] {
+; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2]{0} parameter(0)
+; CHECK-DAG:     [[P1:%[^ ]+]] = f32[2,4]{1,0} parameter(1)
+; CHECK-DAG:     [[SLICE:%[^ ]+]] = f32[2,2]{1,0} slice([[P1]]), slice={[0:2], [0:2]}
+; CHECK-NEXT:    [[P0_BCAST:%[^ ]+]] = f32[2,2]{1,0} broadcast([[P0]]), dimensions={1}
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,2]{1,0} add([[SLICE]], [[P0_BCAST]])
+}
+
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[2]) -> f32[2,2] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-DAG:     [[P2:%[^ ]+]] = f32[2]{0} parameter(2)
@@ -2775,7 +2588,11 @@ ENTRY test {
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
-; CHECK:         [[MATMUL1:%[^ ]+]] = f32[2,2]{1,0} custom-call(
+; CHECK-NEXT:    [[FUSION:%[^ ]+]] = f32[2,2]{1,0} fusion([[P2]], [[MATMUL0]]), kind=kLoop, calls=[[FUSED_COMPUTATION]]
+; CHECK-NEXT:    [[SLICE:%[^ ]+]] = f32[2,2]{1,0} slice([[MATMUL0]]), slice={[0:2], [0:2]}
+; CHECK-NEXT:    [[C0:%[^ ]+]] = f32[] constant(5)
+; CHECK-NEXT:    [[C0_BCAST:%[^ ]+]] = f32[2,2]{1,0} broadcast([[C0]]), dimensions={}
+; CHECK-NEXT:    [[MATMUL1:%[^ ]+]] = f32[2,2]{1,0} custom-call([[SLICE]], [[C0_BCAST]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -2792,7 +2609,7 @@ ENTRY test {
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
-; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,2]{1,0} custom-call{{.*}}[[MATMUL1]]
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,2]{1,0} custom-call([[FUSION]], [[MATMUL1]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -2873,7 +2690,7 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[4], {{.*}}: f32[2,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[4], z2: f32[2,4]) -> f32[2,4] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-DAG:     [[VECTOR_BIAS:%[^ ]+]] = f32[4]{0} parameter(2)
@@ -2917,7 +2734,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: bf16[16,24], {{.*}}: bf16[24,32], {{.*}}: bf16[32]) -> bf16[16,32] {
+; CHECK-LABEL: ENTRY %test (x: bf16[16,24], y: bf16[24,32], z: bf16[32]) -> bf16[16,32] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = bf16[16,24]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = bf16[24,32]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = bf16[32]{0} parameter(2)
@@ -2941,7 +2758,8 @@ ENTRY test {
 }
 
 TEST_F(CublasLtGemmRewriteTest, BF16VectorBiasPadded) {
-  if (!CudaOrRocmCheck(se::CudaComputeCapability::AMPERE, Switch::True)) {
+  if (!GetCudaComputeCapability().IsAtLeast(
+          se::CudaComputeCapability::AMPERE)) {
     GTEST_SKIP() << "Padding of GEMM bf16 operands only implemented on "
                     "architectures with bf16 Tensor Cores.";
   }
@@ -2955,13 +2773,38 @@ ENTRY test {
   dot_a = bf16[2,4] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   z_bcast = bf16[2,4] broadcast(z), dimensions={1}
   ROOT out = bf16[2,4] add(dot_a, z_bcast)
-})";
+}
+
+)";
 
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-DAG: ENTRY %test ({{.*}}: bf16[2,3], {{.*}}: bf16[3,4], {{.*}}: bf16[4]) -> bf16[2,4] {
-; CHECK-DAG:    bf16[8,8]{1,0} pad({{.*}}), padding=0_6x0_5
-; CHECK-DAG:    bf16[8,8]{1,0} pad({{.*}}), padding=0_5x0_4
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: bf16[2,3], y: bf16[3,4], z: bf16[4]) -> bf16[2,4] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = bf16[2,3]{1,0} parameter(0)
+; CHECK-NEXT:    [[C0:%[^ ]+]] = bf16[] constant(0)
+; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = bf16[8,8]{1,0} pad([[P0]], [[C0]]), padding=0_6x0_5
+; CHECK-NEXT:    [[P1:%[^ ]+]] = bf16[3,4]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_PADDED:%[^ ]+]] = bf16[8,8]{1,0} pad([[P1]], [[C0]]), padding=0_5x0_4
+; CHECK-NEXT:    [[P2:%[^ ]+]] = bf16[4]{0} parameter(2)
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = bf16[8,8]{1,0} custom-call([[P0_PADDED]], [[P1_PADDED]], [[P2]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"BIAS"
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = bf16[2,4]{1,0} slice([[MATMUL]]), slice={[0:2], [0:4]}
       )");
 }
 
@@ -2984,7 +2827,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,4]{1,0} custom-call([[P0]], [[P1]]),
@@ -3026,7 +2869,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3,4], {{.*}}: f32[4,5,6]) -> f32[2,3,5,6] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3,4], y: f32[4,5,6]) -> f32[2,3,5,6] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3,4]{2,1,0} parameter(0)
 ; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = f32[6,4]{1,0} bitcast([[P0]])
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[4,5,6]{2,1,0} parameter(1)
@@ -3072,7 +2915,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4]) -> f32[2,2] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4]) -> f32[2,2] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = f32[2,4]{1,0} custom-call([[P0]], [[P1]]),
@@ -3117,7 +2960,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[2,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[2,4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[2,4]{1,0} parameter(2)
@@ -3162,7 +3005,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[4,4], {{.*}}: f32[4,4], {{.*}}: f32[4,4]) -> f32[4,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[4,4], y: f32[4,4], z: f32[4,4]) -> f32[4,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[4,4]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[4,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[4,4]{1,0} parameter(2)
@@ -3208,7 +3051,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[4]{0} parameter(2)
@@ -3254,8 +3097,15 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3,4], {{.*}}: f32[4,5,6], {{.*}}: f32[3,5,6]) -> f32[2,3,5,6] {
-; CHECK:         [[MATMUL:%[^ ]+]] = f32[6,30]{1,0} custom-call(
+; CHECK-LABEL: ENTRY %test (x: f32[2,3,4], y: f32[4,5,6], z: f32[3,5,6]) -> f32[2,3,5,6] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3,4]{2,1,0} parameter(0)
+; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = f32[6,4]{1,0} bitcast([[P0]])
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[4,5,6]{2,1,0} parameter(1)
+; CHECK-NEXT:    [[P1_BITCAST:%[^ ]+]] = f32[4,30]{1,0}
+; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[3,5,6]{2,1,0} parameter(2)
+; CHECK-NEXT:    [[BROADCAST:%[^ ]+]] = f32[2,3,5,6]{3,2,1,0} broadcast([[P2]]), dimensions={1,2,3}
+; CHECK-NEXT:    [[BITCAST:%[^ ]+]] = f32[6,30]{1,0} bitcast([[BROADCAST]])
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = f32[6,30]{1,0} custom-call([[P0_BITCAST]], [[P1_BITCAST]], [[BITCAST]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -3299,7 +3149,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[2]) -> f32[4,2] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[2]) -> f32[4,2] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[2]{0} parameter(2)
@@ -3348,7 +3198,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[4], {{.*}}: f32[2,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z_vec: f32[4], z_matrix: f32[2,4]) -> f32[2,4] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-DAG:     [[P2:%[^ ]+]] = f32[4]{0} parameter(2)
@@ -3406,7 +3256,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[2,4]{1,0} custom-call([[P0]], [[P1]]),
@@ -3467,14 +3317,6 @@ ENTRY test {
 }
 
 TEST_F(CublasLtGemmRewriteTest, VectorBiasThenApproxGeluActivation) {
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION >= 60000
-  auto rocm_switch = Switch::False;  // GELU is only available from ROCM 6.0
-#else
-  auto rocm_switch = Switch::True;
-#endif
-  if (CudaOrRocmCheck(Switch::False, rocm_switch)) {
-    GTEST_SKIP() << "TODO: Unsupported blas-lt epilogue on ROCM";
-  }
   const char* hlo_text = R"(
 HloModule test
 
@@ -3510,7 +3352,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[4]{0} parameter(2)
@@ -3535,9 +3377,6 @@ ENTRY test {
 }
 
 TEST_F(CublasLtGemmRewriteTest, ApproxGeluActivationWithAux) {
-  if (CudaOrRocmCheck(Switch::False, Switch::True)) {
-    GTEST_SKIP() << "TODO: Unsupported blas-lt epilogue on ROCM";
-  }
   const char* hlo_text = R"(
 HloModule test
 
@@ -3571,7 +3410,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4]) -> (f32[2,4], f32[2,4]) {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4]) -> (f32[2,4], f32[2,4]) {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = (f32[2,4]{1,0}, f32[2,4]{1,0}) custom-call([[P0]], [[P1]]),
@@ -3595,9 +3434,6 @@ ENTRY test {
 }
 
 TEST_F(CublasLtGemmRewriteTest, VectorBiasThenApproxGeluActivationWithAux) {
-  if (CudaOrRocmCheck(Switch::False, Switch::True)) {
-    GTEST_SKIP() << "TODO: Unsupported blas-lt epilogue on ROCM";
-  }
   const char* hlo_text = R"(
 HloModule test
 
@@ -3634,7 +3470,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[4]) -> (f32[2,4], f32[2,4]) {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[4]) -> (f32[2,4], f32[2,4]) {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[4]{0} parameter(2)
@@ -3659,7 +3495,8 @@ ENTRY test {
 }
 
 TEST_F(CublasLtGemmRewriteTest, ApproxGeluActivationBF16) {
-  if (!CudaOrRocmCheck(se::CudaComputeCapability::AMPERE, Switch::True)) {
+  if (!GetCudaComputeCapability().IsAtLeast(
+          se::CudaComputeCapability::AMPERE)) {
     GTEST_SKIP() << "Padding of GEMM bf16 operands only implemented on "
                     "architectures with bf16 Tensor Cores.";
   }
@@ -3687,13 +3524,38 @@ ENTRY test {
   bcast.3 = bf16[2,4] broadcast(const.3), dimensions={}
   mul.4 = bf16[2,4] multiply(add.2, bcast.3)
   ROOT out = bf16[2,4] multiply(dot, mul.4)
-})";
+}
+
+)";
 
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{5e-5, 1e-5}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-DAG: ENTRY %test ({{.*}}: bf16[2,3], {{.*}}: bf16[3,4]) -> bf16[2,4] {
-; CHECK-DAG:    bf16[8,8]{1,0} pad({{.*}}), padding=0_6x0_5
-; CHECK-DAG:    bf16[8,8]{1,0} pad({{.*}}), padding=0_5x0_4
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: bf16[2,3], y: bf16[3,4]) -> bf16[2,4] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = bf16[2,3]{1,0} parameter(0)
+; CHECK-NEXT:    [[C0:%[^ ]+]] = bf16[] constant(0)
+; CHECK-NEXT:    [[P0_PAD:%[^ ]+]] = bf16[8,8]{1,0} pad([[P0]], [[C0]]), padding=0_6x0_5
+; CHECK-NEXT:    [[P1:%[^ ]+]] = bf16[3,4]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_PAD:%[^ ]+]] = bf16[8,8]{1,0} pad([[P1]], [[C0]]), padding=0_5x0_4
+; CHECK-NEXT:    [[DOT:%[^ ]+]] = bf16[8,8]{1,0} custom-call([[P0_PAD]], [[P1_PAD]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"GELU"
+; CHECK:           }
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = bf16[2,4]{1,0} slice([[DOT]]), slice={[0:2], [0:4]}
       )");
 }
 
@@ -3729,7 +3591,7 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
@@ -3761,7 +3623,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f16[8,16], {{.*}}: f16[16,8], {{.*}}: f16[8,8]) -> f16[8,8] {
+; CHECK-LABEL: ENTRY %test (x: f16[8,16], y: f16[16,8], z: f16[8,8]) -> f16[8,8] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f16[8,16]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f16[16,8]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[8,8]{1,0} parameter(2)
@@ -3803,7 +3665,7 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
@@ -3829,18 +3691,39 @@ ENTRY test {
   dot_a = f16[8,8] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   z_bcast = f16[8,8] broadcast(z), dimensions={1}
   ROOT add = f16[8,8] add(dot_a, z_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{8e-3, 2e-3}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-NOT:  pad("
-; CHECK:      custom-call
-; CHECK-SAME: custom_call_target="__cublas$lt$matmul"
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: f16[8,16], y: f16[16,8], z: f16[8]) -> f16[8,8] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f16[8,16]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f16[16,8]{1,0} parameter(1)
+; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[8]{0} parameter(2)
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f16[8,8]{1,0} custom-call([[P0]], [[P1]], [[P2]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"BIAS"
+; CHECK:           }
       )");
 }
 
 TEST_F(CublasLtGemmRewriteTest, VectorBiasF16Padded) {
-  if (!CudaOrRocmCheck(se::CudaComputeCapability::VOLTA, Switch::True)) {
+  if (!GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::VOLTA)) {
     GTEST_SKIP() << "Padding of GEMM operands only implemented on "
                     "architectures with Tensor Cores.";
   }
@@ -3854,15 +3737,38 @@ ENTRY test {
   dot_a = f16[6,6] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   z_bcast = f16[6,6] broadcast(z), dimensions={1}
   ROOT add = f16[6,6] add(dot_a, z_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-DAG: ENTRY %test ({{.*}}: f16[6,12], {{.*}}: f16[12,6], {{.*}}: f16[6]) -> f16[6,6] {
-; CHECK-DAG:    f16[8,16]{1,0} pad({{.*}}), padding=0_2x0_4
-; CHECK-DAG:    f16[16,8]{1,0} pad({{.*}}), padding=0_4x0_2
+; CHECK-LABEL: ENTRY %test (x: f16[6,12], y: f16[12,6], z: f16[6]) -> f16[6,6] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f16[6,12]{1,0} parameter(0)
+; CHECK-NEXT:    [[C0:%[^ ]+]] = f16[] constant(0)
+; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = f16[8,16]{1,0} pad([[P0]], [[C0]]), padding=0_2x0_4
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f16[12,6]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_PADDED:%[^ ]+]] = f16[16,8]{1,0} pad([[P1]], [[C0]]), padding=0_4x0_2
+; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[6]{0} parameter(2)
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = f16[8,8]{1,0} custom-call([[P0_PADDED]], [[P1_PADDED]], [[P2]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"BIAS"
+; CHECK:           }
+; CHECK-NEXT:    [[OUT:%[^ ]+]] = f16[6,6]{1,0} slice([[MATMUL]]), slice={[0:6], [0:6]}
       )");
 }
 
@@ -3879,18 +3785,38 @@ ENTRY test {
   c = f16[] constant(0)
   c_bcast = f16[8,8] broadcast(c), dimensions={}
   ROOT out = f16[8,8] maximum(dot_a, c_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-NOT:  pad("
-; CHECK:      custom-call
-; CHECK-SAME: custom_call_target="__cublas$lt$matmul"
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: f16[8,16], y: f16[16,8]) -> f16[8,8] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f16[8,16]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f16[16,8]{1,0} parameter(1)
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f16[8,8]{1,0} custom-call([[P0]], [[P1]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"RELU"
+; CHECK:           }
       )");
 }
 
 TEST_F(CublasLtGemmRewriteTest, ReluActivationF16Padded) {
-  if (!CudaOrRocmCheck(se::CudaComputeCapability::VOLTA, Switch::True)) {
+  if (!GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::VOLTA)) {
     GTEST_SKIP() << "Padding of GEMM operands only implemented on "
                     "architectures with Tensor Cores.";
   }
@@ -3904,13 +3830,37 @@ ENTRY test {
   c = f16[] constant(0)
   c_bcast = f16[6,6] broadcast(c), dimensions={}
   ROOT out = f16[6,6] maximum(dot_a, c_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-DAG: ENTRY %test ({{.*}}: f16[6,12], {{.*}}: f16[12,6]) -> f16[6,6] {
-; CHECK-DAG:    f16[8,16]{1,0} pad({{.*}}), padding=0_2x0_4
-; CHECK-DAG:    f16[16,8]{1,0} pad({{.*}}), padding=0_4x0_2
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: f16[6,12], y: f16[12,6]) -> f16[6,6] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f16[6,12]{1,0} parameter(0)
+; CHECK-NEXT:    [[C0:%[^ ]+]] = f16[] constant(0)
+; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = f16[8,16]{1,0} pad([[P0]], [[C0]]), padding=0_2x0_4
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f16[12,6]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_PADDED:%[^ ]+]] = f16[16,8]{1,0} pad([[P1]], [[C0]]), padding=0_4x0_2
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = f16[8,8]{1,0} custom-call([[P0_PADDED]], [[P1_PADDED]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"RELU"
+; CHECK:           }
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f16[6,6]{1,0} slice([[MATMUL]]), slice={[0:6], [0:6]}
       )");
 }
 
@@ -3935,7 +3885,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f16[8,16], {{.*}}: f16[16,8], {{.*}}: f16[8,8]) -> f16[8,8] {
+; CHECK-LABEL: ENTRY %test (x: f16[8,16], y: f16[16,8], z: f16[8,8]) -> f16[8,8] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f16[8,16]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f16[16,8]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[8,8]{1,0} parameter(2)
@@ -3975,18 +3925,39 @@ ENTRY test {
   c = f16[] constant(0)
   c_bcast = f16[8,8] broadcast(c), dimensions={}
   ROOT out = f16[8,8] maximum(add, c_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-NOT:  pad("
-; CHECK:      custom-call
-; CHECK-SAME: custom_call_target="__cublas$lt$matmul"
-)");
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: f16[8,16], y: f16[16,8], z: f16[8]) -> f16[8,8] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f16[8,16]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f16[16,8]{1,0} parameter(1)
+; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[8]{0} parameter(2)
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f16[8,8]{1,0} custom-call([[P0]], [[P1]], [[P2]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"BIAS_RELU"
+; CHECK:           }
+      )");
 }
 
 TEST_F(CublasLtGemmRewriteTest, VectorBiasReluActivationF16Padded) {
-  if (!CudaOrRocmCheck(se::CudaComputeCapability::VOLTA, Switch::True)) {
+  if (!GetCudaComputeCapability().IsAtLeast(se::CudaComputeCapability::VOLTA)) {
     GTEST_SKIP() << "Padding of GEMM operands only implemented on "
                     "architectures with Tensor Cores.";
   }
@@ -4003,13 +3974,37 @@ ENTRY test {
   c = f16[] constant(0)
   c_bcast = f16[6,6] broadcast(c), dimensions={}
   ROOT out = f16[6,6] maximum(add, c_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-DAG: ENTRY %test ({{.*}}: f16[6,12], {{.*}}: f16[12,6], {{.*}}: f16[6]) -> f16[6,6] {
-; CHECK-DAG:   f16[8,16]{1,0} pad({{.*}}), padding=0_2x0_4
-; CHECK-DAG:   f16[16,8]{1,0} pad({{.*}}), padding=0_4x0_2
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: f16[6,12], y: f16[12,6], z: f16[6]) -> f16[6,6] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f16[6,12]{1,0} parameter(0)
+; CHECK-NEXT:    [[C0:%[^ ]+]] = f16[] constant(0)
+; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = f16[8,16]{1,0} pad([[P0]], [[C0]]), padding=0_2x0_4
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f16[12,6]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_PADDED:%[^ ]+]] = f16[16,8]{1,0} pad([[P1]], [[C0]]), padding=0_4x0_2
+; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[6]{0} parameter(2)
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = f16[8,8]{1,0} custom-call([[P0_PADDED]], [[P1_PADDED]], [[P2]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"BIAS_RELU"
+; CHECK:           }
       )");
 }
 
@@ -4033,7 +4028,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: bf16[8,16], {{.*}}: bf16[16,8], {{.*}}: bf16[8,8]) -> bf16[8,8] {
+; CHECK-LABEL: ENTRY %test (x: bf16[8,16], y: bf16[16,8], z: bf16[8,8]) -> bf16[8,8] {
 ; CHECK-DAG:     [[P0:%[^ ]+]] = bf16[8,16]{1,0} parameter(0)
 ; CHECK-DAG:     [[P1:%[^ ]+]] = bf16[16,8]{1,0} parameter(1)
 ; CHECK-DAG:     [[P2:%[^ ]+]] = bf16[8,8]{1,0} parameter(2)
@@ -4074,7 +4069,7 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
@@ -4102,18 +4097,40 @@ ENTRY test {
   dot_a = bf16[8,8] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   z_bcast = bf16[8,8] broadcast(z), dimensions={1}
   ROOT add = bf16[8,8] add(dot_a, z_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{8e-3, 2e-3}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-NOT:  pad("
-; CHECK:      custom-call
-; CHECK-SAME: custom_call_target="__cublas$lt$matmul"
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: bf16[8,16], y: bf16[16,8], z: bf16[8]) -> bf16[8,8] {
+; CHECK-DAG:     [[P0:%[^ ]+]] = bf16[8,16]{1,0} parameter(0)
+; CHECK-DAG:     [[P1:%[^ ]+]] = bf16[16,8]{1,0} parameter(1)
+; CHECK-DAG:     [[P2:%[^ ]+]] = bf16[8]{0} parameter(2)
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = bf16[8,8]{1,0} custom-call([[P0]], [[P1]], [[P2]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"BIAS"
+; CHECK:           }
       )");
 }
 
 TEST_F(CublasLtGemmRewriteTest, VectorBiasBF16Padded) {
-  if (!CudaOrRocmCheck(se::CudaComputeCapability::AMPERE, Switch::True)) {
+  if (!GetCudaComputeCapability().IsAtLeast(
+          se::CudaComputeCapability::AMPERE)) {
     GTEST_SKIP() << "Padding of GEMM operands in bfloat16 only implemented on "
                     "Ampere and newer architectures.";
   }
@@ -4127,13 +4144,38 @@ ENTRY test {
   dot_a = bf16[6,6] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   z_bcast = bf16[6,6] broadcast(z), dimensions={1}
   ROOT add = bf16[6,6] add(dot_a, z_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-DAG:  ENTRY %test ({{.*}}: bf16[6,12], {{.*}}: bf16[12,6], {{.*}}: bf16[6]) -> bf16[6,6] {
-; CHECK-DAG:    bf16[8,16]{1,0} pad({{.*}}), padding=0_2x0_4
-; CHECK-DAG:    bf16[16,8]{1,0} pad({{.*}}), padding=0_4x0_2
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: bf16[6,12], y: bf16[12,6], z: bf16[6]) -> bf16[6,6] {
+; CHECK-DAG:     [[P0:%[^ ]+]] = bf16[6,12]{1,0} parameter(0)
+; CHECK-DAG:     [[C0:%[^ ]+]] = bf16[] constant(0)
+; CHECK-DAG:     [[P0_PADDED:%[^ ]+]] = bf16[8,16]{1,0} pad([[P0]], [[C0]]), padding=0_2x0_4
+; CHECK-DAG:     [[P1:%[^ ]+]] = bf16[12,6]{1,0} parameter(1)
+; CHECK-DAG:     [[P1_PADDED:%[^ ]+]] = bf16[16,8]{1,0} pad([[P1]], [[C0]]), padding=0_4x0_2
+; CHECK-DAG:     [[P2:%[^ ]+]] = bf16[6]{0} parameter(2)
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = bf16[8,8]{1,0} custom-call([[P0_PADDED]], [[P1_PADDED]], [[P2]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"BIAS"
+; CHECK:           }
+; CHECK-NEXT:    [[OUT:%[^ ]+]] = bf16[6,6]{1,0} slice([[MATMUL]]), slice={[0:6], [0:6]}
       )");
 }
 
@@ -4154,15 +4196,35 @@ ENTRY test {
 
 )";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-NOT:  pad("
-; CHECK:      custom-call
-; CHECK-SAME: custom_call_target="__cublas$lt$matmul"
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: bf16[8,16], y: bf16[16,8]) -> bf16[8,8] {
+; CHECK-DAG:     [[P0:%[^ ]+]] = bf16[8,16]{1,0} parameter(0)
+; CHECK-DAG:     [[P1:%[^ ]+]] = bf16[16,8]{1,0} parameter(1)
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = bf16[8,8]{1,0} custom-call([[P0]], [[P1]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"RELU"
+; CHECK:           }
       )");
 }
 
 TEST_F(CublasLtGemmRewriteTest, ReluActivationBF16Padded) {
-  if (!CudaOrRocmCheck(se::CudaComputeCapability::AMPERE, Switch::True)) {
+  if (!GetCudaComputeCapability().IsAtLeast(
+          se::CudaComputeCapability::AMPERE)) {
     GTEST_SKIP() << "Padding of GEMM operands in bfloat16 only implemented on "
                     "Ampere and newer architectures.";
   }
@@ -4176,13 +4238,37 @@ ENTRY test {
   c = bf16[] constant(0)
   c_bcast = bf16[6,6] broadcast(c), dimensions={}
   ROOT out = bf16[6,6] maximum(dot_a, c_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-DAG: ENTRY %test ({{.*}}: bf16[6,12], {{.*}}: bf16[12,6]) -> bf16[6,6] {
-; CHECK-DAG:     bf16[8,16]{1,0} pad({{.*}}), padding=0_2x0_4
-; CHECK-DAG:     bf16[16,8]{1,0} pad({{.*}}), padding=0_4x0_2
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: bf16[6,12], y: bf16[12,6]) -> bf16[6,6] {
+; CHECK-DAG:     [[P0:%[^ ]+]] = bf16[6,12]{1,0} parameter(0)
+; CHECK-DAG:     [[C0:%[^ ]+]] = bf16[] constant(0)
+; CHECK-DAG:     [[P0_PADDED:%[^ ]+]] = bf16[8,16]{1,0} pad([[P0]], [[C0]]), padding=0_2x0_4
+; CHECK-DAG:     [[P1:%[^ ]+]] = bf16[12,6]{1,0} parameter(1)
+; CHECK-DAG:     [[P1_PADDED:%[^ ]+]] = bf16[16,8]{1,0} pad([[P1]], [[C0]]), padding=0_4x0_2
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = bf16[8,8]{1,0} custom-call([[P0_PADDED]], [[P1_PADDED]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"RELU"
+; CHECK:           }
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = bf16[6,6]{1,0} slice([[MATMUL]]), slice={[0:6], [0:6]}
       )");
 }
 
@@ -4202,19 +4288,40 @@ ENTRY test {
   c = bf16[] constant(0)
   c_bcast = bf16[8,8] broadcast(c), dimensions={}
   ROOT out = bf16[8,8] maximum(add, c_bcast)
-})";
+}
 
+)";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{8e-3, 2e-3}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-NOT:  pad("
-; CHECK:      custom-call
-; CHECK-SAME: custom_call_target="__cublas$lt$matmul"
+
+; CHECK-LABEL: ENTRY %test (x: bf16[8,16], y: bf16[16,8], z: bf16[8]) -> bf16[8,8] {
+; CHECK-DAG:     [[P0:%[^ ]+]] = bf16[8,16]{1,0} parameter(0)
+; CHECK-DAG:     [[P1:%[^ ]+]] = bf16[16,8]{1,0} parameter(1)
+; CHECK-DAG:     [[P2:%[^ ]+]] = bf16[8]{0} parameter(2)
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = bf16[8,8]{1,0} custom-call([[P0]], [[P1]], [[P2]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"BIAS_RELU"
+; CHECK:           }
       )");
 }
 
 TEST_F(CublasLtGemmRewriteTest, VectorBiasReluActivationBF16Padded) {
-  if (!CudaOrRocmCheck(se::CudaComputeCapability::AMPERE, Switch::True)) {
+  if (!GetCudaComputeCapability().IsAtLeast(
+          se::CudaComputeCapability::AMPERE)) {
     GTEST_SKIP() << "Padding of GEMM operands in bfloat16 only implemented on "
                     "Ampere and newer architectures.";
   }
@@ -4235,17 +4342,38 @@ ENTRY test {
 
 )";
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK-DAG: ENTRY %test ({{.*}}: bf16[6,12], {{.*}}: bf16[12,6], {{.*}}: bf16[6]) -> bf16[6,6] {
-; CHECK-DAG:     bf16[8,16]{1,0} pad({{.*}}), padding=0_2x0_4
-; CHECK-DAG:     bf16[16,8]{1,0} pad({{.*}}), padding=0_4x0_2
+  MatchOptimizedHlo(hlo_text,
+                    R"(
+
+; CHECK-LABEL: ENTRY %test (x: bf16[6,12], y: bf16[12,6], z: bf16[6]) -> bf16[6,6] {
+; CHECK-DAG:     [[P0:%[^ ]+]] = bf16[6,12]{1,0} parameter(0)
+; CHECK-DAG:     [[C0:%[^ ]+]] = bf16[] constant(0)
+; CHECK-DAG:     [[P0_PADDED:%[^ ]+]] = bf16[8,16]{1,0} pad([[P0]], [[C0]]), padding=0_2x0_4
+; CHECK-DAG:     [[P1:%[^ ]+]] = bf16[12,6]{1,0} parameter(1)
+; CHECK-DAG:     [[P1_PADDED:%[^ ]+]] = bf16[16,8]{1,0} pad([[P1]], [[C0]]), padding=0_4x0_2
+; CHECK-DAG:     [[P2:%[^ ]+]] = bf16[6]{0} parameter(2)
+; CHECK-NEXT:    [[MATMUL:%[^ ]+]] = bf16[8,8]{1,0} custom-call([[P0_PADDED]], [[P1_PADDED]], [[P2]]),
+; CHECK:           custom_call_target="__cublas$lt$matmul",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"BIAS_RELU"
+; CHECK:           }
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = bf16[6,6]{1,0} slice([[MATMUL]]), slice={[0:6], [0:6]}
       )");
 }
 
 TEST_F(CublasLtGemmRewriteTest, VectorBiasReluActivationF64) {
-  if (CudaOrRocmCheck(Switch::False, Switch::True)) {
-    GTEST_SKIP() << "TODO: Unsupported blas-lt F64 datatype on ROCM";
-  }
   const char* hlo_text = R"(
 HloModule test
 
@@ -4267,7 +4395,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f64[2,3], {{.*}}: f64[3,4], {{.*}}: f64[4]) -> f64[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f64[2,3], y: f64[3,4], z: f64[4]) -> f64[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f64[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f64[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f64[4]{0} parameter(2)
@@ -4316,7 +4444,7 @@ ENTRY test {
   MatchOptimizedHlo(hlo_text,
                     R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: f32[2,3], {{.*}}: f32[3,4], {{.*}}: f32[4]) -> f32[2,4] {
+; CHECK-LABEL: ENTRY %test (x: f32[2,3], y: f32[3,4], z: f32[4]) -> f32[2,4] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[2,3]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,4]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[4]{0} parameter(2)
@@ -4368,7 +4496,7 @@ ENTRY test {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(GpuComputeComp());
+  GemmRewriter pass(GetCudaComputeCapability());
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   SCOPED_TRACE(module->ToString());
   EXPECT_TRUE(changed);
@@ -4423,9 +4551,6 @@ ENTRY main {
 // Test gemm matrix bias add fusion with mix type and out of place update(C !=
 // D)
 TEST_F(CublasLtGemmRewriteTest, MatrixBiasMixTypeOutOfPlace) {
-  if (CudaOrRocmCheck(Switch::False, Switch::True)) {
-    GTEST_SKIP() << "TODO: Unsupported mixed datatypes on ROCM";
-  }
   std::vector<std::tuple<absl::string_view, absl::string_view>>
       type_combinations = {
           {"f16", "f32"},
@@ -4460,9 +4585,6 @@ ENTRY test {
 // Test batch gemm matrix bias add fusion with mix type and out of place
 // update(C != D)
 TEST_F(CublasLtGemmRewriteTest, MatrixBiasMixTypeOutOfPlaceBatched) {
-  if (CudaOrRocmCheck(Switch::False, Switch::True)) {
-    GTEST_SKIP() << "TODO: Unsupported mixed datatypes on ROCM";
-  }
   std::vector<std::tuple<absl::string_view, absl::string_view>>
       type_combinations = {
           {"f16", "f32"},
@@ -4496,9 +4618,6 @@ ENTRY test {
 
 // Test gemm matrix bias add fusion with mix type and in place update(C = D)
 TEST_F(CublasLtGemmRewriteTest, MatrixBiasMixTypeInPlace) {
-  if (CudaOrRocmCheck(Switch::False, Switch::True)) {
-    GTEST_SKIP() << "TODO: Unsupported mixed datatypes on ROCM";
-  }
   std::vector<std::tuple<absl::string_view, absl::string_view>>
       type_combinations = {
           {"f16", "f32"},
@@ -4551,215 +4670,131 @@ ENTRY test {
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-3, 1e-3}));
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> optimized_module,
                           GetOptimizedModule(hlo_text));
-  MatchOptimizedHlo(hlo_text, R"(
-; CHECK:        %[[custom_call:.*]] = {{.*}} custom-call{{.*}}__cublas$lt$matmul
-; CHECK:        ROOT {{.*}} fusion({{.*}}%[[custom_call]]
-)");
+  EXPECT_THAT(
+      optimized_module->entry_computation()->root_instruction(),
+      GmockMatch(m::Fusion(m::Parameter(2),
+                           m::CustomCall({"__cublas$lt$matmul"},
+                                         m::Parameter(0), m::Parameter(1)))));
 }
 
 class ParameterizedFp8GemmRewriteTest : public ParameterizedGemmRewriteTest {
- public:
-  ParameterizedFp8GemmRewriteTest() {
-    replacements_[kF8E4M3DatatypePlaceholder] =
-#if GOOGLE_CUDA
-        "f8e4m3fn";
-#else
-        "f8e4m3fnuz";
-#endif
-    replacements_[kF8E5M2DatatypePlaceholder] =
-#if GOOGLE_CUDA
-        "f8e5m2";
-#else
-        "f8e5m2fnuz";
-#endif
-    replacements_[kF8E4M3AmaxPlaceholder] =
-#if GOOGLE_CUDA
-        "448.";
-#else
-        "240.";
-#endif
-  }
-
  protected:
   // Check the HLO runs and has an FP8 cuBLAS LT custom call on supported
   // architectures (Ada, Hopper, and later).
   void CheckFp8IfSupported(absl::string_view hlo_text,
                            ErrorSpec error_spec = ErrorSpec{1e-2, 1e-2}) {
-    if (!CudaOrRocmCheck(8, 9, [](const se::RocmComputeCapability& cc) {
-          return cc.has_fp8_support();
-        })) {
+    if (!GetCudaComputeCapability().IsAtLeast(8, 9)) {
       return;
     }
-    std::string replaced_hlo_text =
-        absl::StrReplaceAll(hlo_text, replacements_);
-    EXPECT_TRUE(RunAndCompare(absl::StrReplaceAll(hlo_text, replacements_),
-                              error_spec));
+    EXPECT_TRUE(RunAndCompare(hlo_text, error_spec));
 
     // Most FP8 tests directly create a GemmRewriter and check the output.
     // Here, also run the entire HLO pass pipeline to ensure no other passes
     // interfere with GemmRewriter's pattern matching.
     TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> optimized_module,
-                            GetOptimizedModule(replaced_hlo_text));
+                            GetOptimizedModule(hlo_text));
     const HloInstruction* call =
         FindInstruction(optimized_module.get(), HloOpcode::kCustomCall);
     ASSERT_NE(call, nullptr);
     EXPECT_EQ(call->custom_call_target(), "__cublas$lt$matmul$f8");
   }
-
-  void MatchOptimizedHlo(absl::string_view hlo, const absl::string_view pattern,
-                         bool print_operand_shape = false) {
-    GemmRewriteTest::MatchOptimizedHlo(
-        absl::StrReplaceAll(hlo, replacements_),
-        absl::StrReplaceAll(pattern, replacements_), print_operand_shape);
-  }
-
-  void RunAndFilecheckHloRewrite(
-      absl::string_view hlo, HloPassInterface&& hlo_pass,
-      std::optional<absl::string_view> expected,
-      std::function<void(HloModule*)> after_pass_checks = nullptr,
-      const HloModuleConfig* config = nullptr) {
-    if (expected.has_value()) {
-      std::string replaced_pattern =
-          absl::StrReplaceAll(expected.value(), replacements_);
-      GemmRewriteTest::RunAndFilecheckHloRewrite(
-          absl::StrReplaceAll(hlo, replacements_), std::move(hlo_pass),
-          replaced_pattern, after_pass_checks, config);
-    }
-  }
-
-  StatusOr<std::unique_ptr<VerifiedHloModule>> ParseAndReturnVerifiedModule(
-      absl::string_view hlo_text, int64_t replica_count = 1,
-      int64_t num_partitions = 1) {
-    return GemmRewriteTest::ParseAndReturnVerifiedModule(
-        absl::StrReplaceAll(hlo_text, replacements_));
-  }
-
- private:
-  static constexpr const char* kF8E4M3DatatypePlaceholder{"<<F8E4M3>>"};
-  static constexpr const char* kF8E5M2DatatypePlaceholder{"<<F8E5M2>>"};
-  static constexpr const char* kF8E4M3AmaxPlaceholder{"<<F8E4M3_AMAX>>"};
 };
 
 TEST_P(ParameterizedFp8GemmRewriteTest, DoNotRewriteToF8OnPreAda) {
-  if (CudaOrRocmCheck(8, 9, [](const se::RocmComputeCapability& cc) {
-        return cc.has_fp8_support();
-      })) {
-    GTEST_SKIP() << "Test requires a pre-Ada GPU or an AMD GPU prior to MI300.";
+  if (GetCudaComputeCapability().IsAtLeast(8, 9)) {
+    GTEST_SKIP() << "Test requires a pre-Ada GPU.";
   }
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY PreAdaTest {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
-      ROOT out = <<F8E4M3>>[16,16] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
+      ROOT out = f8e4m3fn[16,16] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
           }
 
 )";
 
-  EXPECT_TRUE(RunAndCompare(absl::StrReplaceAll(hlo_text, replacements_),
-                            ErrorSpec{1e-2, 1e-2}));
+  EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-2, 1e-2}));
   MatchOptimizedHlo(hlo_text,
                     R"(
-; CHECK-LABEL: ENTRY %PreAdaTest ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16]) -> <<F8E4M3>>[16,16] {
-; CHECK:    {{.*}} = {{.*}} custom-call({{.*}}, {{.*}})
-; CHECK-DAG:  custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
-          )");
-}
-
-TEST_P(ParameterizedFp8GemmRewriteTest, DoNotRewriteOnPreAdaWithF32Output) {
-  if (CudaOrRocmCheck(8, 9, [](const se::RocmComputeCapability& cc) {
-        return cc.has_fp8_support();
-      })) {
-    GTEST_SKIP() << "Test requires a pre-Ada GPU or an AMD GPU prior to MI300.";
-  }
-  const char* hlo_text = R"(
-    HloModule test
-
-    ENTRY PreAdaTest {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
-      ROOT out = f32[16,16] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-          }
-
-)";
-
-  EXPECT_TRUE(RunAndCompare(absl::StrReplaceAll(hlo_text, replacements_),
-                            ErrorSpec{1e-2, 1e-2}));
-  MatchOptimizedHlo(hlo_text,
-                    R"(
-; CHECK-LABEL: ENTRY %PreAdaTest ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16]) -> f32[16,16] {
-; CHECK:    {{.*}} = {{.*}} custom-call({{.*}}, {{.*}})
+; CHECK-LABEL: ENTRY %PreAdaTest (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16]) -> f8e4m3fn[16,16] {
+; CHECK:    {{.*}} = f16[16,16]{1,0} custom-call({{.*}}, {{.*}})
 ; CHECK-DAG:  custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>"
           )");
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, UnsupportedTypesF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   // Test with types unsupported by cuBLAS LT when FP8 is used. cuBLAS LT with
   // FP8 requires one of the operands to be F8E4M3FN.
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY unsupported_types {
-      x = <<F8E5M2>>[16,16] parameter(0)
-      y = <<F8E5M2>>[16,16] parameter(1)
-      ROOT out = <<F8E5M2>>[16,16] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+      x = f8e5m2[16,16] parameter(0)
+      y = f8e5m2[16,16] parameter(1)
+      ROOT out = f8e5m2[16,16] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
           }
 )";
-  EXPECT_TRUE(RunAndCompare(absl::StrReplaceAll(hlo_text, replacements_),
-                            ErrorSpec{1e-2, 1e-2}));
-  RunAndFilecheckHloRewrite(hlo_text,
-                            GemmRewriter(GpuComputeComp(), /*f8_rewrite=*/true),
-                            R"(
-; CHECK-LABEL: ENTRY %unsupported_types ({{.*}}: <<F8E5M2>>[16,16], {{.*}}: <<F8E5M2>>[16,16]) -> <<F8E5M2>>[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E5M2>>[16,16]{1,0} parameter(0)
+  EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-2, 1e-2}));
+  RunAndFilecheckHloRewrite(hlo_text, GemmRewriter(GetCudaComputeCapability()),
+                            absl::StrReplaceAll(R"(
+; CHECK-LABEL: ENTRY %unsupported_types (x: f8e5m2[16,16], y: f8e5m2[16,16]) -> f8e5m2[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e5m2[16,16]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P0_CONVERT:%[^ ]+]] = f16[16,16]{1,0} convert([[P0]])
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E5M2>>[16,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e5m2[16,16]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P1_CONVERT:%[^ ]+]] = f16[16,16]{1,0} convert([[P1]])
-; CHECK-NEXT:    [[DOT:%[^ ]+]] = f16[16,16]{1,0} dot([[P0_CONVERT]], [[P1_CONVERT]]), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = <<F8E5M2>>[16,16]{1,0} convert([[DOT]])
-      )");
+; CHECK-NEXT:    [[DOT:%[^ ]+]] = f16[16,16]{1,0} custom-call([[P0_CONVERT]], [[P1_CONVERT]]),
+; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
+; CHECK:           backend_config={
+; CHECK-DAG:         "alpha_real":1
+; CHECK-DAG:         "alpha_imag":0
+; CHECK-DAG:         "beta":0
+; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
+; CHECK-DAG:           "lhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:         }
+; CHECK-DAG:         "precision_config":{
+; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
+; CHECK-DAG:         }
+; CHECK-DAG:         "epilogue":"DEFAULT"
+; CHECK:           }
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f8e5m2[16,16]{1,0} convert([[DOT]])
+      )",
+                                                replacements_));
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, UnscaledABUnscaledDF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
-      ROOT out = <<F8E4M3>>[16,16] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
+      ROOT out = f8e4m3fn[16,16] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
           }
 
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16]) -> <<F8E4M3>>[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16]) -> f8e4m3fn[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[C1:[^ ]+]] = f32[] constant(1)
-; CHECK-GCN-NEXT:    [[OUT:%[^ ]+]] = f32[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[C1]], [[C1]], [[C1]], /*index=5*/[[C1]]),
-; CHECK-PTX-NEXT:    ROOT [[OUT:%[^ ]+]] = <<F8E4M3>>[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[C1]], [[C1]], [[C1]], /*index=5*/[[C1]]),
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f8e4m3fn[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[C1]], [[C1]], [[C1]], /*index=5*/[[C1]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -4780,20 +4815,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, UnscaledABUnscaledDF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -4808,13 +4838,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
@@ -4839,20 +4870,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDPaddedF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[13,17] parameter(0)
-      y = <<F8E4M3>>[17,31] parameter(1)
+      x = f8e4m3fn[13,17] parameter(0)
+      y = f8e4m3fn[17,31] parameter(1)
       x_f32 = f32[13,17] convert(x)
       y_f32 = f32[17,31] convert(y)
       x_scale = f32[] parameter(2)
@@ -4867,17 +4893,18 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDPaddedF8) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[13,17], {{.*}}: <<F8E4M3>>[17,31], {{.*}}: f32[], {{.*}}: f32[]) -> f32[13,31] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[13,17]{1,0} parameter(0)
-; CHECK-NEXT:    [[C0:%[^ ]+]] = <<F8E4M3>>[] constant(0)
-; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} pad([[P0]], [[C0]]), padding=0_3x0_15
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[17,31]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[31,17]{1,0} transpose([[P1]]), dimensions={1,0}
-; CHECK-NEXT:    [[C1:%[^ ]+]] = <<F8E4M3>>[] constant(0)
-; CHECK-NEXT:    [[P1_TRANSPOSE_PADDED:%[^ ]+]] = <<F8E4M3>>[32,32]{1,0} pad([[P1_TRANSPOSE]], [[C1]])
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[13,17], y: f8e4m3fn[17,31], x_scale: f32[], y_scale: f32[]) -> f32[13,31] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[13,17]{1,0} parameter(0)
+; CHECK-NEXT:    [[C0:%[^ ]+]] = f8e4m3fn[] constant(0)
+; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = f8e4m3fn[16,32]{1,0} pad([[P0]], [[C0]]), padding=0_3x0_15
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[17,31]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[31,17]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-NEXT:    [[C1:%[^ ]+]] = f8e4m3fn[] constant(0)
+; CHECK-NEXT:    [[P1_TRANSPOSE_PADDED:%[^ ]+]] = f8e4m3fn[32,32]{1,0} pad([[P1_TRANSPOSE]], [[C1]])
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C4:%[^ ]+]] = f32[] constant(1)
@@ -4903,20 +4930,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDPaddedF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDBitcastF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[2,8,16] parameter(0)
-      y = <<F8E4M3>>[16,16] parameter(1)
+      x = f8e4m3fn[2,8,16] parameter(0)
+      y = f8e4m3fn[16,16] parameter(1)
       x_f32 = f32[2,8,16] convert(x)
       y_f32 = f32[16,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -4933,7 +4955,8 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDBitcastF8) {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
+  GemmRewriter pass(
+      se::CudaComputeCapability{se::CudaComputeCapability::HOPPER, 0});
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
@@ -4944,20 +4967,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDBitcastF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDUnaryOpsF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[3] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[3] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[3] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -4975,22 +4993,22 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDUnaryOpsF8) {
           }
 
 )";
-
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[3], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[3]{0} parameter(0)
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[3], y: f8e4m3fn[32,16], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[3]{0} parameter(0)
 ; CHECK-NEXT:    [[C0:%[^ ]+]] = f32[] constant(0)
-; CHECK-NEXT:    [[C0_CONVERT:%[^ ]+]] = <<F8E4M3>>[] convert([[C0]])
-; CHECK-NEXT:    [[P0_U0:%[^ ]+]] = <<F8E4M3>>[30]{0} pad([[P0]], [[C0_CONVERT]]), padding=0_27
-; CHECK-NEXT:    [[P0_U1:%[^ ]+]] = <<F8E4M3>>[30,8,5]{2,1,0} broadcast([[P0_U0]]), dimensions={0}
-; CHECK-NEXT:    [[P0_U2:%[^ ]+]] = <<F8E4M3>>[16,8,4]{2,1,0} slice([[P0_U1]]), slice={[2:18], [0:8], [0:4]}
-; CHECK-NEXT:    [[P0_U3:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} reshape([[P0_U2]])
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-NEXT:    [[C0_CONVERT:%[^ ]+]] = f8e4m3fn[] convert([[C0]])
+; CHECK-NEXT:    [[P0_U0:%[^ ]+]] = f8e4m3fn[30]{0} pad([[P0]], [[C0_CONVERT]]), padding=0_27
+; CHECK-NEXT:    [[P0_U1:%[^ ]+]] = f8e4m3fn[30,8,5]{2,1,0} broadcast([[P0_U0]]), dimensions={0}
+; CHECK-NEXT:    [[P0_U2:%[^ ]+]] = f8e4m3fn[16,8,4]{2,1,0} slice([[P0_U1]]), slice={[2:18], [0:8], [0:4]}
+; CHECK-NEXT:    [[P0_U3:%[^ ]+]] = f8e4m3fn[16,32]{1,0} reshape([[P0_U2]])
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
@@ -5015,20 +5033,16 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDUnaryOpsF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDDynamicSliceF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
+#endif
 
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[32,32] parameter(0)
-      y = <<F8E4M3>>[16,32] parameter(1)
+      x = f8e4m3fn[32,32] parameter(0)
+      y = f8e4m3fn[16,32] parameter(1)
       zero = s32[] constant(0)
       x_f32 = f32[32,32] convert(x)
       y_f32 = f32[16,32] convert(y)
@@ -5042,22 +5056,23 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDDynamicSliceF8) {
       ROOT dot_a = f32[16,16] dot(dyn_slice, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={1}
           }
 )";
-
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
+  GemmRewriter pass(
+      se::CudaComputeCapability{se::CudaComputeCapability::HOPPER, 0});
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[32,32], {{.*}}: <<F8E4M3>>[16,32], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[32,32]{1,0} parameter(0)
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[32,32], y: f8e4m3fn[16,32], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[32,32]{1,0} parameter(0)
 ; CHECK-NEXT:    [[C0:%[^ ]+]] = s32[] constant(0)
-; CHECK-NEXT:    [[DYN_SLICE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} dynamic-slice([[P0]], [[C0]], [[C0]]), dynamic_slice_sizes={16,32}
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(1)
+; CHECK-NEXT:    [[DYN_SLICE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} dynamic-slice([[P0]], [[C0]], [[C0]]), dynamic_slice_sizes={16,32}
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(1)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
@@ -5082,20 +5097,16 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDDynamicSliceF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDSelectF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
+#endif
 
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[16,32] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[16,32] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[16,32] convert(y)
       x_scale = f32[] parameter(2)
@@ -5111,25 +5122,26 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDSelectF8) {
       ROOT dot_a = f32[16,16] dot(x_unscaled, select_a), lhs_contracting_dims={1}, rhs_contracting_dims={1}
           }
 )";
-
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
+  GemmRewriter pass(
+      se::CudaComputeCapability{se::CudaComputeCapability::HOPPER, 0});
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[16,32], {{.*}}: f32[], {{.*}}: f32[], {{.*}}: pred[16,32]) -> f32[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[16,32], x_scale: f32[], y_scale: f32[], k: pred[16,32]) -> f32[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
 ; CHECK-NEXT:    [[P4:%[^ ]+]] = pred[16,32]{1,0} parameter(4)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(1)
 ; CHECK-NEXT:    [[C0:%[^ ]+]] = f32[] constant(0)
 ; CHECK-NEXT:    [[C0_BCAST:%[^ ]+]] = f32[16,32]{1,0} broadcast([[C0]]), dimensions={}
-; CHECK-NEXT:    [[C0_CONVERT:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} convert([[C0_BCAST]])
-; CHECK-NEXT:    [[SELECT:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} select([[P4]], [[P1]], [[C0_CONVERT]])
+; CHECK-NEXT:    [[C0_CONVERT:%[^ ]+]] = f8e4m3fn[16,32]{1,0} convert([[C0_BCAST]])
+; CHECK-NEXT:    [[SELECT:%[^ ]+]] = f8e4m3fn[16,32]{1,0} select([[P4]], [[P1]], [[C0_CONVERT]])
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
@@ -5155,20 +5167,16 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDSelectF8) {
 
 TEST_P(ParameterizedFp8GemmRewriteTest,
        ScaledABUnscaledDSelectNonzeroConstantF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
+#endif
 
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[16,32] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[16,32] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[16,32] convert(y)
       x_scale = f32[] parameter(2)
@@ -5184,29 +5192,32 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
       ROOT dot_a = f32[16,16] dot(x_unscaled, select_a), lhs_contracting_dims={1}, rhs_contracting_dims={1}
           }
 )";
-
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
+  GemmRewriter pass(
+      se::CudaComputeCapability{se::CudaComputeCapability::HOPPER, 0});
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
-  EXPECT_FALSE(changed);
+  EXPECT_TRUE(changed);
+
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[16,32], x_scale: f32[], y_scale: f32[], k: pred[16,32]) -> f32[16,16] {
+; CHECK-NOT:           custom_call_target="__cublas$lt$matmul$f8"
+      )");
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, BatchedScaledABUnscaledDF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[10,16,32] parameter(0)
-      y = <<F8E4M3>>[10,32,16] parameter(1)
+      x = f8e4m3fn[10,16,32] parameter(0)
+      y = f8e4m3fn[10,32,16] parameter(1)
       x_f32 = f32[10,16,32] convert(x)
       y_f32 = f32[10,32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -5221,13 +5232,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest, BatchedScaledABUnscaledDF8) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[10,16,32], {{.*}}: <<F8E4M3>>[10,32,16], {{.*}}: f32[], {{.*}}: f32[]) -> f32[10,16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[10,16,32]{2,1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[10,32,16]{2,1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[10,16,32]{2,1,0} transpose([[P1]]), dimensions={0,2,1}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[10,16,32], y: f8e4m3fn[10,32,16], x_scale: f32[], y_scale: f32[]) -> f32[10,16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[10,16,32]{2,1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[10,32,16]{2,1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[10,16,32]{2,1,0} transpose([[P1]]), dimensions={0,2,1}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
@@ -5252,20 +5264,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, BatchedScaledABUnscaledDF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABAlphaDF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -5283,14 +5290,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABAlphaDF8) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
@@ -5315,20 +5323,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABAlphaDF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDReluActivationF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -5346,14 +5349,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDReluActivationF8) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
@@ -5377,185 +5381,16 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDReluActivationF8) {
       )");
 }
 
-TEST_P(ParameterizedFp8GemmRewriteTest,
-       ScaledABUnscaledDVectorBiasThenApproxGeluActivationF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
-  const char* hlo_text = R"(
-    HloModule test
-    ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
-      x_bf16 = bf16[16,32] convert(x)
-      y_bf16 = bf16[32,16] convert(y)
-      x_scale = bf16[] parameter(2)
-      y_scale = bf16[] parameter(3)
-      bias = bf16[16] parameter(4)
-      x_scale_bcast = bf16[16,32] broadcast(x_scale), dimensions={}
-      y_scale_bcast = bf16[32,16] broadcast(y_scale), dimensions={}
-      x_unscaled = bf16[16,32] multiply(x_bf16, x_scale_bcast)
-      y_unscaled = bf16[32,16] multiply(y_bf16, y_scale_bcast)
-      dot1 = bf16[16,16] dot(x_unscaled, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-      b_bcast = bf16[16,16] broadcast(bias), dimensions={1}
-      dot = bf16[16,16] add(dot1, b_bcast)
-      mul.0 = bf16[16,16] multiply(dot, dot)
-      mul.1 = bf16[16,16] multiply(dot, mul.0)
-      const.0 = bf16[] constant(0.044715)
-      bcast.0 = bf16[16,16] broadcast(const.0), dimensions={}
-      mul.2 = bf16[16,16] multiply(mul.1, bcast.0)
-      add.0 = bf16[16,16] add(dot, mul.2)
-      const.1 = bf16[] constant(0.797884583)
-      bcast.1 = bf16[16,16] broadcast(const.1), dimensions={}
-      mul.3 = bf16[16,16] multiply(add.0, bcast.1)
-      tanh = bf16[16,16] tanh(mul.3)
-      const.2 = bf16[] constant(1)
-      bcast.2 = bf16[16,16] broadcast(const.2), dimensions={}
-      add.2 = bf16[16,16] add(tanh, bcast.2)
-      const.3 = bf16[] constant(0.5)
-      bcast.3 = bf16[16,16] broadcast(const.3), dimensions={}
-      mul.4 = bf16[16,16] multiply(add.2, bcast.3)
-      ROOT out = bf16[16,16] multiply(dot, mul.4)
-          }
-)";
-
-  CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: bf16[], {{.*}}: bf16[], {{.*}}: bf16[16]) -> bf16[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
-; CHECK-NEXT:    [[P2:%[^ ]+]] = bf16[] parameter(2)
-; CHECK-NEXT:    [[XS:%[^ ]+]] = f32[] convert([[P2]])
-; CHECK-NEXT:    [[P3:%[^ ]+]] = bf16[] parameter(3)
-; CHECK-NEXT:    [[XS1:%[^ ]+]] = f32[] convert([[P3]])
-; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[B:%[^ ]+]] = bf16[16]{0} parameter(4)
-; CHECK-PTX-NEXT:    ROOT [[OUT:%[^ ]+]] = bf16[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[XS]], [[XS1]], [[C1]], /*index=5*/[[C1]], [[B]]),
-; CHECK-GCN-NEXT:    [[OUT:%[^ ]+]] = f32[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[XS]], [[XS1]], [[C1]], /*index=5*/[[C1]]),
-; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
-; CHECK:           backend_config={
-; CHECK-DAG:         "alpha_real":1
-; CHECK-DAG:         "alpha_imag":0
-; CHECK-DAG:         "beta":0
-; CHECK-DAG:         "dot_dimension_numbers":{
-; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
-; CHECK-DAG:           "rhs_contracting_dimensions":["1"]
-; CHECK-DAG:           "lhs_batch_dimensions":[]
-; CHECK-DAG:           "rhs_batch_dimensions":[]
-; CHECK-DAG:         }
-; CHECK-DAG:         "precision_config":{
-; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
-; CHECK-DAG:         }
-; CHECK-PTX-DAG:         "epilogue":"BIAS_GELU"
-; CHECK-GCN-DAG:         "epilogue":"DEFAULT"
-; CHECK:           }
-      )");
-}
-
-TEST_P(ParameterizedFp8GemmRewriteTest,
-       ScaledABUnscaledDApproxGeluActivationF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
-  const char* hlo_text = R"(
-    HloModule test
-    ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
-      x_bf16 = bf16[16,32] convert(x)
-      y_bf16 = bf16[32,16] convert(y)
-      x_scale = bf16[] parameter(2)
-      y_scale = bf16[] parameter(3)
-      x_scale_bcast = bf16[16,32] broadcast(x_scale), dimensions={}
-      y_scale_bcast = bf16[32,16] broadcast(y_scale), dimensions={}
-      x_unscaled = bf16[16,32] multiply(x_bf16, x_scale_bcast)
-      y_unscaled = bf16[32,16] multiply(y_bf16, y_scale_bcast)
-      dot = bf16[16,16] dot(x_unscaled, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-      mul.0 = bf16[16,16] multiply(dot, dot)
-      mul.1 = bf16[16,16] multiply(dot, mul.0)
-      const.0 = bf16[] constant(0.044715)
-      bcast.0 = bf16[16,16] broadcast(const.0), dimensions={}
-      mul.2 = bf16[16,16] multiply(mul.1, bcast.0)
-      add.0 = bf16[16,16] add(dot, mul.2)
-      const.1 = bf16[] constant(0.797884583)
-      bcast.1 = bf16[16,16] broadcast(const.1), dimensions={}
-      mul.3 = bf16[16,16] multiply(add.0, bcast.1)
-      tanh = bf16[16,16] tanh(mul.3)
-      const.2 = bf16[] constant(1)
-      bcast.2 = bf16[16,16] broadcast(const.2), dimensions={}
-      add.2 = bf16[16,16] add(tanh, bcast.2)
-      const.3 = bf16[] constant(0.5)
-      bcast.3 = bf16[16,16] broadcast(const.3), dimensions={}
-      mul.4 = bf16[16,16] multiply(add.2, bcast.3)
-      ROOT out = bf16[16,16] multiply(dot, mul.4)
-          }
-)";
-
-  CheckFp8IfSupported(hlo_text);
-  // Currently, hipBlasLt does not support output datatype bf16 for fp8 matmul.
-  // And no fusion was done for such cases.
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: bf16[], {{.*}}: bf16[]) -> bf16[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
-; CHECK-NEXT:    [[P2:%[^ ]+]] = bf16[] parameter(2)
-; CHECK-NEXT:    [[XS:%[^ ]+]] = f32[] convert([[P2]])
-; CHECK-NEXT:    [[P3:%[^ ]+]] = bf16[] parameter(3)
-; CHECK-NEXT:    [[XS1:%[^ ]+]] = f32[] convert([[P3]])
-; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    ROOT [[OUT:%[^ ]+]] = bf16[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[XS]], [[XS1]], [[C1]], /*index=5*/[[C1]]),
-; CHECK-GCN-NEXT:    [[OUT:%[^ ]+]] = f32[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[XS]], [[XS1]], [[C1]], /*index=5*/[[C1]]),
-; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
-; CHECK:           backend_config={
-; CHECK-DAG:         "alpha_real":1
-; CHECK-DAG:         "alpha_imag":0
-; CHECK-DAG:         "beta":0
-; CHECK-DAG:         "dot_dimension_numbers":{
-; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
-; CHECK-DAG:           "rhs_contracting_dimensions":["1"]
-; CHECK-DAG:           "lhs_batch_dimensions":[]
-; CHECK-DAG:           "rhs_batch_dimensions":[]
-; CHECK-DAG:         }
-; CHECK-DAG:         "precision_config":{
-; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
-; CHECK-DAG:         }
-; CHECK-PTX-DAG:         "epilogue":"GELU"
-; CHECK-GCN-DAG:         "epilogue":"DEFAULT"
-; CHECK:           }
-      )");
-}
-
 TEST_P(ParameterizedFp8GemmRewriteTest, InvScaledABUnscaledDF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -5570,28 +5405,24 @@ TEST_P(ParameterizedFp8GemmRewriteTest, InvScaledABUnscaledDF8) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
 ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
       )");
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDMatrixBiasF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       b = f32[16,16] parameter(2)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
@@ -5608,14 +5439,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDMatrixBiasF8) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[16,16], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], b: f32[16,16], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[C0:%[^ ]+]] = f32[16,16]{1,0} parameter(2)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(4)
@@ -5641,20 +5473,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDMatrixBiasF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDMatrixBiasPaddedF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[14,31] parameter(0)
-      y = <<F8E4M3>>[31,14] parameter(1)
+      x = f8e4m3fn[14,31] parameter(0)
+      y = f8e4m3fn[31,14] parameter(1)
       b = f32[14,14] parameter(2)
       x_f32 = f32[14,31] convert(x)
       y_f32 = f32[31,14] convert(y)
@@ -5671,18 +5498,19 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDMatrixBiasPaddedF8) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[14,31], {{.*}}: <<F8E4M3>>[31,14], {{.*}}: f32[14,14], {{.*}}: f32[], {{.*}}: f32[]) -> f32[14,14] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[14,31]{1,0} parameter(0)
-; CHECK-NEXT:    [[C0:%[^ ]+]] = <<F8E4M3>>[] constant(0)
-; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} pad([[P0]], [[C0]]), padding=0_2x0_1
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[31,14]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[14,31]{1,0} transpose([[P1]]), dimensions={1,0}
-; CHECK-NEXT:    [[C1:%[^ ]+]] = <<F8E4M3>>[] constant(0)
-; CHECK-NEXT:    [[P1_TRANSPOSE_PADDED:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} pad([[P1_TRANSPOSE]], [[C1]]), padding=0_2x0_1
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[14,31], y: f8e4m3fn[31,14], b: f32[14,14], x_scale: f32[], y_scale: f32[]) -> f32[14,14] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[14,31]{1,0} parameter(0)
+; CHECK-NEXT:    [[C0:%[^ ]+]] = f8e4m3fn[] constant(0)
+; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = f8e4m3fn[16,32]{1,0} pad([[P0]], [[C0]]), padding=0_2x0_1
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[31,14]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[14,31]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-NEXT:    [[C1:%[^ ]+]] = f8e4m3fn[] constant(0)
+; CHECK-NEXT:    [[P1_TRANSPOSE_PADDED:%[^ ]+]] = f8e4m3fn[16,32]{1,0} pad([[P1_TRANSPOSE]], [[C1]]), padding=0_2x0_1
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[14,14]{1,0} parameter(2)
 ; CHECK-NEXT:    [[C2:%[^ ]+]] = f32[] constant(0)
 ; CHECK-NEXT:    [[P2_PADDED:%[^ ]+]] = f32[16,16]{1,0} pad([[P2]], [[C2]]), padding=0_2x0_2
@@ -5710,83 +5538,16 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDMatrixBiasPaddedF8) {
       )");
 }
 
-TEST_P(ParameterizedFp8GemmRewriteTest, UnscaledABScaledDF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
-  const char* hlo_text = R"(
-    HloModule test
-
-    ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
-      z_scale = f32[] parameter(2)
-      z_scale_bcast = f32[16,16] broadcast(z_scale), dimensions={}
-      dot_a = f32[16,16] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-      dot_a_scaled = f32[16,16] divide(dot_a, z_scale_bcast)
-      c1 = f32[] constant(-448.)
-      c1_bcast = f32[16,16] broadcast(c1), dimensions={}
-      c2 = f32[] constant(448.)
-      c2_bcast = f32[16,16] broadcast(c2), dimensions={}
-      dot_a_clamped = f32[16,16] clamp(c1_bcast, dot_a_scaled, c2_bcast)
-      ROOT dot_a_f8 = <<F8E4M3>>[16,16] convert(dot_a_clamped)
-          }
-
-)";
-
-  CheckFp8IfSupported(hlo_text, ErrorSpec{1e-2, 1e-1});
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[]) -> <<F8E4M3>>[16,16] {
-; CHECK:         [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
-; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
-; CHECK-PTX-NEXT:    [[P2_INV:%[^ ]+]] = f32[] divide([[C2]], [[P2]])
-; CHECK-PTX-NEXT:    ROOT [[OUT:%[^ ]+]] = <<F8E4M3>>[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[C1]], [[C1]], [[C1]], /*index=5*/[[P2_INV]]),
-; CHECK-GCN-NEXT:    [[OUT:%[^ ]+]] = f32[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[C1]], [[C1]], [[C1]], /*index=5*/[[C1]]),
-; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
-; CHECK:           backend_config={
-; CHECK-DAG:         "alpha_real":1
-; CHECK-DAG:         "alpha_imag":0
-; CHECK-DAG:         "beta":0
-; CHECK-DAG:         "dot_dimension_numbers":{
-; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
-; CHECK-DAG:           "rhs_contracting_dimensions":["1"]
-; CHECK-DAG:           "lhs_batch_dimensions":[]
-; CHECK-DAG:           "rhs_batch_dimensions":[]
-; CHECK-DAG:         }
-; CHECK-DAG:         "precision_config":{
-; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
-; CHECK-DAG:         }
-; CHECK-DAG:         "epilogue":"DEFAULT"
-; CHECK:           }
-      )");
-}
-
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -5799,32 +5560,32 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDF8) {
       y_unscaled = f32[32,16] multiply(y_f32, y_scale_bcast)
       dot_a = f32[16,16] dot(x_unscaled, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={0}
       dot_a_scaled = f32[16,16] divide(dot_a, z_scale_bcast)
-      c1 = f32[] constant(-<<F8E4M3_AMAX>>)
+      c1 = f32[] constant(-448.)
       c1_bcast = f32[16,16] broadcast(c1), dimensions={}
-      c2 = f32[] constant(<<F8E4M3_AMAX>>)
+      c2 = f32[] constant(448.)
       c2_bcast = f32[16,16] broadcast(c2), dimensions={}
       dot_a_clamped = f32[16,16] clamp(c1_bcast, dot_a_scaled, c2_bcast)
-      ROOT dot_a_f8 = <<F8E4M3>>[16,16] convert(dot_a_clamped)
+      ROOT dot_a_f8 = f8e4m3fn[16,16] convert(dot_a_clamped)
           }
 
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[], {{.*}}: f32[], {{.*}}: f32[]) -> <<F8E4M3>>[16,16] {
-; CHECK:         [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], x_scale: f32[], y_scale: f32[], z_scale: f32[]) -> f8e4m3fn[16,16] {
+; CHECK:         [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[P4:%[^ ]+]] = f32[] parameter(4)
-; CHECK-PTX-NEXT:    [[P4_INV:%[^ ]+]] = f32[] divide([[C2]], [[P4]])
-; CHECK-PTX-NEXT:    ROOT [[OUT:%[^ ]+]] = <<F8E4M3>>[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[P4_INV]]),
-; CHECK-GCN-NEXT:    [[OUT:%[^ ]+]] = f32[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[C1]]),
+; CHECK-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
+; CHECK-NEXT:    [[P4:%[^ ]+]] = f32[] parameter(4)
+; CHECK-NEXT:    [[P4_INV:%[^ ]+]] = f32[] divide([[C2]], [[P4]])
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f8e4m3fn[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[P4_INV]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -5845,20 +5606,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABInvScaledDF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -5871,20 +5627,21 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABInvScaledDF8) {
       y_unscaled = f32[32,16] multiply(y_f32, y_scale_bcast)
       dot_a = f32[16,16] dot(x_unscaled, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={0}
       dot_a_scaled = f32[16,16] multiply(dot_a, z_scale_bcast)
-      c1 = f32[] constant(-<<F8E4M3_AMAX>>)
+      c1 = f32[] constant(-448.)
       c1_bcast = f32[16,16] broadcast(c1), dimensions={}
-      c2 = f32[] constant(<<F8E4M3_AMAX>>)
+      c2 = f32[] constant(448.)
       c2_bcast = f32[16,16] broadcast(c2), dimensions={}
       dot_a_clamped = f32[16,16] clamp(c1_bcast, dot_a_scaled, c2_bcast)
-      ROOT dot_a_f8 = <<F8E4M3>>[16,16] convert(dot_a_clamped)
+      ROOT dot_a_f8 = f8e4m3fn[16,16] convert(dot_a_clamped)
           }
 
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
 
 ; CHECK-NOT:     divide
 
@@ -5894,19 +5651,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABInvScaledDF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDReluActivationF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -5922,31 +5674,31 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDReluActivationF8) {
       dot_a = f32[16,16] dot(x_unscaled, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={0}
       relu_a = f32[16,16] maximum(dot_a, c_bcast)
       relu_a_scaled = f32[16,16] divide(relu_a, z_scale_bcast)
-      c1 = f32[] constant(-<<F8E4M3_AMAX>>)
+      c1 = f32[] constant(-448.)
       c1_bcast = f32[16,16] broadcast(c1), dimensions={}
-      c2 = f32[] constant(<<F8E4M3_AMAX>>)
+      c2 = f32[] constant(448.)
       c2_bcast = f32[16,16] broadcast(c2), dimensions={}
       relu_a_clamped = f32[16,16] clamp(c1_bcast, relu_a_scaled, c2_bcast)
-      ROOT out = <<F8E4M3>>[16,16] convert(relu_a_clamped)
+      ROOT out = f8e4m3fn[16,16] convert(relu_a_clamped)
           }
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[], {{.*}}: f32[], {{.*}}: f32[]) -> <<F8E4M3>>[16,16] {
-; CHECK:         [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], x_scale: f32[], y_scale: f32[], z_scale: f32[]) -> f8e4m3fn[16,16] {
+; CHECK:         [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[P4:%[^ ]+]] = f32[] parameter(4)
-; CHECK-PTX-NEXT:    [[P4_INV:%[^ ]+]] = f32[] divide([[C2]], [[P4]])
-; CHECK-PTX-NEXT:    ROOT [[OUT:%[^ ]+]] = <<F8E4M3>>[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[P4_INV]]),
-; CHECK-GCN-NEXT:    [[OUT:%[^ ]+]] = f32[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[C1]]),
+; CHECK-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
+; CHECK-NEXT:    [[P4:%[^ ]+]] = f32[] parameter(4)
+; CHECK-NEXT:    [[P4_INV:%[^ ]+]] = f32[] divide([[C2]], [[P4]])
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f8e4m3fn[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[P4_INV]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -5967,20 +5719,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDReluActivationF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDMatrixBiasF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f16 = f16[16,32] convert(x)
       y_f16 = f16[32,16] convert(y)
       b = f16[16,16] parameter(2)
@@ -5995,32 +5742,32 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDMatrixBiasF8) {
       dot_a = f16[16,16] dot(x_unscaled, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={0}
       dot_a_bias = f16[16,16] add(dot_a, b)
       dot_a_scaled = f16[16,16] divide(dot_a_bias, z_scale_bcast)
-      c1 = f16[] constant(-<<F8E4M3_AMAX>>)
+      c1 = f16[] constant(-448.)
       c1_bcast = f16[16,16] broadcast(c1), dimensions={}
-      c2 = f16[] constant(<<F8E4M3_AMAX>>)
+      c2 = f16[] constant(448.)
       c2_bcast = f16[16,16] broadcast(c2), dimensions={}
       dot_a_clamped = f16[16,16] clamp(c1_bcast, dot_a_scaled, c2_bcast)
-      ROOT dot_a_f8 = <<F8E4M3>>[16,16] convert(dot_a_clamped)
+      ROOT dot_a_f8 = f8e4m3fn[16,16] convert(dot_a_clamped)
           }
 
 )";
 
   CheckFp8IfSupported(hlo_text, ErrorSpec{0.1, 0.1});
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f16[16,16], {{.*}}: f16[], {{.*}}: f16[], {{.*}}: f16[]) -> <<F8E4M3>>[16,16] {
-; CHECK:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], b: f16[16,16], x_scale: f16[], y_scale: f16[], z_scale: f16[]) -> f8e4m3fn[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[C0:%[^ ]+]] = f16[16,16]{1,0} parameter(2)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[] parameter(3)
 ; CHECK:         [[P3:%[^ ]+]] = f16[] parameter(4)
 ; CHECK:         [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX:         [[P4:%[^ ]+]] = f16[] parameter(5)
-; CHECK-PTX:       ROOT [[OUT:%[^ ]+]] = <<F8E4M3>>[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[C0]], [[DUMMY0:%[^ ]+]], [[DUMMY1:%[^ ]+]], /*index=5*/[[C1]], [[DUMMY2:%[^ ]+]]),
-; CHECK-GCN:       [[OUT:%[^ ]+]] = f16[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[C0]], [[DUMMY0:%[^ ]+]], [[DUMMY1:%[^ ]+]], /*index=5*/[[C1]], [[DUMMY2:%[^ ]+]]),
+; CHECK:         [[P4:%[^ ]+]] = f16[] parameter(5)
+; CHECK:       ROOT [[OUT:%[^ ]+]] = f8e4m3fn[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[C0]], [[DUMMY0:%[^ ]+]], [[DUMMY1:%[^ ]+]], /*index=5*/[[C1]], [[DUMMY2:%[^ ]+]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -6041,20 +5788,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDMatrixBiasF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDVectorBiasF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f16 = f16[16,32] convert(x)
       y_f16 = f16[32,16] convert(y)
       b = f16[16] parameter(2)
@@ -6070,47 +5812,47 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDVectorBiasF8) {
       dot_a = f16[16,16] dot(x_unscaled, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={0}
       dot_a_bias = f16[16,16] add(dot_a, b_bcast)
       dot_a_scaled = f16[16,16] divide(dot_a_bias, z_scale_bcast)
-      c1 = f16[] constant(-<<F8E4M3_AMAX>>)
+      c1 = f16[] constant(-448.)
       c1_bcast = f16[16,16] broadcast(c1), dimensions={}
-      c2 = f16[] constant(<<F8E4M3_AMAX>>)
+      c2 = f16[] constant(448.)
       c2_bcast = f16[16,16] broadcast(c2), dimensions={}
       dot_a_clamped = f16[16,16] clamp(c1_bcast, dot_a_scaled, c2_bcast)
-      ROOT dot_a_f8 = <<F8E4M3>>[16,16] convert(dot_a_clamped)
+      ROOT dot_a_f8 = f8e4m3fn[16,16] convert(dot_a_clamped)
           }
 
 )";
 
   CheckFp8IfSupported(hlo_text, ErrorSpec{0.1, 0.1});
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
 
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f16[16], {{.*}}: f16[], {{.*}}: f16[], {{.*}}: f16[]) -> <<F8E4M3>>[16,16] {
-; CHECK:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], b: f16[16], x_scale: f16[], y_scale: f16[], z_scale: f16[]) -> f8e4m3fn[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[] parameter(3)
 ; CHECK-NEXT:    [[CV:%[^ ]+]] = f32[] convert([[P2]])
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f16[] parameter(4)
 ; CHECK-NEXT:    [[CV1:%[^ ]+]] = f32[] convert([[P3]])
 ; CHECK-NEXT:    [[C:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[C2:%[^ ]+]] = f16[] constant(1)
-; CHECK-PTX-NEXT:    [[P4:%[^ ]+]] = f16[] parameter(5)
-; CHECK-PTX-NEXT:    [[DV:%[^ ]+]] = f16[] divide([[C2]], [[P4]])
-; CHECK-PTX-NEXT:    [[CV2:%[^ ]+]] = f32[] convert([[DV]])
+; CHECK-NEXT:    [[C2:%[^ ]+]] = f16[] constant(1)
+; CHECK-NEXT:    [[P4:%[^ ]+]] = f16[] parameter(5)
+; CHECK-NEXT:    [[DV:%[^ ]+]] = f16[] divide([[C2]], [[P4]])
+; CHECK-NEXT:    [[CV2:%[^ ]+]] = f32[] convert([[DV]])
 ; CHECK-NEXT:    [[VB:%[^ ]+]] = f16[16]{0} parameter(2)
-; CHECK-PTX:         ROOT [[OUT:%[^ ]+]] = <<F8E4M3>>[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[CV]], [[CV1]], [[C]], /*index=5*/[[CV2]], [[VB]]),
-; CHECK-GCN:         [[OUT:%[^ ]+]] = f16[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[CV]], [[CV1]], [[C]], /*index=5*/[[C]], [[VB]]),
+; CHECK:         ROOT [[OUT:%[^ ]+]] = f8e4m3fn[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[CV]], [[CV1]], [[C]], /*index=5*/[[CV2]], [[VB]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
 ; CHECK-DAG:         "alpha_imag":0
 ; CHECK-DAG:         "beta":0
-; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:         "dot_dimension_numbers":{ 
 ; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
 ; CHECK-DAG:           "rhs_contracting_dimensions":["1"]
 ; CHECK-DAG:           "lhs_batch_dimensions":[]
-; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[] 
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "precision_config":{
 ; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
@@ -6121,20 +5863,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDVectorBiasF8) {
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF32VectorBiasF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       b = f32[16] parameter(2)
@@ -6154,13 +5891,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF32VectorBiasF8) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[16], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
-; CHECK:         [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], b: f32[16], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
+; CHECK:         [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(4)
 ; CHECK-NEXT:    [[C:%[^ ]+]] = f32[] constant(1)
@@ -6172,11 +5910,11 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF32VectorBiasF8) {
 ; CHECK-DAG:         "alpha_real":1
 ; CHECK-DAG:         "alpha_imag":0
 ; CHECK-DAG:         "beta":0
-; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:         "dot_dimension_numbers":{ 
 ; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
 ; CHECK-DAG:           "rhs_contracting_dimensions":["1"]
 ; CHECK-DAG:           "lhs_batch_dimensions":[]
-; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[] 
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "precision_config":{
 ; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
@@ -6188,20 +5926,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF32VectorBiasF8) {
 
 TEST_P(ParameterizedFp8GemmRewriteTest,
        ScaledABUnscaledDVectorBiasThenReluActivationF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       b = f16[16] parameter(2)
       b_bcast = f16[16,16] broadcast(b), dimensions={1}
       x_f32 = f16[16,32] convert(x)
@@ -6221,13 +5954,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 )";
 
   CheckFp8IfSupported(hlo_text, ErrorSpec{2e-3, 0.});
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f16[16], {{.*}}: f16[], {{.*}}: f16[]) -> f16[16,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], b: f16[16], x_scale: f16[], y_scale: f16[]) -> f16[16,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[] parameter(3)
 ; CHECK-NEXT:    [[CV:%[^ ]+]] = f32[] convert([[P2]])
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f16[] parameter(4)
@@ -6255,19 +5989,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, Rank3ScaledABUnscaledDVectorBiasF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "A matrix bias on a matmul is only supported in CUDA 12";
-#endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
+#endif
   const char* hlo_text = R"(
     HloModule test
     ENTRY test {
-      x = <<F8E4M3>>[4,16,16] parameter(0)
-      y = <<F8E4M3>>[16,32] parameter(1)
+      x = f8e4m3fn[4,16,16] parameter(0)
+      y = f8e4m3fn[16,32] parameter(1)
       b = f32[32] parameter(2)
       b_f16 = f16[32] convert(b)
       b_bcast = f16[4,16,32] broadcast(b_f16), dimensions={2}
@@ -6288,7 +6017,8 @@ TEST_P(ParameterizedFp8GemmRewriteTest, Rank3ScaledABUnscaledDVectorBiasF8) {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
+  GemmRewriter pass(
+      se::CudaComputeCapability{se::CudaComputeCapability::HOPPER, 0});
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
@@ -6297,14 +6027,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, Rank3ScaledABUnscaledDVectorBiasF8) {
                                         .WithShape(F16, {64, 32}))
                              .WithShape(F16, {4, 16, 32})));
 
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[4,16,16], {{.*}}: <<F8E4M3>>[16,32], {{.*}}: f32[32], {{.*}}: f16[], {{.*}}: f16[]) -> f16[4,16,32] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[4,16,16]{2,1,0} parameter(0)
-; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = <<F8E4M3>>[64,16]{1,0} bitcast([[P0]])
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[4,16,16], y: f8e4m3fn[16,32], b: f32[32], x_scale: f16[], y_scale: f16[]) -> f16[4,16,32] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[4,16,16]{2,1,0} parameter(0)
+; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = f8e4m3fn[64,16]{1,0} bitcast([[P0]])
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[32,16]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[] parameter(3)
 ; CHECK-NEXT:    [[P2_CV:%[^ ]+]] = f32[] convert([[P2]])
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f16[] parameter(4)
@@ -6335,19 +6066,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest, Rank3ScaledABUnscaledDVectorBiasF8) {
 
 TEST_P(ParameterizedFp8GemmRewriteTest,
        Rank3ScaledABUnscaledDVectorBiasPaddedF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "A matrix bias on a matmul is only supported in CUDA 12";
 #endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
     ENTRY test {
-      x = <<F8E4M3>>[4,15,15] parameter(0)
-      y = <<F8E4M3>>[15,31] parameter(1)
+      x = f8e4m3fn[4,15,15] parameter(0)
+      y = f8e4m3fn[15,31] parameter(1)
       b = f32[31] parameter(2)
       b_f16 = f16[31] convert(b)
       b_bcast = f16[4,15,31] broadcast(b_f16), dimensions={2}
@@ -6368,7 +6094,8 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
+  GemmRewriter pass(
+      se::CudaComputeCapability{se::CudaComputeCapability::HOPPER, 0});
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
@@ -6379,18 +6106,19 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
                                 .WithShape(F16, {60, 31}))
                      .WithShape(F16, {4, 15, 31})));
 
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[4,15,15], {{.*}}: <<F8E4M3>>[15,31], {{.*}}: f32[31], {{.*}}: f16[], {{.*}}: f16[]) -> f16[4,15,31] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[4,15,15]{2,1,0} parameter(0)
-; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = <<F8E4M3>>[60,15]{1,0} bitcast([[P0]])
-; CHECK-NEXT:    [[C1:%[^ ]+]] = <<F8E4M3>>[] constant(0)
-; CHECK-NEXT:    [[P0_PAD:%[^ ]+]] = <<F8E4M3>>[64,16]{1,0} pad([[P0_BITCAST]], [[C1]]), padding=0_4x0_1
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[15,31]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[31,15]{1,0} transpose([[P1]]), dimensions={1,0}
-; CHECK-NEXT:    [[C2:%[^ ]+]] = <<F8E4M3>>[] constant(0)
-; CHECK-NEXT:    [[P1_PAD:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} pad([[P1_TRANSPOSE]], [[C2]]), padding=0_1x0_1
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[4,15,15], y: f8e4m3fn[15,31], b: f32[31], x_scale: f16[], y_scale: f16[]) -> f16[4,15,31] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[4,15,15]{2,1,0} parameter(0)
+; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = f8e4m3fn[60,15]{1,0} bitcast([[P0]])
+; CHECK-NEXT:    [[C1:%[^ ]+]] = f8e4m3fn[] constant(0)
+; CHECK-NEXT:    [[P0_PAD:%[^ ]+]] = f8e4m3fn[64,16]{1,0} pad([[P0_BITCAST]], [[C1]]), padding=0_4x0_1
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[15,31]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[31,15]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-NEXT:    [[C2:%[^ ]+]] = f8e4m3fn[] constant(0)
+; CHECK-NEXT:    [[P1_PAD:%[^ ]+]] = f8e4m3fn[32,16]{1,0} pad([[P1_TRANSPOSE]], [[C2]]), padding=0_1x0_1
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[] parameter(3)
 ; CHECK-NEXT:    [[P2_CV:%[^ ]+]] = f32[] convert([[P2]])
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f16[] parameter(4)
@@ -6423,19 +6151,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, Rank3ScaledABUnscaledDMatrixBiasF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "A matrix bias on a matmul is only supported in CUDA 12";
 #endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
     ENTRY test {
-      x = <<F8E4M3>>[4,16,16] parameter(0)
-      y = <<F8E4M3>>[16,32] parameter(1)
+      x = f8e4m3fn[4,16,16] parameter(0)
+      y = f8e4m3fn[16,32] parameter(1)
       b = f32[4,16,32] parameter(2)
       x_f32 = f32[4,16,16] convert(x)
       y_f32 = f32[16,32] convert(y)
@@ -6454,7 +6177,8 @@ TEST_P(ParameterizedFp8GemmRewriteTest, Rank3ScaledABUnscaledDMatrixBiasF8) {
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
+  GemmRewriter pass(
+      se::CudaComputeCapability{se::CudaComputeCapability::HOPPER, 0});
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
@@ -6463,14 +6187,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest, Rank3ScaledABUnscaledDMatrixBiasF8) {
                                         .WithShape(F32, {64, 32}))
                              .WithShape(F32, {4, 16, 32})));
 
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[4,16,16], {{.*}}: <<F8E4M3>>[16,32], {{.*}}: f32[4,16,32], {{.*}}: f32[], {{.*}}: f32[]) -> f32[4,16,32] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[4,16,16]{2,1,0} parameter(0)
-; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = <<F8E4M3>>[64,16]{1,0} bitcast([[P0]])
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[4,16,16], y: f8e4m3fn[16,32], b: f32[4,16,32], x_scale: f32[], y_scale: f32[]) -> f32[4,16,32] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[4,16,16]{2,1,0} parameter(0)
+; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = f8e4m3fn[64,16]{1,0} bitcast([[P0]])
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[32,16]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[B:%[^ ]+]] = f32[4,16,32]{2,1,0} parameter(2)
 ; CHECK-NEXT:    [[B_BITCAST:%[^ ]+]] = f32[64,32]{1,0} bitcast([[B]])
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(3)
@@ -6499,19 +6224,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest, Rank3ScaledABUnscaledDMatrixBiasF8) {
 
 TEST_P(ParameterizedFp8GemmRewriteTest,
        Rank3ScaledABUnscaledDMatrixBiasPaddedF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "A matrix bias on a matmul is only supported in CUDA 12";
 #endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
     ENTRY test {
-      x = <<F8E4M3>>[3,15,15] parameter(0)
-      y = <<F8E4M3>>[15,31] parameter(1)
+      x = f8e4m3fn[3,15,15] parameter(0)
+      y = f8e4m3fn[15,31] parameter(1)
       b = f32[3,15,31] parameter(2)
       x_f32 = f32[3,15,15] convert(x)
       y_f32 = f32[15,31] convert(y)
@@ -6530,7 +6250,8 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
+  GemmRewriter pass(
+      se::CudaComputeCapability{se::CudaComputeCapability::HOPPER, 0});
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
@@ -6541,18 +6262,19 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
                                 .WithShape(F32, {45, 31}))
                      .WithShape(F32, {3, 15, 31})));
 
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[3,15,15], {{.*}}: <<F8E4M3>>[15,31], {{.*}}: f32[3,15,31], {{.*}}: f32[], {{.*}}: f32[]) -> f32[3,15,31] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[3,15,15]{2,1,0} parameter(0)
-; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = <<F8E4M3>>[45,15]{1,0} bitcast([[P0]])
-; CHECK-NEXT:    [[C1:%[^ ]+]] = <<F8E4M3>>[] constant(0)
-; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = <<F8E4M3>>[48,16]{1,0} pad([[P0_BITCAST]], [[C1]]), padding=0_3x0_1
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[15,31]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[31,15]{1,0} transpose([[P1]]), dimensions={1,0}
-; CHECK-NEXT:    [[C2:%[^ ]+]] = <<F8E4M3>>[] constant(0)
-; CHECK-NEXT:    [[P1_PADDED:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} pad([[P1_TRANSPOSE]], [[C2]]), padding=0_1x0_1
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[3,15,15], y: f8e4m3fn[15,31], b: f32[3,15,31], x_scale: f32[], y_scale: f32[]) -> f32[3,15,31] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[3,15,15]{2,1,0} parameter(0)
+; CHECK-NEXT:    [[P0_BITCAST:%[^ ]+]] = f8e4m3fn[45,15]{1,0} bitcast([[P0]])
+; CHECK-NEXT:    [[C1:%[^ ]+]] = f8e4m3fn[] constant(0)
+; CHECK-NEXT:    [[P0_PADDED:%[^ ]+]] = f8e4m3fn[48,16]{1,0} pad([[P0_BITCAST]], [[C1]]), padding=0_3x0_1
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[15,31]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[31,15]{1,0} transpose([[P1]]), dimensions={1,0}
+; CHECK-NEXT:    [[C2:%[^ ]+]] = f8e4m3fn[] constant(0)
+; CHECK-NEXT:    [[P1_PADDED:%[^ ]+]] = f8e4m3fn[32,16]{1,0} pad([[P1_TRANSPOSE]], [[C2]]), padding=0_1x0_1
 ; CHECK-NEXT:    [[B:%[^ ]+]] = f32[3,15,31]{2,1,0} parameter(2)
 ; CHECK-NEXT:    [[B_BITCAST:%[^ ]+]] = f32[45,31]{1,0} bitcast([[B]])
 ; CHECK-NEXT:    [[C3:%[^ ]+]] = f32[] constant(0)
@@ -6586,19 +6308,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 // of dimensions.
 TEST_P(ParameterizedFp8GemmRewriteTest,
        ScaledABUnscaledDMatrixBiasWithSliceF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "A matrix bias on a matmul is only supported in CUDA 12";
 #endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   const char* hlo_text = R"(
     HloModule test
     ENTRY test {
-      x = <<F8E4M3>>[48,16] parameter(0)
-      y = <<F8E4M3>>[16,32] parameter(1)
+      x = f8e4m3fn[48,16] parameter(0)
+      y = f8e4m3fn[16,32] parameter(1)
       b = f32[32,16] parameter(2)
       x_f32 = f32[48,16] convert(x)
       y_f32 = f32[16,32] convert(y)
@@ -6616,17 +6333,19 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
+  GemmRewriter pass(
+      se::CudaComputeCapability{se::CudaComputeCapability::HOPPER, 0});
   TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
   EXPECT_TRUE(changed);
 
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[48,16], {{.*}}: <<F8E4M3>>[16,32], {{.*}}: f32[32,16], {{.*}}: f32[], {{.*}}: f32[]) -> f32[32,16] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = <<F8E4M3>>[48,16]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[48,16], y: f8e4m3fn[16,32], b: f32[32,16], x_scale: f32[], y_scale: f32[]) -> f32[32,16] {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[48,16]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[32,16]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(4)
 ; CHECK-NEXT:    [[C:%[^ ]+]] = f32[] constant(1)
@@ -6654,20 +6373,16 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDWithAllGatherF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
-  GTEST_SKIP() << "A matrix bias on a matmul is only supported in CUDA 12";
+#if CUDA_VERSION < 12000
+  GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
 
   absl::string_view hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[16,32] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[16,32] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[16,32] convert(y)
       x_scale = f32[] parameter(2)
@@ -6686,15 +6401,16 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDWithAllGatherF8) {
   config.set_use_spmd_partitioning(true);
   config.set_num_partitions(8);
 
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[16,32], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,32] {
-; CHECK:         [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK:         [[AG:%[^ ]+]] = <<F8E4M3>>[16,64]{1,0} all-gather([[P0]]), {{[^ ]+}}
-; CHECK:         [[P1:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(1)
-; CHECK:         [[AG1:%[^ ]+]] = <<F8E4M3>>[64,32]{1,0} all-gather([[P1]]), {{[^ ]+}}
-; CHECK:         [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[32,64]{1,0} transpose([[AG1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[16,32], x_scale: f32[], y_scale: f32[]) -> f32[16,32] {
+; CHECK:         [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK:         [[AG:%[^ ]+]] = f8e4m3fn[16,64]{1,0} all-gather([[P0]]), {{[^ ]+}}
+; CHECK:         [[P1:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(1)
+; CHECK:         [[AG1:%[^ ]+]] = f8e4m3fn[64,32]{1,0} all-gather([[P1]]), {{[^ ]+}}
+; CHECK:         [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[32,64]{1,0} transpose([[AG1]]), dimensions={1,0}
 ; CHECK:         [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK:         [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK:         [[C:%[^ ]+]] = f32[] constant(1)
@@ -6716,24 +6432,20 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDWithAllGatherF8) {
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
       )",
-      nullptr, &config);
+                            nullptr, &config);
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDWithAllToAllF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
-  GTEST_SKIP() << "A matrix bias on a matmul is only supported in CUDA 12";
+#if CUDA_VERSION < 12000
+  GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
 
   absl::string_view hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[16,32] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[16,32] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[16,32] convert(y)
       x_scale = f32[] parameter(2)
@@ -6751,13 +6463,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDWithAllToAllF8) {
   config.set_use_spmd_partitioning(true);
   config.set_num_partitions(8);
 
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[16,32], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
-; CHECK:         [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK:         [[AA:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} all-to-all([[P0]]), {{[^ ]+}}
-; CHECK:         [[P1:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(1)
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[16,32], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
+; CHECK:         [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK:         [[AA:%[^ ]+]] = f8e4m3fn[16,32]{1,0} all-to-all([[P0]]), {{[^ ]+}}
+; CHECK:         [[P1:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(1)
 ; CHECK:         [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK:         [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK:         [[C:%[^ ]+]] = f32[] constant(1)
@@ -6779,25 +6492,21 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDWithAllToAllF8) {
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
       )",
-      nullptr, &config);
+                            nullptr, &config);
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest,
        ScaledABUnscaledDWithCollectivePermuteF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
 
   absl::string_view hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[16,32] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[16,32] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[16,32] convert(y)
       x_scale = f32[] parameter(2)
@@ -6815,13 +6524,14 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
   config.set_use_spmd_partitioning(true);
   config.set_num_partitions(8);
 
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[16,32], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
-; CHECK:         [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK:         [[AA:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} collective-permute([[P0]]), {{[^ ]+}}
-; CHECK:         [[P1:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(1)
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[16,32], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
+; CHECK:         [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK:         [[AA:%[^ ]+]] = f8e4m3fn[16,32]{1,0} collective-permute([[P0]]), {{[^ ]+}}
+; CHECK:         [[P1:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(1)
 ; CHECK:         [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK:         [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK:         [[C:%[^ ]+]] = f32[] constant(1)
@@ -6843,25 +6553,20 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
       )",
-      nullptr, &config);
+                            nullptr, &config);
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest,
        ScaledABUnscaledDMatrixBiasThenVectorBiasF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
+#endif  // CUDA_VERSION < 12000
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f16 = f16[16,32] convert(x)
       y_f16 = f16[32,16] convert(y)
       b = f16[16] parameter(2)
@@ -6879,15 +6584,15 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
           }
 
 )";
-
   CheckFp8IfSupported(hlo_text, ErrorSpec{2e-3, 0.});
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL:   ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f16[16], {{.*}}: f16[16,16], {{.*}}: f16[], {{.*}}: f16[]) -> f16[16,16] {
-; CHECK-DAG:     [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL:   ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], b: f16[16], b2: f16[16,16], x_scale: f16[], y_scale: f16[]) -> f16[16,16] {
+; CHECK-DAG:     [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]]), dimensions={1,0}
 ; CHECK-NEXT:    [[MB:%[^ ]+]] = f16[16,16]{1,0} parameter(3)
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[] parameter(4)
 ; CHECK-NEXT:    [[CV0:%[^ ]+]] = f32[] convert([[P2]])
@@ -6900,11 +6605,11 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 ; CHECK-DAG:         "alpha_real":1
 ; CHECK-DAG:         "alpha_imag":0
 ; CHECK-DAG:         "beta":1
-; CHECK-DAG:         "dot_dimension_numbers":{
+; CHECK-DAG:         "dot_dimension_numbers":{ 
 ; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
 ; CHECK-DAG:           "rhs_contracting_dimensions":["1"]
 ; CHECK-DAG:           "lhs_batch_dimensions":[]
-; CHECK-DAG:           "rhs_batch_dimensions":[]
+; CHECK-DAG:           "rhs_batch_dimensions":[] 
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "precision_config":{
 ; CHECK-DAG:           "operand_precision":["DEFAULT","DEFAULT"]
@@ -6918,14 +6623,9 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDWithDAmaxF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
+#endif  // CUDA_VERSION < 12000
   const char* hlo_text = R"(
     HloModule test
 
@@ -6936,8 +6636,8 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDWithDAmaxF8) {
     }
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -6953,33 +6653,33 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDWithDAmaxF8) {
       c0 = f32[] constant(-inf)
       amax = f32[] reduce(abs_dot_a, c0), dimensions={0,1}, to_apply=apply
       dot_a_scaled = f32[16,16] divide(dot_a, z_scale_bcast)
-      c1 = f32[] constant(-<<F8E4M3_AMAX>>)
+      c1 = f32[] constant(-448.)
       c1_bcast = f32[16,16] broadcast(c1), dimensions={}
-      c2 = f32[] constant(<<F8E4M3_AMAX>>)
+      c2 = f32[] constant(448.)
       c2_bcast = f32[16,16] broadcast(c2), dimensions={}
       dot_a_clamped = f32[16,16] clamp(c1_bcast, dot_a_scaled, c2_bcast)
-      dot_a_f8 = <<F8E4M3>>[16,16] convert(dot_a_clamped)
-      ROOT out = (<<F8E4M3>>[16,16], f32[]) tuple(dot_a_f8, amax)
+      dot_a_f8 = f8e4m3fn[16,16] convert(dot_a_clamped)
+      ROOT out = (f8e4m3fn[16,16], f32[]) tuple(dot_a_f8, amax)
           }
 
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[], {{.*}}: f32[], {{.*}}: f32[]) -> (<<F8E4M3>>[16,16], f32[]) {
-; CHECK:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]])
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], x_scale: f32[], y_scale: f32[], z_scale: f32[]) -> (f8e4m3fn[16,16], f32[]) {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]])
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[P4:%[^ ]+]] = f32[] parameter(4)
-; CHECK-PTX-NEXT:    [[P4_INV:%[^ ]+]] = f32[] divide([[C2]], [[P4]])
-; CHECK-PTX-NEXT:    [[OUT:%[^ ]+]] = (<<F8E4M3>>[16,16]{1,0}, f32[]) custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[P4_INV]]),
-; CHECK-GCN-NEXT:    [[OUT:%[^ ]+]] = f32[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[C1]]),
+; CHECK-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
+; CHECK-NEXT:    [[P4:%[^ ]+]] = f32[] parameter(4)
+; CHECK-NEXT:    [[P4_INV:%[^ ]+]] = f32[] divide([[C2]], [[P4]])
+; CHECK-NEXT:    [[OUT:%[^ ]+]] = (f8e4m3fn[16,16]{1,0}, f32[]) custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[P4_INV]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -7001,14 +6701,9 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABScaledDWithDAmaxF8) {
 
 TEST_P(ParameterizedFp8GemmRewriteTest,
        ScaledABScaledDWithDAmaxF8WithF16Intermediates) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
+#endif  // CUDA_VERSION < 12000
   // This is the same as ScaledABScaledDWithDAmaxF8, but uses F16 intermediate
   // values instead of F32 intermediate values.
   const char* hlo_text = R"(
@@ -7021,8 +6716,8 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
     }
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f16 = f16[16,32] convert(x)
       y_f16 = f16[32,16] convert(y)
       x_scale = f16[] parameter(2)
@@ -7038,36 +6733,36 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
       c0 = f16[] constant(-inf)
       amax = f16[] reduce(abs_dot_a, c0), dimensions={0,1}, to_apply=apply
       dot_a_scaled = f16[16,16] divide(dot_a, z_scale_bcast)
-      c1 = f16[] constant(-<<F8E4M3_AMAX>>)
+      c1 = f16[] constant(-448.)
       c1_bcast = f16[16,16] broadcast(c1), dimensions={}
-      c2 = f16[] constant(<<F8E4M3_AMAX>>)
+      c2 = f16[] constant(448.)
       c2_bcast = f16[16,16] broadcast(c2), dimensions={}
       dot_a_clamped = f16[16,16] clamp(c1_bcast, dot_a_scaled, c2_bcast)
-      dot_a_f8 = <<F8E4M3>>[16,16] convert(dot_a_clamped)
-      ROOT out = (<<F8E4M3>>[16,16], f16[]) tuple(dot_a_f8, amax)
+      dot_a_f8 = f8e4m3fn[16,16] convert(dot_a_clamped)
+      ROOT out = (f8e4m3fn[16,16], f16[]) tuple(dot_a_f8, amax)
           }
 
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f16[], {{.*}}: f16[], {{.*}}: f16[]) -> (<<F8E4M3>>[16,16], f16[]) {
-; CHECK:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]])
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], x_scale: f16[], y_scale: f16[], z_scale: f16[]) -> (f8e4m3fn[16,16], f16[]) {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]])
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f16[] parameter(2)
 ; CHECK-NEXT:    [[P2_CONVERT:%[^ ]+]] = f32[] convert([[P2]])
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f16[] parameter(3)
 ; CHECK-NEXT:    [[P3_CONVERT:%[^ ]+]] = f32[] convert([[P3]])
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[C2:%[^ ]+]] = f16[] constant(1)
-; CHECK-PTX-NEXT:    [[P4:%[^ ]+]] = f16[] parameter(4)
-; CHECK-PTX-NEXT:    [[P4_INV:%[^ ]+]] = f16[] divide([[C2]], [[P4]])
-; CHECK-PTX-NEXT:    [[P4_INV_CONVERT:%[^ ]+]] = f32[] convert([[P4_INV]])
-; CHECK-PTX-NEXT:    [[OUT:%[^ ]+]] = (<<F8E4M3>>[16,16]{1,0}, f32[]) custom-call([[P0]], [[P1_TRANSPOSE]], [[P2_CONVERT]], [[P3_CONVERT]], [[C1]], /*index=5*/[[P4_INV_CONVERT]]),
-; CHECK-GCN-NEXT:    [[OUT:%[^ ]+]] = f16[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[P2_CONVERT]], [[P3_CONVERT]], [[C1]], /*index=5*/[[C1]]),
+; CHECK-NEXT:    [[C2:%[^ ]+]] = f16[] constant(1)
+; CHECK-NEXT:    [[P4:%[^ ]+]] = f16[] parameter(4)
+; CHECK-NEXT:    [[P4_INV:%[^ ]+]] = f16[] divide([[C2]], [[P4]])
+; CHECK-NEXT:    [[P4_INV_CONVERT:%[^ ]+]] = f32[] convert([[P4_INV]])
+; CHECK-NEXT:    [[OUT:%[^ ]+]] = (f8e4m3fn[16,16]{1,0}, f32[]) custom-call([[P0]], [[P1_TRANSPOSE]], [[P2_CONVERT]], [[P3_CONVERT]], [[C1]], /*index=5*/[[P4_INV_CONVERT]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -7089,14 +6784,9 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
 
 TEST_P(ParameterizedFp8GemmRewriteTest,
        ScaledABScaledDReluActivationWithDAmaxF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
+#endif  // CUDA_VERSION < 12000
   const char* hlo_text = R"(
     HloModule test
 
@@ -7107,8 +6797,8 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
     }
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E4M3>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e4m3fn[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -7126,33 +6816,33 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
       c0 = f32[] constant(-inf)
       amax = f32[] reduce(dot_a_relu, c0), dimensions={0,1}, to_apply=apply
       dot_a_scaled = f32[16,16] divide(dot_a_relu, z_scale_bcast)
-      c1 = f32[] constant(-<<F8E4M3_AMAX>>)
+      c1 = f32[] constant(-448.)
       c1_bcast = f32[16,16] broadcast(c1), dimensions={}
-      c2 = f32[] constant(<<F8E4M3_AMAX>>)
+      c2 = f32[] constant(448.)
       c2_bcast = f32[16,16] broadcast(c2), dimensions={}
       dot_a_clamped = f32[16,16] clamp(c1_bcast, dot_a_scaled, c2_bcast)
-      dot_a_f8 = <<F8E4M3>>[16,16] convert(dot_a_clamped)
-      ROOT out = (<<F8E4M3>>[16,16], f32[]) tuple(dot_a_f8, amax)
+      dot_a_f8 = f8e4m3fn[16,16] convert(dot_a_clamped)
+      ROOT out = (f8e4m3fn[16,16], f32[]) tuple(dot_a_f8, amax)
           }
 
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: <<F8E4M3>>[16,32], {{.*}}: <<F8E4M3>>[32,16], {{.*}}: f32[], {{.*}}: f32[], {{.*}}: f32[]) -> (<<F8E4M3>>[16,16], f32[]) {
-; CHECK:    [[P0:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = <<F8E4M3>>[32,16]{1,0} parameter(1)
-; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]])
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fn[16,32], y: f8e4m3fn[32,16], x_scale: f32[], y_scale: f32[], z_scale: f32[]) -> (f8e4m3fn[16,16], f32[]) {
+; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fn[16,32]{1,0} parameter(0)
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fn[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = f8e4m3fn[16,32]{1,0} transpose([[P1]])
 ; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
 ; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
 ; CHECK-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX-NEXT:    [[P4:%[^ ]+]] = f32[] parameter(4)
-; CHECK-PTX-NEXT:    [[P4_INV:%[^ ]+]] = f32[] divide([[C2]], [[P4]])
-; CHECK-PTX-NEXT:    [[OUT:%[^ ]+]] = (<<F8E4M3>>[16,16]{1,0}, f32[]) custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[P4_INV]]),
-; CHECK-GCN-NEXT:    [[OUT:%[^ ]+]] = f32[16,16]{1,0} custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[C1]]),
+; CHECK-NEXT:    [[C2:%[^ ]+]] = f32[] constant(1)
+; CHECK-NEXT:    [[P4:%[^ ]+]] = f32[] parameter(4)
+; CHECK-NEXT:    [[P4_INV:%[^ ]+]] = f32[] divide([[C2]], [[P4]])
+; CHECK-NEXT:    [[OUT:%[^ ]+]] = (f8e4m3fn[16,16]{1,0}, f32[]) custom-call([[P0]], [[P1_TRANSPOSE]], [[P2]], [[P3]], [[C1]], /*index=5*/[[P4_INV]]),
 ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
@@ -7172,55 +6862,10 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
       )");
 }
 
-TEST_P(ParameterizedFp8GemmRewriteTest, UnscaledABUnscaledDPrecisionF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8Parameterized) {
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
 #endif  // CUDA_VERSION < 12000
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
-  const char* raw_hlo_template = R"(
-    HloModule test
-
-    ENTRY test {
-      x = <<F8E4M3>>[1600,3200] parameter(0)
-      y = <<F8E4M3>>[3200,1600] parameter(1)
-      x_f32 = f32[1600,3200] convert(x)
-      y_f32 = f32[3200,1600] convert(y)
-      x_scale = f32[] parameter(2)
-      y_scale = f32[] parameter(3)
-      x_scale_bcast = f32[1600,3200] broadcast(x_scale), dimensions={}
-      y_scale_bcast = f32[3200,1600] broadcast(y_scale), dimensions={}
-      x_unscaled = f32[1600,3200] multiply(x_f32, x_scale_bcast)
-      y_unscaled = f32[3200,1600] multiply(y_f32, y_scale_bcast)
-      ROOT out = f32[1600,1600] dot(x_unscaled, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={0}, operand_precision={<<precision>>,<<precision>>}
-          }
-)";
-
-  std::string hlo_template =
-      absl::StrReplaceAll(raw_hlo_template, replacements_);
-
-  absl::flat_hash_map<absl::string_view, absl::string_view> replacements;
-  replacements["<<precision>>"] = "default";
-  const auto hlo_text_default = absl::StrReplaceAll(hlo_template, replacements);
-  EXPECT_TRUE(RunAndCompare(hlo_text_default, ErrorSpec{1e-3, 1e-3}));
-
-  replacements["<<precision>>"] = "highest";
-  const auto hlo_text_highest = absl::StrReplaceAll(hlo_template, replacements);
-  EXPECT_TRUE(RunAndCompare(hlo_text_highest, ErrorSpec{1e-4, 1e-4}));
-}
-
-TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8Parameterized) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
   std::array<std::array<absl::string_view, 7>, 32> combinations;
   int i = 0;
 
@@ -7252,12 +6897,12 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8Parameterized) {
   const char* hlo_template = R"(
       HloModule test
     ENTRY test {
-      x = <<F8E4M3>><<Ashape>><<Alayout>> parameter(0)
+      x = f8e4m3fn<<Ashape>><<Alayout>> parameter(0)
       x_f32 = f32<<Ashape>><<Alayout>> convert(x)
       x_scale = f32[] parameter(2)
       x_scale_bcast = f32<<Ashape>> broadcast(x_scale), dimensions={}
       x_unscaled = f32<<Ashape>> multiply(x_f32, x_scale_bcast)
-      y = <<F8E4M3>><<Bshape>><<Blayout>> parameter(1)
+      y = f8e4m3fn<<Bshape>><<Blayout>> parameter(1)
       y_f32 = f32<<Bshape>><<Blayout>> convert(y)
       y_scale = f32[] parameter(3)
       y_scale_bcast = f32<<Bshape>> broadcast(y_scale), dimensions={}
@@ -7277,9 +6922,10 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8Parameterized) {
     const auto hlo_text = absl::StrReplaceAll(hlo_template, replacements);
     CheckFp8IfSupported(hlo_text);
 
-    RunAndFilecheckHloRewrite(
-        hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-        R"(
+    RunAndFilecheckHloRewrite(hlo_text,
+                              GemmRewriter(se::CudaComputeCapability{
+                                  se::CudaComputeCapability::HOPPER, 0}),
+                              R"(
     ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
           )");
   }
@@ -7287,15 +6933,10 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8Parameterized) {
 
 TEST_P(ParameterizedFp8GemmRewriteTest,
        ScaledABUnscaledDF8ParameterizedBatched) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
-  // TODO(wenscarl): For batched matmul, not all combinations of A, B and
+#endif  // CUDA_VERSION < 12000
+  // TODO(wenscarl): For batched matmaul, not all combinations of A, B and
   // output layouts get pattern matched successfully to FP8 custom call. Only
   // a handful of cases are tested here.
   std::array<std::array<std::string, 7>, 32> combinations;
@@ -7322,13 +6963,13 @@ TEST_P(ParameterizedFp8GemmRewriteTest,
   const char* hlo_template = R"(
       HloModule m
 ENTRY f {
-  x_q = <<F8E4M3>><<Ashape>><<Alayout>> parameter(0)
+  x_q = f8e4m3fn<<Ashape>><<Alayout>> parameter(0)
   x_scale = f32[] parameter(2)
   x_scale_broadcast = f32<<Ashape>><<Alayout>> broadcast(x_scale), dimensions={}
   x_q_convert = f32<<Ashape>><<Alayout>> convert(x_q)
   x_qdq = f32<<Ashape>><<Alayout>> multiply(x_q_convert, x_scale_broadcast)
 
-  y_q = <<F8E4M3>><<Bshape>><<Blayout>> parameter(1)
+  y_q = f8e4m3fn<<Bshape>><<Blayout>> parameter(1)
   y_scale = f32[] parameter(3)
   y_scale_broadcast = f32<<Bshape>><<Blayout>> broadcast(y_scale), dimensions={}
   y_q_convert = f32<<Bshape>><<Blayout>> convert(y_q)
@@ -7337,7 +6978,6 @@ ENTRY f {
   ROOT out = f32[2,64,16]<<Olayout>> dot(x_qdq, y_qdq), lhs_batch_dims={0}, lhs_contracting_dims=<<Lcd>>, rhs_batch_dims={0}, rhs_contracting_dims=<<Rcd>>
 }
      )";
-
   for (const auto& combination : combinations) {
     absl::flat_hash_map<std::string, std::string> replacements;
     replacements["<<Lcd>>"] = std::get<0>(combination);
@@ -7351,29 +6991,25 @@ ENTRY f {
     const auto hlo_text = absl::StrReplaceAll(hlo_template, replacements);
     CheckFp8IfSupported(hlo_text);
 
-    RunAndFilecheckHloRewrite(
-        hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-        R"(
+    RunAndFilecheckHloRewrite(hlo_text,
+                              GemmRewriter(se::CudaComputeCapability{
+                                  se::CudaComputeCapability::HOPPER, 0}),
+                              R"(
     ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
           )");
   }
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8TF32E5M2) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
+#endif  // CUDA_VERSION < 12000
   const char* hlo_text = R"(
     HloModule test
 
     ENTRY test {
-      x = <<F8E4M3>>[16,32] parameter(0)
-      y = <<F8E5M2>>[32,16] parameter(1)
+      x = f8e4m3fn[16,32] parameter(0)
+      y = f8e5m2[32,16] parameter(1)
       x_f32 = f32[16,32] convert(x)
       y_f32 = f32[32,16] convert(y)
       x_scale = f32[] parameter(2)
@@ -7388,22 +7024,18 @@ TEST_P(ParameterizedFp8GemmRewriteTest, ScaledABUnscaledDF8TF32E5M2) {
 )";
 
   CheckFp8IfSupported(hlo_text);
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            R"(
     ; CHECK:           custom_call_target="__cublas$lt$matmul$f8",
           )");
 }
 
 TEST_P(ParameterizedFp8GemmRewriteTest, FnuzTypeF8) {
-#if GOOGLE_CUDA && CUDA_VERSION < 12000
+#if CUDA_VERSION < 12000
   GTEST_SKIP() << "F8 gemm rewrite is only supported in CUDA 12 and above.";
-#endif
-
-#if TENSORFLOW_USE_ROCM && TF_ROCM_VERSION < 60000
-  GTEST_SKIP() << "F8 gemm rewrite is only supported in ROCm 6.0 and above.";
-#endif  // TF_ROCM_VERSION < 60000
-
+#endif  // CUDA_VERSION < 12000
   // Test that FNUZ FP8 gemms are not rewritten, as cuBLAS does not support them
   const char* hlo_text = R"(
     HloModule test
@@ -7422,45 +7054,31 @@ TEST_P(ParameterizedFp8GemmRewriteTest, FnuzTypeF8) {
       ROOT out = f32[16,16] dot(x_unscaled, y_unscaled), lhs_contracting_dims={1}, rhs_contracting_dims={0}
           }
 )";
-#if GOOGLE_CUDA
-  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseAndReturnVerifiedModule(hlo_text));
-  GemmRewriter pass(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true);
-  TF_ASSERT_OK_AND_ASSIGN(bool changed, this->RunHloPass(&pass, module.get()));
-  EXPECT_FALSE(changed);
-#endif
-#if TENSORFLOW_USE_ROCM
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-2, 1e-2}));
-  RunAndFilecheckHloRewrite(
-      hlo_text, GemmRewriter(CudaHopperOrRocmMI300(), /*f8_rewrite=*/true),
-      R"(
-; CHECK-LABEL: ENTRY %test ({{.*}}: f8e4m3fnuz[16,32], {{.*}}: f8e4m3fnuz[32,16], {{.*}}: f32[], {{.*}}: f32[]) -> f32[16,16] {
+  RunAndFilecheckHloRewrite(hlo_text,
+                            GemmRewriter(se::CudaComputeCapability{
+                                se::CudaComputeCapability::HOPPER, 0}),
+                            absl::StrReplaceAll(R"(
+; CHECK-LABEL: ENTRY %test (x: f8e4m3fnuz[16,32], y: f8e4m3fnuz[32,16], x_scale: f32[], y_scale: f32[]) -> f32[16,16] {
 ; CHECK-NEXT:    [[P0:%[^ ]+]] = f8e4m3fnuz[16,32]{1,0} parameter(0)
-; CHECK-PTX-NEXT:    [[P0_CV:%[^ ]+]] = f32[16,32]{1,0} convert([[P0]])
-; CHECK-PTX-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
-; CHECK-PTX-NEXT:    [[P2_B:%[^ ]+]] = f32[16,32]{1,0} broadcast([[P2]]), dimensions={}
-; CHECK-PTX-NEXT:    [[P0_UNSCALED:%[^ ]+]] = f32[16,32]{1,0} multiply([[P0_CV]], [[P2_B]])
-; CHECK-PTX-NEXT:    [[P1:%[^ ]+]] = f8e4m3fnuz[32,16]{1,0} parameter(1)
-; CHECK-PTX-NEXT:    [[P1_CV:%[^ ]+]] = f32[32,16]{1,0} convert([[P1]])
-; CHECK-PTX-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
-; CHECK-PTX-NEXT:    [[P3_B:%[^ ]+]] = f32[32,16]{1,0} broadcast([[P3]]), dimensions={}
-; CHECK-PTX-NEXT:    [[P1_UNSCALED:%[^ ]+]] = f32[32,16]{1,0} multiply([[P1_CV]], [[P3_B]])
-; CHECK-PTX-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} custom-call([[P0_UNSCALED]], [[P1_UNSCALED]]),
-; CHECK-GCN-NEXT:    [[P1:%[^ ]+]] = f8e4m3fnuz[32,16]{1,0} parameter(1)
-; CHECK-GCN-NEXT:    [[P1_TRANSPOSE:%[^ ]+]] = <<F8E4M3>>[16,32]{1,0} transpose([[P1]])
-; CHECK-GCN-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
-; CHECK-GCN-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
-; CHECK-GCN-NEXT:    [[C1:%[^ ]+]] = f32[] constant(1)
-; CHECK-PTX:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
-; CHECK-GCN:           custom_call_target="__cublas$lt$matmul$f8",
+; CHECK-NEXT:    [[P0_CV:%[^ ]+]] = f32[16,32]{1,0} convert([[P0]])
+; CHECK-NEXT:    [[P2:%[^ ]+]] = f32[] parameter(2)
+; CHECK-NEXT:    [[P2_B:%[^ ]+]] = f32[16,32]{1,0} broadcast([[P2]]), dimensions={}
+; CHECK-NEXT:    [[P0_UNSCALED:%[^ ]+]] = f32[16,32]{1,0} multiply([[P0_CV]], [[P2_B]])
+; CHECK-NEXT:    [[P1:%[^ ]+]] = f8e4m3fnuz[32,16]{1,0} parameter(1)
+; CHECK-NEXT:    [[P1_CV:%[^ ]+]] = f32[32,16]{1,0} convert([[P1]])
+; CHECK-NEXT:    [[P3:%[^ ]+]] = f32[] parameter(3)
+; CHECK-NEXT:    [[P3_B:%[^ ]+]] = f32[32,16]{1,0} broadcast([[P3]]), dimensions={}
+; CHECK-NEXT:    [[P1_UNSCALED:%[^ ]+]] = f32[32,16]{1,0} multiply([[P1_CV]], [[P3_B]])
+; CHECK-NEXT:    ROOT [[OUT:%[^ ]+]] = f32[16,16]{1,0} custom-call([[P0_UNSCALED]], [[P1_UNSCALED]]),
+; CHECK:           custom_call_target="<<CUBLAS_CUSTOM_CALL_TARGET_PLACEHOLDER>>",
 ; CHECK:           backend_config={
 ; CHECK-DAG:         "alpha_real":1
 ; CHECK-DAG:         "alpha_imag":0
 ; CHECK-DAG:         "beta":0
 ; CHECK-DAG:         "dot_dimension_numbers":{
 ; CHECK-DAG:           "lhs_contracting_dimensions":["1"]
-; CHECK-PTX-DAG:           "rhs_contracting_dimensions":["0"]
-; CHECK-GCN-DAG:           "rhs_contracting_dimensions":["1"]
+; CHECK-DAG:           "rhs_contracting_dimensions":["0"]
 ; CHECK-DAG:           "lhs_batch_dimensions":[]
 ; CHECK-DAG:           "rhs_batch_dimensions":[]
 ; CHECK-DAG:         }
@@ -7469,8 +7087,8 @@ TEST_P(ParameterizedFp8GemmRewriteTest, FnuzTypeF8) {
 ; CHECK-DAG:         }
 ; CHECK-DAG:         "epilogue":"DEFAULT"
 ; CHECK:           }
-      )");
-#endif
+      )",
+                                                replacements_));
 }
 
 INSTANTIATE_TEST_SUITE_P(Fp8CublasTestsBothLegacyAndLt,
@@ -7514,14 +7132,7 @@ class GemmRewriteAllocationTest : public GpuCodegenTest {
         static_cast<GpuExecutable*>(executable.get());
     absl::Span<const BufferAllocation> allocations =
         gpu_executable->GetAllocations();
-    ASSERT_EQ(allocations.size(), expected_number_of_allocations);
-  }
-
-  DebugOptions GetDebugOptionsForTest() override {
-    DebugOptions debug_options = GpuCodegenTest::GetDebugOptionsForTest();
-    // Make sure the rewriter does not skip the rewrite for being too small.
-    debug_options.set_xla_gpu_gemm_rewrite_size_threshold(0);
-    return debug_options;
+    CHECK_EQ(allocations.size(), expected_number_of_allocations);
   }
 };
 
@@ -7540,58 +7151,8 @@ ENTRY AddDotsFunc {
 )";
 
   // Bias should be fused into the multiplication.
-  CheckNumberOfAllocations(hlo_text, 4);
+  CheckNumberOfAllocations(hlo_text, 3);
   EXPECT_TRUE(RunAndCompare(hlo_text, ErrorSpec{1e-5, 1e-5}));
-}
-
-class SmallDotGemmRewriteTest : public GemmRewriteTest {
- public:
-  DebugOptions GetDebugOptionsForTest() override {
-    DebugOptions debug_options = GemmRewriteTest::GetDebugOptionsForTest();
-    debug_options.set_xla_gpu_gemm_rewrite_size_threshold(100);
-    return debug_options;
-  }
-};
-
-TEST_F(SmallDotGemmRewriteTest, SkipSmallMatrixMultiplicationRewrite) {
-  const char* hlo_text = R"(
-HloModule SkipSmallMatrixRewrite
-
-ENTRY DotFunc {
-  x = f32[3,3] parameter(0)
-  y = f32[3,3] parameter(1)
-  ROOT out = f32[3,3] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-}
-)";
-
-  MatchOptimizedHlo(hlo_text,
-                    R"(
-; CHECK-LABEL: ENTRY %DotFunc ({{.*}}: f32[3,3], {{.*}}: f32[3,3]) -> f32[3,3] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[3,3]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[3,3]{1,0} parameter(1)
-; CHECK-NEXT:    [[GEMM:%[^ ]+]] = {{.*}} dot([[P0]], [[P1]]),
-; CHECK:           lhs_contracting_dims={1}, rhs_contracting_dims={0}
-)");
-}
-
-TEST_F(SmallDotGemmRewriteTest, LargeMatrixMultiplicationIsRewritten) {
-  const char* hlo_text = R"(
-HloModule SkipSmallMatrixRewrite
-
-ENTRY DotFunc {
-  x = f32[8,8] parameter(0)
-  y = f32[8,8] parameter(1)
-  ROOT out = f32[8,8] dot(x, y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-}
-)";
-
-  MatchOptimizedHlo(hlo_text,
-                    R"(
-; CHECK-LABEL: ENTRY %DotFunc ({{.*}}: f32[8,8], {{.*}}: f32[8,8]) -> f32[8,8] {
-; CHECK-NEXT:    [[P0:%[^ ]+]] = f32[8,8]{1,0} parameter(0)
-; CHECK-NEXT:    [[P1:%[^ ]+]] = f32[8,8]{1,0} parameter(1)
-; CHECK:         {{[^ ]+}} = {{.*}} custom-call([[P0]], [[P1]])
-)");
 }
 
 }  // namespace

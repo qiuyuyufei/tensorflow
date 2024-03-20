@@ -69,7 +69,7 @@ class Int32FulltypeTest : public ::testing::Test {
   Status BuildGraph(const GraphDefBuilder& builder, Graph* out_graph) {
     TF_RETURN_IF_ERROR(GraphDefBuilderToGraph(builder, out_graph));
     RebuildNodeNameMap(*out_graph);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   void AddTensorFT(FullTypeDef& t, tensorflow::FullTypeId out_t_id,

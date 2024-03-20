@@ -33,8 +33,6 @@ module @main attributes {mhlo.cross_program_prefetches = [], mhlo.is_dynamic = f
 // CHECK-NEXT: }
 // CHECK-NEXT: metadata {
 // CHECK-NEXT:   op_name: "name(anothername)
-// CHECK-NEXT:   source_file: "file_name"
-// CHECK-NEXT:   source_line: 2
 // CHECK-NEXT:   stack_frame_id: 1
 // CHECK-NEXT: }
 
@@ -73,8 +71,6 @@ module @main attributes {mhlo.cross_program_prefetches = [], mhlo.is_dynamic = f
 // CHECK-NEXT: }
 // CHECK-NEXT: metadata {
 // CHECK-NEXT:   op_name: "name(anothername)
-// CHECK-NEXT:   source_file: "file_name_2"
-// CHECK-NEXT:   source_line: 3
 // CHECK-NEXT:   stack_frame_id: 2
 // CHECK-NEXT: }
 

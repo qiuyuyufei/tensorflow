@@ -198,9 +198,9 @@ static void AddControlOperand(Operation *op, Value control,
                               PatternRewriter &rewriter) {
   assert(control.getType().isa<ControlType>());
   if (llvm::is_contained(op->getOperands(), control)) return;
-  rewriter.startOpModification(op);
+  rewriter.startRootUpdate(op);
   op->insertOperands(op->getNumOperands(), control);
-  rewriter.finalizeOpModification(op);
+  rewriter.finalizeRootUpdate(op);
 }
 
 static FailureOr<TFOp> ReplaceOpWithConstantTensor(
@@ -782,9 +782,9 @@ class EvaluateConstant : public FolderPatternBase<EvaluateConstant> {
         if (!it.value()) continue;
         for (OpOperand &use :
              llvm::make_early_inc_range(op->getResult(it.index()).getUses())) {
-          rewriter.startOpModification(use.getOwner());
+          rewriter.startRootUpdate(use.getOwner());
           use.set(it.value()->getResult(0));
-          rewriter.finalizeOpModification(use.getOwner());
+          rewriter.finalizeRootUpdate(use.getOwner());
         }
       }
       // All the non-control outputs are replaced with constant ops, except for
@@ -998,9 +998,9 @@ class MaterializeShapeNOp : public FolderPatternBase<MaterializeShapeNOp> {
 
       for (OpOperand &user :
            llvm::make_early_inc_range(op->getResult(it.index()).getUses())) {
-        rewriter.startOpModification(user.getOwner());
+        rewriter.startRootUpdate(user.getOwner());
         user.set((*const_op)->getResult(0));
-        rewriter.finalizeOpModification(user.getOwner());
+        rewriter.finalizeRootUpdate(user.getOwner());
       }
     }
 
@@ -1107,15 +1107,15 @@ class MaterializeBroadcastGradientArgsOp
 
     for (OpOperand &user :
          llvm::make_early_inc_range(op->getResult(0).getUses())) {
-      rewriter.startOpModification(user.getOwner());
+      rewriter.startRootUpdate(user.getOwner());
       user.set(const_values[0]);
-      rewriter.finalizeOpModification(user.getOwner());
+      rewriter.finalizeRootUpdate(user.getOwner());
     }
     for (OpOperand &user :
          llvm::make_early_inc_range(op->getResult(1).getUses())) {
-      rewriter.startOpModification(user.getOwner());
+      rewriter.startRootUpdate(user.getOwner());
       user.set(const_values[1]);
-      rewriter.finalizeOpModification(user.getOwner());
+      rewriter.finalizeRootUpdate(user.getOwner());
     }
 
     return success();
@@ -1193,9 +1193,9 @@ class MaterializeReductionIndices
     if (TFOp(op).deviceAttr())
       (*const_op).setRequestedDevice(TFOp(op).deviceAttr());
 
-    rewriter.startOpModification(op);
+    rewriter.startRootUpdate(op);
     op->setOperand(1, (*const_op)->getResults()[0]);
-    rewriter.finalizeOpModification(op);
+    rewriter.finalizeRootUpdate(op);
 
     return success();
   }
@@ -1371,15 +1371,15 @@ class MergeNodeFoldingBase : public PropagationPatternBase<ConcreteType> {
 
       for (OpOperand &user :
            llvm::make_early_inc_range(op->getResults()[0].getUses())) {
-        rewriter.startOpModification(user.getOwner());
+        rewriter.startRootUpdate(user.getOwner());
         user.set((*const_out)->getResult(0));
-        rewriter.finalizeOpModification(user.getOwner());
+        rewriter.finalizeRootUpdate(user.getOwner());
       }
       for (OpOperand &user :
            llvm::make_early_inc_range(op->getResults()[1].getUses())) {
-        rewriter.startOpModification(user.getOwner());
+        rewriter.startRootUpdate(user.getOwner());
         user.set((*const_index)->getResult(0));
-        rewriter.finalizeOpModification(user.getOwner());
+        rewriter.finalizeRootUpdate(user.getOwner());
       }
 
       // Already found an avaiable input.
@@ -1902,9 +1902,9 @@ class MoveConstantsPastEnterOpBase
     if (!TFOp(op).device().empty())
       (*cloned_const_op).setRequestedDevice(TFOp(op).deviceAttr());
 
-    rewriter.startOpModification(op);
+    rewriter.startRootUpdate(op);
     op->getResults()[0].replaceAllUsesWith((*cloned_const_op)->getResults()[0]);
-    rewriter.finalizeOpModification(op);
+    rewriter.finalizeRootUpdate(op);
     return success();
   }
 };
@@ -1988,9 +1988,9 @@ class SimplifySwitchOp : public PropagationPatternBase<SimplifySwitchOp> {
       for (OpOperand &user : llvm::make_early_inc_range(result.getUses())) {
         if (user.getOwner() == &(*anchor)) continue;
 
-        rewriter.startOpModification(user.getOwner());
+        rewriter.startRootUpdate(user.getOwner());
         user.set(const_op->getResult(0));
-        rewriter.finalizeOpModification(user.getOwner());
+        rewriter.finalizeRootUpdate(user.getOwner());
       }
       modified = true;
     };
@@ -2595,14 +2595,14 @@ class ConstantPushDown : public ConstantPushDownBase<ConstantPushDown> {
       // X   +
       //    / \
       //   C   Y
-      rewriter.startOpModification(op);
+      rewriter.startRootUpdate(op);
       op->setOperand(0, x_value);
       op->setOperand(1, child_op->getResult(0));
-      rewriter.finalizeOpModification(op);
-      rewriter.startOpModification(child_op);
+      rewriter.finalizeRootUpdate(op);
+      rewriter.startRootUpdate(child_op);
       child_op->setOperand(0, const_op->getResult(0));
       child_op->setOperand(1, y_value);
-      rewriter.finalizeOpModification(child_op);
+      rewriter.finalizeRootUpdate(child_op);
     } else {
       // More complicated case: When there are non-commutative operations like
       // subtractions or divisions involved, we may have to rotate the tree
@@ -2692,9 +2692,9 @@ class PartialConstPropThroughIdentityN
         continue;
       }
 
-      rewriter.startOpModification(op);
+      rewriter.startRootUpdate(op);
       operand.set(value_to_forward);
-      rewriter.finalizeOpModification(op);
+      rewriter.finalizeRootUpdate(op);
 
       // Add the control dependency to the Identity/IdentityN. Note that it's
       // possible to have multiple operands defined by the same
@@ -3002,21 +3002,21 @@ class MulConvPushDown : public ConstantPatternBase<MulConvPushDown, FolderTrait,
 
     StringRef conv_node_name = TFOp(conv_node).name();
 
-    rewriter.startOpModification(conv_node);
+    rewriter.startRootUpdate(conv_node);
     TFOp(conv_node).setName(TFOp(op).nameAttr());
     if (conv_left_is_constant)
       conv_node->setOperand(0, op->getResult(0));
     else
       conv_node->setOperand(1, op->getResult(0));
-    rewriter.finalizeOpModification(conv_node);
+    rewriter.finalizeRootUpdate(conv_node);
 
-    rewriter.startOpModification(op);
+    rewriter.startRootUpdate(op);
     TFOp(op).setName(Twine(conv_node_name, "/merged_input"));
     if (left_child_is_constant)
       op->setOperand(1, conv_const_node->getResult(0));
     else
       op->setOperand(0, conv_const_node->getResult(0));
-    rewriter.finalizeOpModification(op);
+    rewriter.finalizeRootUpdate(op);
 
     return success();
   }
@@ -3150,9 +3150,9 @@ class PartialConcatConstFolding
 
       // Overwrite the first constant input with the result of the added
       // child node.
-      rewriter.startOpModification(op);
+      rewriter.startRootUpdate(op);
       op->setOperand(interval.first, new_op->getResult(0));
-      rewriter.finalizeOpModification(op);
+      rewriter.finalizeRootUpdate(op);
     }
 
     if (!inputs_to_delete.empty()) {
@@ -3273,12 +3273,12 @@ class ConstantPushDownBiasAdd
       return failure();
     }
 
-    rewriter.startOpModification(op);
+    rewriter.startRootUpdate(op);
     op->setOperand(1, leaf_to_swap);
-    rewriter.finalizeOpModification(op);
-    rewriter.startOpModification(add_child);
+    rewriter.finalizeRootUpdate(op);
+    rewriter.startRootUpdate(add_child);
     add_child->setOperand(input_to_swap, const_child->getResult(0));
-    rewriter.finalizeOpModification(add_child);
+    rewriter.finalizeRootUpdate(add_child);
 
     return success();
   }
@@ -3391,12 +3391,12 @@ class ConstantPushDownAdd : public ConstantPushDownBase<ConstantPushDownAdd> {
       return failure();
     }
 
-    rewriter.startOpModification(op);
+    rewriter.startRootUpdate(op);
     op->setOperand(const_index, leaf_to_swap);
-    rewriter.finalizeOpModification(op);
-    rewriter.startOpModification(add_child);
+    rewriter.finalizeRootUpdate(op);
+    rewriter.startRootUpdate(add_child);
     add_child->setOperand(input_to_swap, const_child->getResult(0));
-    rewriter.finalizeOpModification(add_child);
+    rewriter.finalizeRootUpdate(add_child);
 
     return success();
   }

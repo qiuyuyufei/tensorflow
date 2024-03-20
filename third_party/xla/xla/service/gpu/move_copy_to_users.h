@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,11 +16,12 @@ limitations under the License.
 #ifndef XLA_SERVICE_GPU_MOVE_COPY_TO_USERS_H_
 #define XLA_SERVICE_GPU_MOVE_COPY_TO_USERS_H_
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/statusor.h"
+#include <utility>
+
 #include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/hlo_pass_interface.h"
+#include "xla/statusor.h"
 
 namespace xla {
 
@@ -29,7 +30,7 @@ class MoveCopyToUsers : public HloModulePass {
  public:
   absl::string_view name() const override { return "move_copy_to_users"; }
   using HloPassInterface::Run;
-  absl::StatusOr<bool> Run(
+  StatusOr<bool> Run(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads) override;
 };

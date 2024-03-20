@@ -52,7 +52,7 @@ Status PaddingFIFOQueue::Initialize() {
         " shapes.");
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 /* static */
@@ -63,7 +63,7 @@ Status PaddingFIFOQueue::GetElementComponent(
   TF_RETURN_IF_ERROR(
       ctx->allocate_temp(tuple[component].dtype(), element_shape, out_tensor));
   *out_tensor = tuple[component];
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void PaddingFIFOQueue::TryDequeueMany(int num_elements, OpKernelContext* ctx,
@@ -243,7 +243,7 @@ Status PaddingFIFOQueue::ValidateTuple(const Tuple& tuple) {
                                      tuple[i].shape().DebugString());
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status PaddingFIFOQueue::ValidateManyTuple(const Tuple& tuple) {
@@ -260,7 +260,7 @@ Status PaddingFIFOQueue::ValidateManyTuple(const Tuple& tuple) {
                                      tuple[i].shape().DebugString());
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status PaddingFIFOQueue::CompatibleNodeDefShapes(
@@ -275,7 +275,7 @@ Status PaddingFIFOQueue::CompatibleNodeDefShapes(
         " but requested component shapes were ",
         PartialTensorShapeUtils::PartialShapeListString(requested_shapes));
   } else {
-    return absl::OkStatus();
+    return OkStatus();
   }
 }
 
@@ -288,7 +288,7 @@ Status PaddingFIFOQueue::MatchesNodeDef(const NodeDef& node_def) {
   TF_RETURN_IF_ERROR(MatchesNodeDefCapacity(node_def, capacity_));
   TF_RETURN_IF_ERROR(MatchesNodeDefTypes(node_def));
   TF_RETURN_IF_ERROR(CompatibleNodeDefShapes(node_def));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 static Status ValidateElementToLargerSlice(const Tensor& element,
@@ -303,7 +303,7 @@ static Status ValidateElementToLargerSlice(const Tensor& element,
         "Shapes are: [element]: ", element.shape().DebugString(),
         ", [parent slice]: ", chip_shape.DebugString());
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 template <typename T, int NDIMS>
@@ -314,7 +314,7 @@ Status HandleElementToLargerSlice(const Tensor& element, Tensor* parent,
     return s;
   }
   if (element.NumElements() == 0) {
-    return absl::OkStatus();
+    return OkStatus();
   }
   auto element_t = element.tensor<T, NDIMS>();
   auto parent_t = parent->tensor<T, NDIMS + 1>();
@@ -326,7 +326,7 @@ Status HandleElementToLargerSlice(const Tensor& element, Tensor* parent,
     slice_size[i] = element_t.dimension(i - 1);
   }
   parent_t.slice(slice_indices, slice_size) = element_t.reshape(slice_size);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 namespace {

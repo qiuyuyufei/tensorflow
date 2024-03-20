@@ -2,6 +2,12 @@ load("//tensorflow:strict.default.bzl", "py_strict_library", "py_strict_test")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
+    default_visibility = [
+        "//tensorflow:internal",
+        "//tensorflow_estimator:__subpackages__",
+        "//tensorflow_federated:__subpackages__",
+        "//third_party/py/tensorflow:__subpackages__",
+    ],
     licenses = ["notice"],
 )
 
@@ -27,7 +33,6 @@ py_strict_test(
     srcs_version = "PY2AND3",
     deps = [
         ":authoring",
-        #internal proto upb dep
         "//tensorflow:tensorflow_py",
     ],
 )

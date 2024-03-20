@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,9 +16,7 @@ limitations under the License.
 #include "xla/stream_executor/integrations/tf_allocator_adapter.h"
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "tsl/platform/errors.h"
@@ -36,9 +34,10 @@ TfAllocatorAdapter::TfAllocatorAdapter(tsl::Allocator *wrapped,
 
 TfAllocatorAdapter::~TfAllocatorAdapter() {}
 
-absl::StatusOr<OwningDeviceMemory> TfAllocatorAdapter::Allocate(
+tsl::StatusOr<OwningDeviceMemory> TfAllocatorAdapter::Allocate(
     int device_ordinal, uint64_t size, bool retry_on_failure,
     int64_t memory_space) {
+  CHECK_EQ(memory_space, 0);
   tsl::AllocationAttributes attrs;
   attrs.retry_on_failure = retry_on_failure;
   void *data = nullptr;
@@ -46,25 +45,25 @@ absl::StatusOr<OwningDeviceMemory> TfAllocatorAdapter::Allocate(
     data =
         wrapped_->AllocateRaw(tsl::Allocator::kAllocatorAlignment, size, attrs);
     if (data == nullptr) {
-      return absl::ResourceExhaustedError(absl::StrCat(
-          "Out of memory while trying to allocate ", size, " bytes."));
+      return tsl::errors::ResourceExhausted(
+          "Out of memory while trying to allocate ", size, " bytes.");
     }
   }
   return OwningDeviceMemory(DeviceMemoryBase(data, size), device_ordinal, this);
 }
 
-absl::Status TfAllocatorAdapter::Deallocate(int device_ordinal,
-                                            DeviceMemoryBase mem) {
+tsl::Status TfAllocatorAdapter::Deallocate(int device_ordinal,
+                                           DeviceMemoryBase mem) {
   wrapped_->DeallocateRaw(mem.opaque());
-  return absl::OkStatus();
+  return ::tsl::OkStatus();
 }
 
-absl::StatusOr<Stream *> TfAllocatorAdapter::GetStream(int device_ordinal) {
+tsl::StatusOr<Stream *> TfAllocatorAdapter::GetStream(int device_ordinal) {
   CHECK_EQ(stream_->parent()->device_ordinal(), device_ordinal);
   return stream_;
 }
 
-absl::StatusOr<tsl::Allocator *> TfAllocatorAdapter::GetAllocator(
+tsl::StatusOr<tsl::Allocator *> TfAllocatorAdapter::GetAllocator(
     int device_ordinal) {
   if (stream_ == nullptr) {
     return absl::UnavailableError("stream_ is null for TfAllocatorAdapter.");

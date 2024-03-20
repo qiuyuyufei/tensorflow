@@ -49,8 +49,7 @@ using ::tensorflow::testing::StatusIs;
 using ::testing::HasSubstr;
 using ::testing::SizeIs;
 
-absl::StatusOr<NodeDef> GetNode(const GraphDef& graph_def,
-                                absl::string_view name) {
+StatusOr<NodeDef> GetNode(const GraphDef& graph_def, absl::string_view name) {
   for (const NodeDef& node : graph_def.node()) {
     if (node.name() == name) {
       return node;
@@ -60,8 +59,7 @@ absl::StatusOr<NodeDef> GetNode(const GraphDef& graph_def,
                                            name, graph_def.ShortDebugString()));
 }
 
-absl::StatusOr<int64_t> GetValue(const GraphDef& graph_def,
-                                 absl::string_view name) {
+StatusOr<int64_t> GetValue(const GraphDef& graph_def, absl::string_view name) {
   for (const NodeDef& node : graph_def.node()) {
     if (node.name() == name) {
       return node.attr().at("value").tensor().int64_val()[0];

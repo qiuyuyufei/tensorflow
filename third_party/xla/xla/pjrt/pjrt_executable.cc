@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -335,24 +335,12 @@ StatusOr<std::vector<Layout>> PjRtExecutable::GetParameterLayouts() const {
         "from executable.");
   }
   ComputationLayout comp_layout = hlo_modules[0]->entry_computation_layout();
-  return comp_layout.FlattenedParameterLayouts();
-}
-
-StatusOr<std::vector<Layout>> PjRtExecutable::GetOutputLayouts() const {
-  TF_ASSIGN_OR_RETURN(std::vector<std::shared_ptr<HloModule>> hlo_modules,
-                      GetHloModules());
-  if (hlo_modules.size() > 1) {
-    return Unimplemented(
-        "PjRtExecutable::GetOutputLayouts doesn't support MPMD "
-        "executables.");
+  std::vector<Layout> result;
+  result.reserve(comp_layout.parameter_count());
+  for (const ShapeLayout& layout : comp_layout.parameter_layouts()) {
+    result.push_back(layout.layout());
   }
-  if (hlo_modules.empty()) {
-    return InvalidArgument(
-        "PjRtExecutable::GetOutputLayouts: couldn't retrieve HLO module "
-        "from executable.");
-  }
-  ComputationLayout comp_layout = hlo_modules[0]->entry_computation_layout();
-  return comp_layout.FlattenedResultLayouts();
+  return result;
 }
 
 StatusOr<absl::flat_hash_map<std::string, PjRtValueType>>
@@ -424,7 +412,7 @@ CompileOptions::LoadEnvOptionOverrides(
                               env_option_override.second.double_field())});
         break;
       case OptionOverrideProto::VALUE_NOT_SET:
-        return Internal("OptionOverrideProto value not set.");
+        return InternalError("OptionOverrideProto value not set.");
     }
   }
   return result;

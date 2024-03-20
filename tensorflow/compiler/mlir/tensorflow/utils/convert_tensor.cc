@@ -86,8 +86,8 @@ static std::string MangleTensor(const Tensor& tensor) {
 
 // Converts a TensorFlow tensor into an MLIR elements attribute.
 template <typename T>
-absl::StatusOr<ElementsAttr> ConvertFlatTensor(const Tensor& input_tensor,
-                                               ShapedType type) {
+StatusOr<ElementsAttr> ConvertFlatTensor(const Tensor& input_tensor,
+                                         ShapedType type) {
   auto arr = input_tensor.flat<T>();
   return ElementsAttr(mlir::DenseElementsAttr::get(
       type, llvm::ArrayRef(arr.data(), arr.size())));
@@ -100,8 +100,8 @@ ElementsAttr ConvertTensorOfCustomFloatType(const Tensor& tensor,
   return mlir::DenseElementsAttr::getFromRawBuffer(type, buffer);
 }
 
-absl::StatusOr<ElementsAttr> ConvertStringTensor(const Tensor& input_tensor,
-                                                 ShapedType type) {
+StatusOr<ElementsAttr> ConvertStringTensor(const Tensor& input_tensor,
+                                           ShapedType type) {
   // Extract to a vector of StringRefs for converting.
   auto arr = input_tensor.flat<tstring>();
   std::vector<mlir::StringRef> string_refs;
@@ -114,8 +114,8 @@ absl::StatusOr<ElementsAttr> ConvertStringTensor(const Tensor& input_tensor,
   return ElementsAttr(DenseStringElementsAttr::get(type, string_refs));
 }
 
-absl::StatusOr<ElementsAttr> ConvertTensor(const Tensor& input_tensor,
-                                           Builder* builder) {
+StatusOr<ElementsAttr> ConvertTensor(const Tensor& input_tensor,
+                                     Builder* builder) {
   const auto& input_dtype = input_tensor.dtype();
   const auto& input_shape = input_tensor.shape();
   Type elt_type;
@@ -201,8 +201,8 @@ int NumberOfMaterializedElements(const TensorProto& tensor) {
   }
 }
 
-absl::StatusOr<ElementsAttr> ConvertTensorProto(const TensorProto& input_tensor,
-                                                Builder* builder) {
+StatusOr<ElementsAttr> ConvertTensorProto(const TensorProto& input_tensor,
+                                          Builder* builder) {
   // If there is only one actual element in the proto, but its shape would
   // indicate there are more values, then this is representing a splat tensor.
   // We can create an MLIR Attribute more efficiently in this case.
@@ -272,8 +272,7 @@ mlir::TF::ShapeAttr ConvertTypeToTensorShapeAttr(const mlir::Type& type) {
   return mlir::TF::ShapeAttr::get(type.getContext(), ArrayRef<int64_t>());
 }
 
-absl::StatusOr<TensorSpecProto> ConvertTypeToTensorSpecProto(
-    const mlir::Type& type) {
+StatusOr<TensorSpecProto> ConvertTypeToTensorSpecProto(const mlir::Type& type) {
   DataType dtype;
   TF_RETURN_IF_ERROR(ConvertToDataType(type, &dtype));
   TensorSpecProto tensor_spec;
@@ -283,8 +282,8 @@ absl::StatusOr<TensorSpecProto> ConvertTypeToTensorSpecProto(
 }
 
 // Converts the tensor shape proto into an MLIR shape attribute.
-absl::StatusOr<mlir::Attribute> ConvertTensorShapeProto(
-    const TensorShapeProto& shape, mlir::MLIRContext* context) {
+StatusOr<mlir::Attribute> ConvertTensorShapeProto(const TensorShapeProto& shape,
+                                                  mlir::MLIRContext* context) {
   if (shape.unknown_rank())
     return mlir::TF::ShapeAttr::get(context, std::nullopt);
 

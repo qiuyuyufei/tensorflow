@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ limitations under the License.
 #include <algorithm>
 #include <atomic>
 #include <cinttypes>
-#include <cstdint>
 #include <functional>
 #include <iterator>
 #include <memory>
@@ -26,7 +25,6 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "absl/functional/any_invocable.h"
 #include "absl/synchronization/mutex.h"
 #include "xla/pjrt/local_device_state.h"
 #include "xla/pjrt/utils.h"
@@ -35,8 +33,6 @@ limitations under the License.
 #include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/event.h"
 #include "xla/types.h"
-#include "tsl/profiler/lib/connected_traceme.h"
-#include "tsl/profiler/lib/context_types.h"
 
 namespace xla {
 
@@ -79,7 +75,7 @@ void BufferSequencingEvent::WaitForEventOnStream(se::Stream* stream) {
     return;
   }
 
-  stream->WaitFor(event_.event()).IgnoreError();
+  stream->ThenWaitFor(event_.event());
   streams_defined_on_.push_back(stream);
 }
 
@@ -125,21 +121,11 @@ bool BufferSequencingEvent::IsComplete() {
 void BufferSequencingEvent::ExecuteOrAddToFutureTasks(
     const std::string& task_name, std::function<void()> task) {
   absl::MutexLock lock(&mu_);
-  tsl::profiler::TraceMeProducer producer(
-      "BufferSequencingEvent::ExecuteOrAddToFutureTasks",
-      tsl::profiler::ContextType::kPjRt);
-  uint64_t context_id = producer.GetContextId();
-  auto wrapped_task = [task = std::move(task), context_id]() {
-    tsl::profiler::TraceMeConsumer consumer("BufferSequencingEvent::Execute",
-                                            tsl::profiler::ContextType::kPjRt,
-                                            context_id);
-    task();
-  };
   if (defined_status_.IsConcrete()) {
-    thread_pool_->Schedule(std::move(wrapped_task));
+    thread_pool_->Schedule(std::move(task));
     return;
   }
-  on_ready_tasks_callback_[task_name] = std::move(wrapped_task);
+  on_ready_tasks_callback_[task_name] = std::move(task);
 }
 
 void BufferSequencingEvent::ExecuteFutureTasks() {
@@ -221,7 +207,7 @@ TrackedDeviceBuffer::TrackedDeviceBuffer(
     se::DeviceMemoryAllocator* allocator, int device_ordinal,
     absl::Span<se::DeviceMemoryBase const> device_memory,
     absl::Span<const std::shared_ptr<BufferSequencingEvent>> definition_events,
-    absl::AnyInvocable<void() &&> on_delete_callback)
+    std::function<void()> on_delete_callback)
     : allocator_(allocator),
       device_ordinal_(device_ordinal),
       device_memory_(device_memory.begin(), device_memory.end()),
@@ -240,7 +226,7 @@ TrackedDeviceBuffer::~TrackedDeviceBuffer() {
     }
   }
   if (on_delete_callback_) {
-    std::move(on_delete_callback_)();
+    on_delete_callback_();
   }
 }
 

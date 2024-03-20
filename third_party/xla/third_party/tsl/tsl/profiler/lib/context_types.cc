@@ -46,8 +46,6 @@ const char* GetContextTypeString(ContextType context_type) {
       return "tpu_launch";
     case ContextType::kPathwaysExecutor:
       return "pathways_exec";
-    case ContextType::kPjrtLibraryCall:
-      return "pjrt_library_call";
   }
 }
 

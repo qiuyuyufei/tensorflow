@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,12 +16,8 @@ limitations under the License.
 #include "xla/stream_executor/gpu/asm_compiler.h"
 
 #include <array>
-#include <cassert>
 #include <cstdint>
-#include <cstdlib>
-#include <sstream>
 #include <string>
-#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -32,45 +28,32 @@ limitations under the License.
 #include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/log/check.h"
-#include "absl/log/log.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/match.h"
-#include "absl/strings/numbers.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
-#include "absl/types/span.h"
-#include "xla/stream_executor/cuda/ptx_compiler.h"
-#include "xla/stream_executor/cuda/ptx_compiler_support.h"
-#include "xla/stream_executor/gpu/gpu_asm_opts.h"
 #include "xla/stream_executor/gpu/gpu_driver.h"
-#include "xla/stream_executor/gpu/gpu_types.h"
 #include "xla/util.h"
 #include "tsl/platform/cuda_libdevice_path.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/path.h"
 #include "tsl/platform/regexp.h"
-#include "tsl/platform/status.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/platform/subprocess.h"
 
 namespace stream_executor {
 
-static absl::StatusOr<std::string> GetToolVersionString(
+static tsl::StatusOr<absl::string_view> GetToolVersionString(
     absl::string_view binary_path) {
-  // If binary_path doesn't exist, then tsl::SubProcess will log a bunch of
-  // error messages that have confused users in the past. Therefore we first
-  // check whether the binary_path exists and error out early if not.
-  tsl::Env* env = tsl::Env::Default();
-  if (absl::Status file_exists = env->FileExists(std::string{binary_path});
-      !file_exists.ok()) {
-    return file_exists;
+  static absl::Mutex mu(absl::kConstInit);
+  static auto* seen_binary_paths ABSL_GUARDED_BY(mu) =
+      new absl::flat_hash_map<std::string, std::string>();
+
+  absl::MutexLock lock(&mu);
+  auto it = seen_binary_paths->find(binary_path);
+  if (it != seen_binary_paths->end()) {
+    // Already checked this binary, nothing to do.
+    return absl::string_view(it->second);
   }
 
   tsl::SubProcess binary;
@@ -78,7 +61,7 @@ static absl::StatusOr<std::string> GetToolVersionString(
   binary.SetProgram(binary_path_str, {binary_path_str, "--version"});
   binary.SetChannelAction(tsl::CHAN_STDOUT, tsl::ACTION_PIPE);
   if (!binary.Start()) {
-    return absl::InternalError(
+    return tsl::errors::Internal(
         absl::StrFormat("Couldn't invoke %s --version", binary_path));
   }
 
@@ -86,52 +69,33 @@ static absl::StatusOr<std::string> GetToolVersionString(
   int exit_code = binary.Communicate(/*stdin_input=*/nullptr, &out,
                                      /*stderr_output=*/nullptr);
   if (exit_code != 0) {
-    return absl::InternalError(absl::StrFormat(
+    return tsl::errors::Internal(absl::StrFormat(
         "Running %s --version returned %d", binary_path, exit_code));
   }
-
-  return out;
+  auto emplace_it = seen_binary_paths->emplace(binary_path, std::move(out));
+  return absl::string_view(emplace_it.first->second);
 }
 
-static absl::StatusOr<ToolVersion> GetToolVersionImpl(
-    std::string_view tool_path) {
-  absl::StatusOr<std::string> tool_version = GetToolVersionString(tool_path);
+tsl::StatusOr<std::array<int64_t, 3>> GetToolVersion(
+    absl::string_view tool_path) {
+  tsl::StatusOr<absl::string_view> tool_version =
+      GetToolVersionString(tool_path);
   if (!tool_version.ok()) {
-    return absl::FailedPreconditionError(
-        absl::StrCat("Couldn't get ptxas/nvlink version string: ",
-                     tool_version.status().ToString()));
+    return tsl::errors::FailedPrecondition(
+        "Couldn't get ptxas/nvlink version string: ", tool_version.status());
   }
-  static constexpr LazyRE2 kVersionRegex = {R"(\bV(\d+)\.(\d+)\.(\d+)\b)"};
-  ToolVersion version{};
-  absl::string_view vmaj_str, vmin_str, vdot_str;
-  if (!RE2::PartialMatch(tool_version.value(), *kVersionRegex, &vmaj_str,
-                         &vmin_str, &vdot_str) ||
+  std::array<int64_t, 3> version;
+  std::string vmaj_str, vmin_str, vdot_str;
+  if (!RE2::PartialMatch(tool_version.value(), R"(\bV(\d+)\.(\d+)\.(\d+)\b)",
+                         &vmaj_str, &vmin_str, &vdot_str) ||
       !absl::SimpleAtoi(vmaj_str, &version[0]) ||
       !absl::SimpleAtoi(vmin_str, &version[1]) ||
       !absl::SimpleAtoi(vdot_str, &version[2])) {
-    return absl::FailedPreconditionError(
-        absl::StrCat("Couldn't parse ptxas/nvlink version in output of ",
-                     tool_path, " --version:\n", tool_version.value()));
+    return tsl::errors::FailedPrecondition(
+        "Couldn't parse ptxas/nvlink version in output of ", tool_path,
+        " --version:\n", tool_version.value());
   }
   return version;
-}
-
-absl::StatusOr<ToolVersion> GetToolVersion(std::string_view tool_path) {
-  // This is only implementing a static cache. `GetToolVersionImpl` has the
-  // actual business logic.
-  static absl::Mutex mutex(absl::kConstInit);
-  static auto cache =
-      new absl::flat_hash_map<std::string, absl::StatusOr<ToolVersion>>
-          ABSL_GUARDED_BY(mutex);
-
-  absl::MutexLock lock(&mutex);
-  auto it = cache->find(tool_path);
-  if (it != cache->end()) {
-    return it->second;
-  }
-
-  return cache->try_emplace(tool_path, GetToolVersionImpl(tool_path))
-      .first->second;
 }
 
 // Prints a warning if the ptxas at ptxas_path has known bugs.
@@ -141,7 +105,7 @@ absl::StatusOr<ToolVersion> GetToolVersion(std::string_view tool_path) {
 //
 // Locks on entry.˝
 static void WarnIfBadPtxasVersion(absl::string_view ptxas_path) {
-  absl::StatusOr<std::array<int64_t, 3>> version = GetToolVersion(ptxas_path);
+  tsl::StatusOr<std::array<int64_t, 3>> version = GetToolVersion(ptxas_path);
   if (!version.ok()) {
     LOG(WARNING) << "Couldn't get ptxas version : " << version.status();
     return;
@@ -156,10 +120,10 @@ static void WarnIfBadPtxasVersion(absl::string_view ptxas_path) {
   }
 }
 
-absl::StatusOr<absl::Span<const uint8_t>> CompileGpuAsmOrGetCached(
+tsl::StatusOr<absl::Span<const uint8_t>> CompileGpuAsmOrGetCached(
     int device_ordinal, const char* ptx, GpuAsmOpts compilation_options) {
   using PtxCacheKey = std::tuple<int, std::string, GpuAsmOpts::PtxOptionsTuple>;
-  using PtxCompilerResult = absl::StatusOr<std::vector<uint8_t>>;
+  using PtxCompilerResult = tsl::StatusOr<std::vector<uint8_t>>;
   static absl::Mutex ptx_cache_mutex(absl::kConstInit);
   static auto& ptx_cache ABSL_GUARDED_BY(ptx_cache_mutex) =
       *new absl::flat_hash_map<PtxCacheKey, PtxCompilerResult>();
@@ -188,9 +152,9 @@ absl::StatusOr<absl::Span<const uint8_t>> CompileGpuAsmOrGetCached(
   return absl::MakeSpan(compiled);
 }
 
-absl::StatusOr<std::vector<uint8_t>> CompileGpuAsm(int device_ordinal,
-                                                   const char* ptx_contents,
-                                                   GpuAsmOpts options) {
+tsl::StatusOr<std::vector<uint8_t>> CompileGpuAsm(int device_ordinal,
+                                                  const char* ptx_contents,
+                                                  GpuAsmOpts options) {
   gpu::GpuDeviceHandle handle;
   TF_RETURN_IF_ERROR(gpu::GpuDriver::GetDevice(device_ordinal, &handle));
   int cc_major;
@@ -200,50 +164,50 @@ absl::StatusOr<std::vector<uint8_t>> CompileGpuAsm(int device_ordinal,
   return CompileGpuAsm(cc_major, cc_minor, ptx_contents, options);
 }
 
-absl::StatusOr<std::string> FindCudaExecutable(
-    std::string_view binary_name, std::string_view preferred_cuda_dir) {
-#if defined(PLATFORM_WINDOWS)
-  const std::string binary_filename = std::string{binary_name} + ".exe";
-#else
-  std::string_view binary_filename = binary_name;
-#endif
+std::string FindCudaExecutable(const std::string& binary_name,
+                               const std::string& preferred_cuda_dir) {
+  static absl::Mutex mu(absl::kConstInit);
+  static auto* seen_binary_paths ABSL_GUARDED_BY(mu) =
+      new absl::flat_hash_map<std::pair<std::string, std::string>,
+                              std::string>();
 
-  std::vector<std::string> candidates{};
+  auto cache_key = std::make_pair(binary_name, preferred_cuda_dir);
 
-  // #1 - Check the preferred CUDA directory
-  candidates.emplace_back(
-      tsl::io::JoinPath(preferred_cuda_dir, "bin", binary_filename));
-
-  // #2 - Check the PATH environment variable
-  std::string_view path_env = std::getenv("PATH");
-
-#if defined(PLATFORM_WINDOWS)
-  constexpr char kSearchPathSeparator = ';';
-#else
-  constexpr char kSearchPathSeparator = ':';
-#endif
-
-  for (std::string_view path : absl::StrSplit(path_env, kSearchPathSeparator)) {
-    candidates.emplace_back(tsl::io::JoinPath(path, binary_filename));
+  absl::MutexLock lock(&mu);
+  auto it = seen_binary_paths->find(cache_key);
+  if (it != seen_binary_paths->end()) {
+    return it->second;
   }
 
-  // #3 - Check generic CUDA locations
-  for (std::string_view path : tsl::CandidateCudaRoots()) {
-    candidates.emplace_back(tsl::io::JoinPath(path, "bin", binary_filename));
+  // Try searching in the default PATH first if applicable.
+  if (tsl::PreferPtxasFromPath() && GetToolVersionString(binary_name).ok()) {
+    VLOG(2) << "Using " << binary_name;
+    seen_binary_paths->emplace(std::move(cache_key), binary_name);
+    return binary_name;
   }
 
-  for (const auto& candidate : candidates) {
-    VLOG(2) << "Looking for " << candidate;
-    if (GetToolVersion(candidate).ok()) {
-      VLOG(2) << "Using " << candidate;
-      return candidate;
+  // Search in cuda root candidates.
+  auto env = tsl::Env::Default();
+  std::string binary_path;
+  for (const std::string& cuda_root :
+       tsl::CandidateCudaRoots(preferred_cuda_dir)) {
+    binary_path = tsl::io::JoinPath(cuda_root, "bin", binary_name);
+    VLOG(2) << "Looking for " << binary_name << " at " << binary_path;
+    if (env->FileExists(binary_path).ok() &&
+        GetToolVersionString(binary_path).ok()) {
+      break;
     }
   }
-
-  return absl::NotFoundError(
-      absl::StrCat("Couldn't find ", binary_name,
-                   ". The following locations were considered: ",
-                   absl::StrJoin(candidates, ", ")));
+  if (!env->FileExists(binary_path).ok()) {
+    // Give up and just rely on subprocess invocation to find the correct
+    // binary. This won't work, in all probability, given we already tried that
+    // above, but it's the best we can do.
+    VLOG(2) << "Unable to find " << binary_name;
+    binary_path = binary_name;
+  }
+  VLOG(2) << "Using " << binary_name << " at " << binary_path;
+  seen_binary_paths->emplace(std::move(cache_key), binary_path);
+  return binary_path;
 }
 
 static void LogPtxasTooOld(const std::string& ptxas_path, int cc_major,
@@ -274,27 +238,18 @@ static void AppendArgsFromOptions(GpuAsmOpts options,
               options.extra_flags.end());
 }
 
-absl::StatusOr<std::array<int64_t, 3>> GetAsmCompilerVersion(
+tsl::StatusOr<std::array<int64_t, 3>> GetAsmCompilerVersion(
     const std::string& preferred_cuda_dir) {
-  TF_ASSIGN_OR_RETURN(std::string ptxas_path,
-                      FindCudaExecutable("ptxas", preferred_cuda_dir));
+  std::string ptxas_path = FindCudaExecutable("ptxas", preferred_cuda_dir);
   return GetToolVersion(ptxas_path);
 }
 
-absl::StatusOr<std::vector<uint8_t>> CompileGpuAsmUsingPtxAs(
-    int cc_major, int cc_minor, const char* ptx_contents, GpuAsmOpts options,
-    bool cancel_if_reg_spill) {
-  TF_ASSIGN_OR_RETURN(auto ptxas_version_tuple,
-                      GetAsmCompilerVersion(options.preferred_cuda_dir));
-  if (ptxas_version_tuple == std::array<int64_t, 3>{12, 3, 103}) {
-    return absl::InternalError(absl::StrFormat(
-        "ptxas %d.%d.%d has a bug that we think can affect XLA. "
-        "Please use a different version.",
-        std::get<0>(ptxas_version_tuple), std::get<1>(ptxas_version_tuple),
-        std::get<2>(ptxas_version_tuple)));
-  }
-  TF_ASSIGN_OR_RETURN(std::string ptxas_path,
-                      FindCudaExecutable("ptxas", options.preferred_cuda_dir));
+tsl::StatusOr<std::vector<uint8_t>> CompileGpuAsm(int cc_major, int cc_minor,
+                                                  const char* ptx_contents,
+                                                  GpuAsmOpts options,
+                                                  bool cancel_if_reg_spill) {
+  std::string ptxas_path =
+      FindCudaExecutable("ptxas", options.preferred_cuda_dir);
 
   WarnIfBadPtxasVersion(ptxas_path);
 
@@ -302,11 +257,9 @@ absl::StatusOr<std::vector<uint8_t>> CompileGpuAsmUsingPtxAs(
   std::string ptx_path;
   auto env = tsl::Env::Default();
   if (!env->LocalTempFilename(&ptx_path)) {
-    return absl::InternalError("couldn't get temp PTX file name");
+    return tsl::errors::Internal("couldn't get temp PTX file name");
   }
-  TF_RETURN_WITH_CONTEXT_IF_ERROR(
-      tsl::WriteStringToFile(env, ptx_path, ptx_contents),
-      "Unable to write PTX contents to: ", ptx_path);
+  TF_RETURN_IF_ERROR(tsl::WriteStringToFile(env, ptx_path, ptx_contents));
   VLOG(2) << "ptx written to: " << ptx_path;
 
   absl::Cleanup ptx_cleaner = [&ptx_path] {
@@ -316,7 +269,7 @@ absl::StatusOr<std::vector<uint8_t>> CompileGpuAsmUsingPtxAs(
   // Invoke ptxas and collect its output.
   std::string cubin_path;
   if (!env->LocalTempFilename(&cubin_path)) {
-    return absl::InternalError("couldn't get temp CUBIN file name");
+    return tsl::errors::Internal("couldn't get temp CUBIN file name");
   }
   absl::Cleanup cubin_cleaner = [&cubin_path] {
     // CUBIN file may never be created, so the failure to delete it should not
@@ -345,7 +298,7 @@ absl::StatusOr<std::vector<uint8_t>> CompileGpuAsmUsingPtxAs(
   ptxas_info_dumper.SetProgram(ptxas_path, ptxas_args);
   ptxas_info_dumper.SetChannelAction(tsl::CHAN_STDERR, tsl::ACTION_PIPE);
   if (!ptxas_info_dumper.Start()) {
-    return absl::InternalError("Failed to launch ptxas");
+    return tsl::errors::Internal("Failed to launch ptxas");
   }
   std::string stderr_output;
   int exit_status = ptxas_info_dumper.Communicate(
@@ -355,21 +308,15 @@ absl::StatusOr<std::vector<uint8_t>> CompileGpuAsmUsingPtxAs(
     //  Example error message associated with this error code:
     //      ptxas fatal   : Value 'sm_80' is not defined for option 'gpu-name'
     // In that case, fallback to the driver for compilation
-    if (absl::StrContains(stderr_output, "ptxas fatal   : Value '") &&
+    if (absl::StartsWith(stderr_output, "ptxas fatal   : Value '") &&
         absl::StrContains(stderr_output,
                           "is not defined for option 'gpu-name'")) {
       LogPtxasTooOld(ptxas_path, cc_major, cc_minor);
-      return absl::UnimplementedError(absl::StrFormat(
-          "%s ptxas too old. Falling back to the driver to compile.",
-          ptxas_path));
-    }
-    if (absl::StrContains(stderr_output, "ptxas fatal") &&
-        absl::StrContains(stderr_output, "Register allocation failed")) {
-      LOG(INFO) << stderr_output;
-      return absl::ResourceExhaustedError("Register allocation failed");
+      return tsl::errors::Unimplemented(
+          ptxas_path, " ptxas too old. Falling back to the driver to compile.");
     }
 
-    return absl::InternalError(
+    return tsl::errors::Internal(
         absl::StrFormat("ptxas exited with non-zero error code %d, output: %s",
                         exit_status, stderr_output));
   }
@@ -395,11 +342,10 @@ absl::StatusOr<std::vector<uint8_t>> CompileGpuAsmUsingPtxAs(
   return cubin_vector;
 }
 
-absl::StatusOr<std::vector<uint8_t>> BundleGpuAsm(
+tsl::StatusOr<std::vector<uint8_t>> BundleGpuAsm(
     std::vector<CubinOrPTXImage> images, GpuAsmOpts options) {
-  TF_ASSIGN_OR_RETURN(
-      std::string fatbinary_path,
-      FindCudaExecutable("fatbinary", options.preferred_cuda_dir));
+  std::string fatbinary_path =
+      FindCudaExecutable("fatbinary", options.preferred_cuda_dir);
 
   // Write images to temporary files.
   std::vector<std::string> image_paths;
@@ -407,7 +353,7 @@ absl::StatusOr<std::vector<uint8_t>> BundleGpuAsm(
   for (const CubinOrPTXImage& img : images) {
     std::string img_path;
     if (!env->LocalTempFilename(&img_path)) {
-      return absl::InternalError(
+      return tsl::errors::Internal(
           "Could not get temporary filenames for images.");
     }
     TF_RETURN_IF_ERROR(tsl::WriteStringToFile(
@@ -424,7 +370,7 @@ absl::StatusOr<std::vector<uint8_t>> BundleGpuAsm(
   // Prepare temorary result file.
   std::string result_path;
   if (!env->LocalTempFilename(&result_path)) {
-    return absl::InternalError(
+    return tsl::errors::Internal(
         "Could not get temporary filename for fatbin result.");
   }
   absl::Cleanup result_file_cleaner = [&result_path] {
@@ -457,13 +403,13 @@ absl::StatusOr<std::vector<uint8_t>> BundleGpuAsm(
   fatbinary.SetProgram(fatbinary_path, fatbinary_args);
   fatbinary.SetChannelAction(tsl::CHAN_STDERR, tsl::ACTION_PIPE);
   if (!fatbinary.Start()) {
-    return absl::InternalError("Failed to launch fatbinary.");
+    return tsl::errors::Internal("Failed to launch fatbinary.");
   }
   std::string stderr_output;
   int exit_status = fatbinary.Communicate(
       /*stdin_input=*/nullptr, /*stdout_output=*/nullptr, &stderr_output);
   if (exit_status != 0) {
-    return absl::InternalError(absl::StrFormat(
+    return tsl::errors::Internal(absl::StrFormat(
         "fatbinary exited with non-zero error code %d, output: %s", exit_status,
         stderr_output));
   }
@@ -490,7 +436,7 @@ static std::string findRocmExecutable(const std::string& binary_relative_path,
   return binary_path;
 }
 
-absl::StatusOr<std::vector<uint8_t>> BundleGpuAsm(
+tsl::StatusOr<std::vector<uint8_t>> BundleGpuAsm(
     std::vector<HsacoImage> images, const std::string rocm_root_dir) {
   std::string clang_offload_bundler_path =
       findRocmExecutable("llvm/bin/clang-offload-bundler", rocm_root_dir);
@@ -571,22 +517,6 @@ absl::StatusOr<std::vector<uint8_t>> BundleGpuAsm(
   TF_RETURN_IF_ERROR(
       tsl::ReadFileToString(tsl::Env::Default(), result_path, &result_blob));
   return std::vector<uint8_t>(result_blob.begin(), result_blob.end());
-}
-
-absl::StatusOr<std::vector<uint8_t>> CompileGpuAsm(int cc_major, int cc_minor,
-                                                   const char* ptx_contents,
-                                                   GpuAsmOpts options,
-                                                   bool cancel_if_reg_spill) {
-  if (IsLibNvPtxCompilerSupported()) {
-    VLOG(3) << "Compiling GPU ASM with libnvptxcompiler";
-    return CompileGpuAsmUsingLibNvPtxCompiler(cc_major, cc_minor, ptx_contents,
-                                              options, cancel_if_reg_spill);
-  }
-
-  VLOG(3) << "Compiling GPU ASM with PTXAS. Libnvptxcompiler compilation "
-             "not supported.";
-  return CompileGpuAsmUsingPtxAs(cc_major, cc_minor, ptx_contents, options,
-                                 cancel_if_reg_spill);
 }
 
 }  // namespace stream_executor

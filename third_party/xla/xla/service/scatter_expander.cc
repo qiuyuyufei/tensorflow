@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ namespace xla {
 
 // Transposes the given scatter_indices such that the index_vector_dim becomes
 // the most-minor dimension.
-static absl::StatusOr<HloInstruction*> TransposeIndexVectorDimToLast(
+static StatusOr<HloInstruction*> TransposeIndexVectorDimToLast(
     HloInstruction* scatter_indices, int64_t index_vector_dim) {
   const Shape& scatter_indices_shape = scatter_indices->shape();
 
@@ -57,7 +57,7 @@ static absl::StatusOr<HloInstruction*> TransposeIndexVectorDimToLast(
 
 // Canonicalizes the scatter_indices tensor in order to keep them uniform while
 // performing the scatter operation.
-static absl::StatusOr<HloInstruction*> CanonicalizeScatterIndices(
+static StatusOr<HloInstruction*> CanonicalizeScatterIndices(
     HloInstruction* scatter_indices, int64_t index_vector_dim) {
   // Transpose the non-index-vector dimensions to the front.
   TF_ASSIGN_OR_RETURN(
@@ -95,7 +95,7 @@ static absl::StatusOr<HloInstruction*> CanonicalizeScatterIndices(
 // Permutes the `updates` tensor such that all the scatter dims appear in the
 // major dimensions and all the window dimensions appear in the minor
 // dimensions.
-static absl::StatusOr<HloInstruction*> PermuteScatterAndWindowDims(
+static StatusOr<HloInstruction*> PermuteScatterAndWindowDims(
     HloInstruction* updates, absl::Span<const int64_t> update_window_dims) {
   std::vector<int64_t> permutation;
   const int64_t updates_rank = updates->shape().rank();
@@ -115,7 +115,7 @@ static absl::StatusOr<HloInstruction*> PermuteScatterAndWindowDims(
 }
 
 // Expands or contracts the scatter indices in the updates tensor.
-static absl::StatusOr<HloInstruction*> AdjustScatterDims(
+static StatusOr<HloInstruction*> AdjustScatterDims(
     const Shape& scatter_indices_shape, HloInstruction* updates,
     int64_t index_vector_dim) {
   int64_t num_scatter_dims = scatter_indices_shape.dimensions_size();
@@ -133,7 +133,7 @@ static absl::StatusOr<HloInstruction*> AdjustScatterDims(
 
 // Expands an index vector from the scatter_indices tensor into a vector that
 // can be used to dynamic-update-slice to perform the scatter update.
-static absl::StatusOr<HloInstruction*> ExpandIndexVectorIntoOperandSpace(
+static StatusOr<HloInstruction*> ExpandIndexVectorIntoOperandSpace(
     HloInstruction* index_vector, const ScatterDimensionNumbers& dim_numbers,
     int64_t operand_rank) {
   HloComputation* computation = index_vector->parent();
@@ -172,7 +172,7 @@ static absl::StatusOr<HloInstruction*> ExpandIndexVectorIntoOperandSpace(
   return MakeConcatHlo(expanded_index_components, /*dimension=*/0);
 }
 
-static absl::StatusOr<HloInstruction*> CheckIndexValidity(
+static StatusOr<HloInstruction*> CheckIndexValidity(
     HloComputation* computation, HloInstruction* index,
     absl::Span<const int64_t> operand_dims,
     absl::Span<const int64_t> window_sizes, HloModule* module) {
@@ -218,8 +218,8 @@ static absl::StatusOr<HloInstruction*> CheckIndexValidity(
   return MakeBroadcastHlo(valid_index_reduced, {}, window_sizes);
 }
 
-static absl::StatusOr<HloComputation*> CallAndGetOutput(
-    HloComputation* original, int output_index) {
+static StatusOr<HloComputation*> CallAndGetOutput(HloComputation* original,
+                                                  int output_index) {
   HloInstruction* original_root = original->root_instruction();
   if (!original_root->shape().IsTuple()) {
     return original;
@@ -246,7 +246,7 @@ static absl::StatusOr<HloComputation*> CallAndGetOutput(
 }
 
 // Body of the while loop that performs the scatter operation using other HLOs.
-static absl::StatusOr<std::vector<HloInstruction*>> ScatterLoopBody(
+static StatusOr<std::vector<HloInstruction*>> ScatterLoopBody(
     HloScatterInstruction* scatter, HloInstruction* induction_var,
     absl::Span<HloInstruction* const> loop_state) {
   const ScatterDimensionNumbers& dim_numbers =
@@ -410,7 +410,7 @@ static int64_t ScatterTripCount(const HloScatterInstruction* scatter) {
 //         from c. and d. using the update_computation of scatter.
 //      f. Write the updated value of the slice into the operand tensor.
 
-absl::StatusOr<HloInstruction*> ScatterExpander::ExpandInstruction(
+StatusOr<HloInstruction*> ScatterExpander::ExpandInstruction(
     HloInstruction* inst) {
   auto* scatter = Cast<HloScatterInstruction>(inst);
   auto scatter_operands = scatter->scatter_operands();
@@ -470,7 +470,7 @@ absl::StatusOr<HloInstruction*> ScatterExpander::ExpandInstruction(
   absl::c_copy(scatter_operands, std::back_inserter(loop_state));
   loop_state.push_back(canonical_scatter_indices);
   absl::c_copy(adjusted_canonical_updates, std::back_inserter(loop_state));
-  absl::StatusOr<std::vector<HloInstruction*>> scatter_loop_result_status =
+  StatusOr<std::vector<HloInstruction*>> scatter_loop_result_status =
       WhileUtil::MakeCountedLoop(
           scatter->parent(), scatter_loop_trip_count, loop_state,
           [scatter](HloInstruction* induction_var,

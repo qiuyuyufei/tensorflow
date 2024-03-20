@@ -24,7 +24,7 @@ limitations under the License.
 
 namespace xla {
 
-absl::StatusOr<std::unique_ptr<xla::PjRtClient>> GetCpuClient(
+StatusOr<std::unique_ptr<xla::PjRtClient>> GetCpuClient(
     const PjrtClientFactoryOptions& option) {
   TF_ASSIGN_OR_RETURN(std::unique_ptr<PjRtClient> client,
                       xla::GetTfrtCpuClient(option.cpu_options.asynchronous));

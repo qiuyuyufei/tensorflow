@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -270,7 +270,6 @@ HLO_MATCHER(Broadcast);
 HLO_MATCHER(Call);
 HLO_MATCHER(Ceil);
 HLO_MATCHER(Clamp);
-HLO_MATCHER(CollectiveBroadcast);
 HLO_MATCHER(CollectivePermute);
 HLO_MATCHER(CollectivePermuteStart);
 HLO_MATCHER(CollectivePermuteDone);
@@ -286,7 +285,6 @@ HLO_MATCHER(Divide);
 HLO_MATCHER(Domain);
 HLO_MATCHER(DynamicSlice);
 HLO_MATCHER(DynamicUpdateSlice);
-HLO_MATCHER(Erf);
 HLO_MATCHER(Exp);
 HLO_MATCHER(Fft);
 HLO_MATCHER(Floor);

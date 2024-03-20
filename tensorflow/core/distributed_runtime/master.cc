@@ -144,7 +144,7 @@ class DeviceFinder {
     finder.Start();
     TF_RETURN_IF_ERROR(finder.Wait());
     finder.GetRemoteDevices(env->local_devices, out_remote);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   static void GetRemoteWorkers(

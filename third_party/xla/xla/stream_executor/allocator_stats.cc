@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,8 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "xla/stream_executor/allocator_stats.h"
-
-#include <string>
 
 #include "absl/strings/str_format.h"
 

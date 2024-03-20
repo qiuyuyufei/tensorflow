@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,10 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "absl/status/status.h"
 #include "absl/synchronization/mutex.h"
+#include "xla/stream_executor/multi_platform_manager.h"
 #include "xla/stream_executor/platform.h"
-#include "xla/stream_executor/platform_manager.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "tsl/lib/core/status_test_util.h"
@@ -27,49 +26,55 @@ namespace se = stream_executor;
 
 TEST(HostStream, EnforcesFIFOOrder) {
   se::Platform* platform =
-      se::PlatformManager::PlatformWithName("Host").value();
+      se::MultiPlatformManager::PlatformWithName("Host").value();
   se::StreamExecutor* executor = platform->ExecutorForDevice(0).value();
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
+  se::Stream stream(executor);
+  stream.Init();
+
   absl::Mutex mu;
   int expected = 0;
   bool ok = true;
   for (int i = 0; i < 2000; ++i) {
-    TF_ASSERT_OK(stream->DoHostCallback([i, &mu, &expected, &ok]() {
+    stream.ThenDoHostCallback([i, &mu, &expected, &ok]() {
       absl::MutexLock lock(&mu);
       if (expected != i) {
         ok = false;
       }
       ++expected;
-    }));
+    });
   }
-  TF_ASSERT_OK(stream->BlockHostUntilDone());
+  TF_ASSERT_OK(stream.BlockHostUntilDone());
   absl::MutexLock lock(&mu);
   EXPECT_TRUE(ok);
 }
 
 TEST(HostStream, ReportsHostCallbackError) {
   se::Platform* platform =
-      se::PlatformManager::PlatformWithName("Host").value();
+      se::MultiPlatformManager::PlatformWithName("Host").value();
   se::StreamExecutor* executor = platform->ExecutorForDevice(0).value();
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
-  TF_ASSERT_OK(stream->DoHostCallbackWithStatus(
-      []() { return absl::InternalError("error!"); }));
+  se::Stream stream(executor);
+  stream.Init();
 
-  auto status = stream->BlockHostUntilDone();
+  stream.ThenDoHostCallbackWithStatus(
+      []() { return tsl::errors::Internal("error!"); });
+
+  auto status = stream.BlockHostUntilDone();
   ASSERT_EQ(status.code(), tsl::error::INTERNAL);
   ASSERT_EQ(status.message(), "error!");
 }
 
 TEST(HostStream, ReportsFirstHostCallbackError) {
   se::Platform* platform =
-      se::PlatformManager::PlatformWithName("Host").value();
+      se::MultiPlatformManager::PlatformWithName("Host").value();
   se::StreamExecutor* executor = platform->ExecutorForDevice(0).value();
-  TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
-  TF_ASSERT_OK(stream->DoHostCallbackWithStatus(
-      []() { return absl::InternalError("error 1"); }));
-  TF_ASSERT_OK(stream->DoHostCallbackWithStatus(
-      []() { return absl::InternalError("error 2"); }));
+  se::Stream stream(executor);
+  stream.Init();
+
+  stream.ThenDoHostCallbackWithStatus(
+      []() { return tsl::errors::Internal("error 1"); });
+  stream.ThenDoHostCallbackWithStatus(
+      []() { return tsl::errors::Internal("error 2"); });
 
   // "error 2" is just lost.
-  ASSERT_EQ(stream->BlockHostUntilDone().message(), "error 1");
+  ASSERT_EQ(stream.BlockHostUntilDone().message(), "error 1");
 }

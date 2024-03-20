@@ -60,7 +60,7 @@ void SameWorkerRecvDone(const DeviceMgr* device_mgr,
       }
     }
     *out = in;
-    done(absl::OkStatus());
+    done(OkStatus());
     return;
   }
 

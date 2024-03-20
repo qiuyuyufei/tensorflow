@@ -42,7 +42,7 @@ Status TensorShapeToConstant(const TensorShape& input_shape,
       vec(i) = dim_size;
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

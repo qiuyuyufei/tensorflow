@@ -86,10 +86,10 @@ Status MakeCallNodeFromAttribute(const Node& node, const std::string& attr_name,
   TF_RETURN_IF_ERROR(GetNodeAttr(node.attrs(), attr_name, &name_attr));
   node_def->set_op(name_attr->name());
   *(node_def->mutable_attr()) = name_attr->attr();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::StatusOr<std::vector<NodeDef>> MakeCallNodesFromAttribute(
+StatusOr<std::vector<NodeDef>> MakeCallNodesFromAttribute(
     const Node& node, absl::string_view attr_name,
     absl::string_view call_name) {
   std::vector<NameAttrList> attr_lists;
@@ -235,7 +235,7 @@ bool RecursiveCompilabilityChecker::IsCompilableCase(
     NameAttrList* encapsulating_function,
     RecursiveCompilabilityChecker::UncompilableNodesMap* uncompilable_nodes)
     const {
-  absl::StatusOr<std::vector<NodeDef>> calls =
+  StatusOr<std::vector<NodeDef>> calls =
       MakeCallNodesFromAttribute(case_node, "branches", "branch");
   if (!calls.ok()) {
     VLOG(2) << "Rejecting node " << case_node.name() << ": "
@@ -660,7 +660,7 @@ Status GetBodyAndConstantsAndResources(FunctionLibraryRuntime* flr,
     }
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 tensorflow::MemoryTypeVector GetInputMemoryTypes(

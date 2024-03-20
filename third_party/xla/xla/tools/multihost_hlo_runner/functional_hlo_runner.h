@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -207,33 +207,30 @@ class FunctionalHloRunner {
     int partitions = 1;
   };
 
-  // Create a PjRtClient which can run HLOs on Host CPU.
-  static absl::StatusOr<std::unique_ptr<PjRtClient>> CreateHostClient();
-
   // Create a PjRtClient which can run HLOs on GPU.
-  static absl::StatusOr<std::unique_ptr<PjRtClient>> CreateGpuClient();
+  static StatusOr<std::unique_ptr<PjRtClient>> CreateGpuClient();
 
   // Create a PjRtClient which mocks multi-hosts GPU run
-  static absl::StatusOr<std::unique_ptr<PjRtClient>> CreateMockGpuClient(
+  static StatusOr<std::unique_ptr<PjRtClient>> CreateMockGpuClient(
       int num_nodes = 1);
 
   // Create a PjRtClient which can run HLOs on GPUs distributed across several
   // nodes.
   // The distributed client pointer passed as a parameter is expected to be
   // non-null, and 0 <= node_id < num_nodes must hold.
-  static absl::StatusOr<std::unique_ptr<PjRtClient>> CreateGpuClient(
+  static StatusOr<std::unique_ptr<PjRtClient>> CreateGpuClient(
       std::shared_ptr<xla::DistributedRuntimeClient> distributed_client,
       int node_id, int num_nodes);
 
   // Loads an ExecutionOptions proto (which can be used in RawCompileOptions).
-  static absl::StatusOr<ExecutionOptions> LoadExecutionOptions(
+  static StatusOr<ExecutionOptions> LoadExecutionOptions(
       absl::string_view path);
 
   // Creates the compilation options.
   //
   // If RawCompileOptions::num_slices is set, the
   // CompileOptions::device_assignment has to be set manually.
-  static absl::StatusOr<CompileOptions> CreateCompileOptions(
+  static StatusOr<CompileOptions> CreateCompileOptions(
       const PjRtClient& client,
       const FunctionalHloRunner::RawCompileOptions& raw_options,
       int task_id = 0);
@@ -254,13 +251,28 @@ class FunctionalHloRunner {
   // not empty. Otherwise, use arguments from the HLO file or fake arguments.
   // The hlo file might be a HLO snapshot and thus contain arguments, otherwise
   // it is run with fake arguments.
-  static absl::StatusOr<PerDeviceLiteralVecType> LoadAndRun(
+  static StatusOr<PerDeviceLiteralVecType> LoadAndRun(
       PjRtClient& client, const DebugOptions& debug_options,
       const PreprocessingOptions& preproc_options,
       const CompileOptions& compile_options,
       const RunningOptions& running_options,
       absl::Span<const std::string> hlo_files, InputFormat input_format,
       const PerDeviceLiteralVecType& arguments = {});
+
+  // Loads an HLO module from hlo_file according to input_format and run it.
+  // The module arguments are provided by `argument_literals`. The arguments per
+  // device is defined by the `per_device_index_vec`, which should contain a
+  // vector of indices for each local device. This means different device may
+  // use the same argument literals. This is essential to run HLO modules with
+  // large arguments (e.g., models with large weights).
+  static StatusOr<PerDeviceLiteralVecType> LoadAndRun(
+      PjRtClient& client, const DebugOptions& debug_options,
+      const PreprocessingOptions& preproc_options,
+      const CompileOptions& compile_options,
+      const RunningOptions& running_options,
+      absl::Span<const std::string> hlo_files, InputFormat input_format,
+      const LiteralVec& argument_literals,
+      const PerDeviceIndexVecType& per_device_index_vec);
 
   // Loads and compiles an HLO for debugging purposes.
   //
@@ -276,15 +288,29 @@ class FunctionalHloRunner {
   // Compiles and runs the given HLO module with the given arguments for each
   // device. The given arguments is a map from device ID to a list of arguments.
   // If the arguments map is empty, the HLO module is run with fake arguments.
-  static absl::StatusOr<PerDeviceLiteralVecType> CompileAndRun(
+  static StatusOr<PerDeviceLiteralVecType> CompileAndRun(
       PjRtClient& client, const DebugOptions& debug_options,
       const PreprocessingOptions& preproc_options,
       const CompileOptions& compile_options,
       const RunningOptions& running_options, HloModule* hlo_module,
       const PerDeviceLiteralVecType& arguments = {});
 
+  // Compiles and runs the given HLO module with the given arguments for each
+  // device. The module arguments are provided by `argument_literals`. The
+  // arguments per device is defined by the `per_device_index_vec`, which should
+  // contain a vector of indices for each local device. This means different
+  // devices may use the same argument literals. This is essential to run HLO
+  // modules with large arguments (e.g., models with large weights).
+  static StatusOr<PerDeviceLiteralVecType> CompileAndRun(
+      PjRtClient& client, const DebugOptions& debug_options,
+      const PreprocessingOptions& preproc_options,
+      const CompileOptions& compile_options,
+      const RunningOptions& running_options, HloModule* hlo_module,
+      const LiteralVec& argument_literals,
+      const PerDeviceIndexVecType& argument_indices);
+
   // Compiles the HLO module.
-  static absl::StatusOr<std::unique_ptr<PjRtLoadedExecutable>> Compile(
+  static StatusOr<std::unique_ptr<PjRtLoadedExecutable>> Compile(
       PjRtClient& client, HloModule* hlo_module,
       const DebugOptions& debug_options,
       const PreprocessingOptions& preproc_options,
@@ -293,7 +319,7 @@ class FunctionalHloRunner {
   // Ahead-of-time compilation using the PjRtTopologyDescription that's passed
   // instead of using the registered topology. This enables reproduction of
   // compilation based on captured information.
-  static absl::StatusOr<std::unique_ptr<PjRtExecutable>> Compile(
+  static StatusOr<std::unique_ptr<PjRtExecutable>> Compile(
       PjRtClient& client, HloModule* hlo_module,
       const DebugOptions& debug_options,
       const PreprocessingOptions& preproc_options,
@@ -301,27 +327,35 @@ class FunctionalHloRunner {
       const PjRtTopologyDescription& topology);
 
   // Runs the executable.
-  static absl::StatusOr<PerDeviceLiteralVecType> Run(
+  static StatusOr<PerDeviceLiteralVecType> Run(
       PjRtClient& client, PjRtLoadedExecutable* executable,
       const PerDeviceLiteralVecType& arguments,
       const RunningOptions& running_options);
 
-  static absl::StatusOr<std::unique_ptr<HloModule>> ReadModuleFromHloTextFile(
+  // Runs the executable, where the module arguments are provided through
+  // a shared literal vector and per-device indices.
+  static StatusOr<PerDeviceLiteralVecType> Run(
+      PjRtClient& client, PjRtLoadedExecutable* executable,
+      const LiteralVec& argument_literals,
+      const PerDeviceIndexVecType& argument_indices,
+      const RunningOptions& running_options);
+
+  static StatusOr<std::unique_ptr<HloModule>> ReadModuleFromHloTextFile(
       absl::string_view hlo_file);
-  static absl::StatusOr<std::unique_ptr<HloModule>>
-  ReadModuleFromBinaryProtoFile(absl::string_view hlo_file);
-  static absl::StatusOr<std::unique_ptr<HloModule>> ReadModuleFromTextProtoFile(
+  static StatusOr<std::unique_ptr<HloModule>> ReadModuleFromBinaryProtoFile(
+      absl::string_view hlo_file);
+  static StatusOr<std::unique_ptr<HloModule>> ReadModuleFromTextProtoFile(
       absl::string_view hlo_file);
 
-  static absl::StatusOr<HloModuleAndArguments>
-  ReadModuleFromSnapshotBinaryProtoFile(absl::string_view hlo_file);
-  static absl::StatusOr<HloModuleAndArguments> LoadHloModuleAndArguments(
+  static StatusOr<HloModuleAndArguments> ReadModuleFromSnapshotBinaryProtoFile(
+      absl::string_view hlo_file);
+  static StatusOr<HloModuleAndArguments> LoadHloModuleAndArguments(
       absl::string_view hlo_file, InputFormat input_format);
 
-  static absl::StatusOr<std::unique_ptr<HloModule>> ReadModuleFromString(
+  static StatusOr<std::unique_ptr<HloModule>> ReadModuleFromString(
       absl::string_view hlo_text);
 
-  static absl::StatusOr<std::unique_ptr<HloModule>> ReadModuleFromProto(
+  static StatusOr<std::unique_ptr<HloModule>> ReadModuleFromProto(
       const HloModuleProto& proto);
 
   // This would ideally be private, but we need it for the implementation of
@@ -360,14 +394,14 @@ class FunctionalHloRunner {
       const PjRtClient& client);
 
   // Creates fake arguments to run the given executable.
-  static absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
+  static StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
   CreateArgumentsOnDevice(PjRtClient& client,
                           const PjRtLoadedExecutable* executable,
                           const RunningOptions& running_options,
                           bool flatten_arguments = false);
 
   // Creates uninitialized arguments to run the given executable.
-  static absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
+  static StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
   CreateUninitializedArgumentsOnDevice(PjRtClient& client,
                                        const PjRtLoadedExecutable* executable,
                                        const RunningOptions& running_options,
@@ -375,27 +409,27 @@ class FunctionalHloRunner {
 
   // Creates argument buffers based on the given arguments map. Note that the
   // arguments might be invalid when arguments are destructed.
-  static absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
+  static StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
   CopyArgumentsToDevice(PjRtClient& client,
                         absl::Span<PjRtDevice* const> addressable_devices,
                         const PerDeviceLiteralVecType& arguments,
                         bool log_input);
 
-  static absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
+  static StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
   CopyArgumentsToDevice(PjRtClient& client,
                         absl::Span<PjRtDevice* const> addressable_devices,
                         const LiteralVec& argument_literals,
                         const PerDeviceIndexVecType& argument_indices,
                         bool log_input);
 
-  static absl::StatusOr<PerDeviceLiteralVecType> RunInternal(
+  static StatusOr<PerDeviceLiteralVecType> RunInternal(
       PjRtClient& client, PjRtLoadedExecutable* executable,
-      std::function<absl::StatusOr<
-          std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>(bool)>
+      std::function<
+          StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>(bool)>
           create_argument_buffers_on_device,
       const RunningOptions& running_options);
 
-  static absl::StatusOr<PerDeviceLiteralVecType> FetchAndLogOutput(
+  static StatusOr<PerDeviceLiteralVecType> FetchAndLogOutput(
       PjRtClient& client,
       const std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>&
           output_buffers,

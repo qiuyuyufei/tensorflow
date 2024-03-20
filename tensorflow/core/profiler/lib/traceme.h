@@ -28,6 +28,7 @@ limitations under the License.
 #include "tsl/profiler/lib/traceme.h"
 
 #if !defined(IS_MOBILE_PLATFORM)
+#include "tensorflow/core/profiler/backends/cpu/traceme_recorder.h"
 #include "tsl/profiler/utils/time_utils.h"
 #endif
 

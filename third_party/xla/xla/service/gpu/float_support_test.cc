@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,12 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <variant>
-
 #include <gtest/gtest.h>
 #include "absl/strings/string_view.h"
 #include "xla/error_spec.h"
-#include "xla/service/gpu/variant_visitor.h"
 #include "xla/stream_executor/device_description.h"
 #include "xla/tests/hlo_test_base.h"
 #include "xla/xla.pb.h"
@@ -29,11 +26,11 @@ namespace {
 
 class FloatSupportTest : public HloTestBase {
  public:
-  const se::GpuComputeCapability& GetGpuComputeCapability() {
+  se::CudaComputeCapability GetCudaComputeCapability() {
     return backend()
         .default_stream_executor()
         ->GetDeviceDescription()
-        .gpu_compute_capability();
+        .cuda_compute_capability();
   }
 };
 
@@ -75,15 +72,9 @@ ENTRY e {
 }
 
 TEST_F(FloatSupportTestWithTriton, MixedTypeDotWithBF16IsNotUpcasted) {
-  bool skip_test = std::visit(
-      VariantVisitor{[](const se::CudaComputeCapability& cc) {
-                       return !cc.IsAtLeast(se::CudaComputeCapability::AMPERE);
-                     },
-                     [](const se::RocmComputeCapability&) { return true; }},
-      GetGpuComputeCapability());
-
-  if (skip_test) {
-    GTEST_SKIP() << "Not supported on this GPU architecture";
+  if (!GetCudaComputeCapability().IsAtLeast(
+          se::CudaComputeCapability::AMPERE)) {
+    GTEST_SKIP() << "No BF16 before Ampere.";
   }
 
   constexpr absl::string_view kHloText = R"(

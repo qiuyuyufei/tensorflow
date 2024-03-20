@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ class TestBugSearch : public BugCheckerInterface {
  public:
   TestBugSearch(std::initializer_list<HloOpcode> opcodes) : opcodes_(opcodes) {}
 
-  absl::StatusOr<bool> Run(const HloModule& module) override {
+  StatusOr<bool> Run(const HloModule& module) override {
     auto has_opcode = [&](HloOpcode opcode) {
       return absl::c_any_of(module.entry_computation()->instructions(),
                             [opcode](const HloInstruction* instr) {
@@ -173,7 +173,7 @@ TEST_F(HloBisectStateTest, TrimByOutputsLostBug) {
   class CustomBugSearch : public TestBugSearch {
    public:
     CustomBugSearch() : TestBugSearch({HloOpcode::kConstant}) {}
-    absl::StatusOr<bool> Run(const HloModule& module) override {
+    StatusOr<bool> Run(const HloModule& module) override {
       TF_ASSIGN_OR_RETURN(bool has_constants, TestBugSearch::Run(module));
       int program_size = module.entry_computation()->instruction_count();
       return program_size == 5 && !has_constants;

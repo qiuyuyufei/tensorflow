@@ -69,14 +69,14 @@ absl::string_view DefiningOpName(mlir::Value operand) {
 
 Status AssertReplicated(mlir::Value operand) {
   TF_ASSIGN_OR_RETURN(auto layout, ExtractLayoutFromOperand(operand));
-  if (!layout) return absl::OkStatus();
+  if (!layout) return OkStatus();
 
   if (!layout->IsFullyReplicated()) {
     return errors::InvalidArgument(
         "Expected layout for ", DefiningOpName(operand),
         " to be fully replicated, but found ", layout->ToString());
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 absl::flat_hash_set<std::string> ReducedMeshDimensions(
@@ -95,7 +95,7 @@ template <typename OpType>
 Status ExtractDims(mlir::Operation* op,
                    llvm::SmallVector<int64_t, 4>* reduced_dims, bool* keep_dims,
                    bool* matched) {
-  if (!llvm::isa<OpType>(op)) return absl::OkStatus();
+  if (!llvm::isa<OpType>(op)) return OkStatus();
   auto reduce_op = llvm::cast<OpType>(op);
   *keep_dims = reduce_op.getKeepDims();
   TF_RETURN_IF_ERROR(ExtractConstVectorFromValue(
@@ -103,7 +103,7 @@ Status ExtractDims(mlir::Operation* op,
   TF_RETURN_IF_ERROR(AssertReplicated(reduce_op.getReductionIndices()));
   *matched = true;
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 template <>
@@ -191,7 +191,7 @@ Status ExtractReductionParameters(mlir::Operation* op,
                                  " not yet implemented.");
 
   reduced_dims_set.insert(reduced_dims.begin(), reduced_dims.end());
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 StatusOr<Layout> ComputeResultLayout(mlir::Operation* op,

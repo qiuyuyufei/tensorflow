@@ -1,20 +1,10 @@
 load("//xla:xla.bzl", "xla_cc_test")
-load("@local_tsl//tsl:tsl.bzl", "internal_visibility")
 load("@local_tsl//tsl:tsl.default.bzl", "filegroup", "get_compatible_with_portable")
-load("@local_tsl//tsl/platform:build_config.bzl", "tf_platform_deps")
-load(
-    "@local_tsl//tsl/platform:build_config_root.bzl",
-    "if_llvm_aarch32_available",
-    "if_llvm_aarch64_available",
-    "if_llvm_powerpc_available",
-    "if_llvm_system_z_available",
-    "if_llvm_x86_available",
-)
+load("@local_tsl//tsl/platform:build_config.bzl", "if_llvm_system_z_available", "tf_platform_deps")
 load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = internal_visibility(["//xla:internal"]),
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -23,6 +13,7 @@ cc_library(
     srcs = ["arguments.cc"],
     hdrs = ["arguments.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":async_runtime",
         ":types",
@@ -49,6 +40,7 @@ cc_library(
     srcs = ["async_runtime.cc"],
     hdrs = ["async_runtime.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/base:dynamic_annotations",
         "@local_tsl//tsl/concurrency:async_value",
@@ -73,6 +65,7 @@ cc_library(
     name = "async_values_cache",
     hdrs = ["async_values_cache.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "@local_tsl//tsl/platform",
     ] + tf_platform_deps(
@@ -86,10 +79,10 @@ cc_library(
     srcs = ["constraints.cc"],
     hdrs = ["constraints.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Support",
     ],
 )
@@ -97,6 +90,7 @@ cc_library(
 filegroup(
     name = "aot_ffi_execution_context_hdrs",
     srcs = ["aot_ffi_execution_context.h"],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -129,6 +123,7 @@ cc_library(
     srcs = ["custom_call.cc"],
     hdrs = ["custom_call.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":async_runtime",
         ":diagnostics",
@@ -150,11 +145,33 @@ cc_library(
     ],
 )
 
+xla_cc_test(
+    name = "custom_call_test",
+    srcs = ["custom_call_test.cc"],
+    deps = [
+        ":arguments",
+        ":async_runtime",
+        ":custom_call",
+        ":custom_call_registry",
+        ":diagnostics",
+        ":jit_executable",
+        ":module",
+        ":state",
+        "//xla/mlir/runtime/ir/tests:testlib",
+        "//xla/mlir/runtime/transforms:compilation_pipeline_gpu",
+        "//xla/mlir/runtime/transforms:custom_call_encoding",
+        "@local_tsl//tsl/platform:test",
+        "@local_tsl//tsl/platform:test_benchmark",
+        "@local_tsl//tsl/platform:test_main",
+    ],
+)
+
 cc_library(
     name = "custom_call_registry",
     srcs = ["custom_call_registry.cc"],
     hdrs = ["custom_call_registry.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":custom_call",
         "@llvm-project//llvm:Support",
@@ -166,6 +183,7 @@ cc_library(
     srcs = ["diagnostics.cc"],
     hdrs = ["diagnostics.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":logical_result",
         "@com_google_absl//absl/status",
@@ -189,6 +207,7 @@ cc_library(
     name = "errors",
     hdrs = ["errors.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings:str_format",
@@ -200,6 +219,7 @@ cc_library(
     srcs = ["executable.cc"],
     hdrs = ["executable.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":arguments",
         ":async_runtime",
@@ -225,11 +245,36 @@ cc_library(
     ],
 )
 
+xla_cc_test(
+    name = "executable_test",
+    srcs = ["executable_test.cc"],
+    tags = ["nomsan"],  # TODO(ezhulenev): Find msan error in LLVM coroutine passes
+    deps = [
+        ":arguments",
+        ":async_runtime",
+        ":custom_call_registry",
+        ":jit_executable",
+        ":logical_result",
+        ":results",
+        ":types",
+        "//xla/mlir/runtime/transforms:compilation_pipeline_options",
+        "//xla/mlir/runtime/transforms/tests:testlib_pipeline",
+        "//xla/mlir/runtime/utils:async_runtime_api",
+        "@com_google_absl//absl/base:dynamic_annotations",
+        "@com_google_absl//absl/synchronization",
+        "@local_tsl//tsl/platform:env",
+        "@local_tsl//tsl/platform:test",
+        "@local_tsl//tsl/platform:test_benchmark",
+        "@local_tsl//tsl/platform:test_main",
+    ],
+)
+
 cc_library(
     name = "execution_engine",
     srcs = ["execution_engine.cc"],
     hdrs = ["execution_engine.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":errors",
         "@com_google_absl//absl/log:check",
@@ -242,21 +287,26 @@ cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//llvm:Target",
         "@llvm-project//llvm:TransformUtils",
-    ] + if_llvm_aarch32_available([
-        "@llvm-project//llvm:ARMAsmParser",
-        "@llvm-project//llvm:ARMCodeGen",
-    ]) + if_llvm_aarch64_available([
-        "@llvm-project//llvm:AArch64AsmParser",
-        "@llvm-project//llvm:AArch64CodeGen",
-    ]) + if_llvm_powerpc_available([
-        "@llvm-project//llvm:PowerPCAsmParser",
-        "@llvm-project//llvm:PowerPCCodeGen",
-    ]) + if_llvm_system_z_available([
-        "@llvm-project//llvm:SystemZAsmParser",
-        "@llvm-project//llvm:SystemZCodeGen",
-    ]) + if_llvm_x86_available([
         "@llvm-project//llvm:X86AsmParser",
         "@llvm-project//llvm:X86CodeGen",
+    ] + select({
+        "@local_tsl//tsl:arm_any": [
+            "@llvm-project//llvm:AArch64AsmParser",  # fixdeps: keep
+            "@llvm-project//llvm:AArch64CodeGen",  # fixdeps: keep
+        ],
+        "@local_tsl//tsl:linux_ppc64le": [
+            "@llvm-project//llvm:PowerPCAsmParser",  # fixdeps: keep
+            "@llvm-project//llvm:PowerPCCodeGen",  # fixdeps: keep
+        ],
+        "@local_tsl//tsl:macos_arm64": [
+            "@llvm-project//llvm:AArch64AsmParser",  # fixdeps: keep
+            "@llvm-project//llvm:AArch64CodeGen",  # fixdeps: keep
+        ],
+        "//conditions:default": [
+        ],
+    }) + if_llvm_system_z_available([
+        "@llvm-project//llvm:SystemZAsmParser",  # fixdeps: keep
+        "@llvm-project//llvm:SystemZCodeGen",  # fixdeps: keep
     ]),
 )
 
@@ -265,6 +315,7 @@ cc_library(
     srcs = ["jit_executable.cc"],
     hdrs = ["jit_executable.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":async_values_cache",
         ":constraints",
@@ -284,6 +335,7 @@ cc_library(
     name = "logical_result",
     hdrs = ["logical_result.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = ["@llvm-project//mlir:Support"],
 )
 
@@ -291,6 +343,7 @@ cc_library(
     name = "map_by_type",
     hdrs = ["map_by_type.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":type_id",
         "@llvm-project//llvm:Support",
@@ -313,6 +366,7 @@ cc_library(
     srcs = ["memory_mapper.cc"],
     hdrs = ["memory_mapper.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "@llvm-project//llvm:ExecutionEngine",
         "@llvm-project//llvm:Support",
@@ -327,6 +381,7 @@ cc_library(
     name = "memref_view",
     hdrs = ["memref_view.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "//xla:xla_data_proto_cc",
         "@com_google_absl//absl/types:span",
@@ -337,6 +392,7 @@ cc_library(
     name = "module",
     hdrs = ["module.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":custom_call_registry",
         "@com_google_absl//absl/status",
@@ -349,6 +405,7 @@ cc_library(
     srcs = ["module_registry.cc"],
     hdrs = ["module_registry.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":module",
     ],
@@ -369,6 +426,7 @@ cc_library(
     name = "results",
     hdrs = ["results.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":logical_result",
         ":types",
@@ -392,12 +450,14 @@ cc_library(
     name = "runtime",
     hdrs = ["runtime.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "state",
     hdrs = ["state.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -421,6 +481,7 @@ cc_library(
     srcs = ["symbolic_shape.cc"],
     hdrs = ["symbolic_shape.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":arguments",
         ":constraints",
@@ -452,6 +513,7 @@ cc_library(
     srcs = ["types.cc"],
     hdrs = ["types.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "//xla:shape_util",
         "//xla:xla_data_proto_cc",
@@ -466,6 +528,7 @@ cc_library(
     name = "tracing",
     hdrs = ["tracing.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         ":custom_call",
         ":type_id",
@@ -477,6 +540,7 @@ cc_library(
     srcs = ["type_id.cc"],
     hdrs = ["type_id.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/container:flat_hash_map",
         "@llvm-project//mlir:Support",
@@ -487,11 +551,13 @@ cc_library(
     name = "compiler",
     hdrs = ["compiler.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "cpu_event",
     hdrs = ["cpu_event.h"],
+    visibility = ["//visibility:public"],
 )
 
 xla_cc_test(

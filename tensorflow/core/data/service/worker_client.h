@@ -22,7 +22,6 @@ limitations under the License.
 #include "tensorflow/core/data/service/common.pb.h"
 #include "tensorflow/core/data/service/data_transfer.h"
 #include "tensorflow/core/data/service/worker.pb.h"
-#include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/statusor.h"
@@ -39,11 +38,9 @@ class DataServiceWorkerClient : public DataServiceClientBase {
  public:
   DataServiceWorkerClient(const std::string& address,
                           const std::string& protocol,
-                          const std::string& transfer_protocol,
-                          Allocator* allocator)
+                          const std::string& transfer_protocol)
       : DataServiceClientBase(address, protocol),
-        transfer_protocol_(transfer_protocol),
-        allocator_(allocator) {}
+        transfer_protocol_(transfer_protocol) {}
 
   // Fetches an element from the worker.
   Status GetElement(const GetElementRequest& req, GetElementResult& result);
@@ -65,9 +62,7 @@ class DataServiceWorkerClient : public DataServiceClientBase {
   Status EnsureInitialized() override;
 
  private:
-  std::string transfer_protocol_;
-  Allocator* allocator_;
-
+  const std::string transfer_protocol_;
   mutex mu_;
   // Initialization is guarded by `mu_`, but using the stub does not require
   // holding `mu_`
@@ -78,8 +73,7 @@ class DataServiceWorkerClient : public DataServiceClientBase {
 // from the data transfer server specified in `info`.
 StatusOr<std::unique_ptr<DataServiceWorkerClient>>
 CreateDataServiceWorkerClient(const std::string& dispatcher_protocol,
-                              const DataTransferServerInfo& info,
-                              Allocator* allocator);
+                              const DataTransferServerInfo& info);
 
 }  // namespace data
 }  // namespace tensorflow

@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,8 +19,6 @@ limitations under the License.
 #include <string>
 
 #include "absl/log/check.h"
-#include "absl/log/log.h"
-#include "absl/status/status.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/string_view.h"
 #include "xla/service/collective_ops_utils.h"
@@ -29,8 +27,9 @@ limitations under the License.
 #include "xla/service/platform_util.h"
 #include "xla/shape_util.h"
 #include "xla/status.h"
+#include "xla/statusor.h"
+#include "xla/stream_executor/multi_platform_manager.h"
 #include "xla/stream_executor/platform.h"
-#include "xla/stream_executor/platform_manager.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/util.h"
@@ -47,38 +46,38 @@ std::string GetGpuPlatformName() {
       PlatformUtil::CanonicalPlatformName("gpu").value());
 }
 
-absl::Status AssertOnGpu(void* stream_handle, void* buffer,
-                         absl::string_view error_msg) {
+Status AssertOnGpu(void* stream_handle, void* buffer,
+                   absl::string_view error_msg) {
   TF_ASSIGN_OR_RETURN(
       se::Platform * platform,
-      se::PlatformManager::PlatformWithName(GetGpuPlatformName()));
+      se::MultiPlatformManager::PlatformWithName(GetGpuPlatformName()));
   se::StreamExecutorConfig config;
   config.gpu_stream = stream_handle;
   TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
                       platform->GetExecutor(config));
   se::Stream* stream = executor->FindAllocatedStream(stream_handle);
   if (!stream) {
-    return Internal("Stream not found for: %p", stream_handle);
+    return InternalError("Stream not found for: %p", stream_handle);
   }
 
   int8_t expected = false;
   int64_t byte_size = sizeof(int8_t);
   CHECK_EQ(byte_size, ShapeUtil::ByteSizeOfPrimitiveType(PrimitiveType::PRED));
-  TF_RETURN_IF_ERROR(stream->Memcpy(
+  stream->ThenMemcpy(
       &expected, se::DeviceMemoryBase{buffer, static_cast<uint64_t>(byte_size)},
-      byte_size));
+      byte_size);
   TF_RETURN_IF_ERROR(stream->BlockHostUntilDone());
   if (!static_cast<bool>(expected)) {
-    return Internal("%s", error_msg);
+    return InternalError("%s", error_msg);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void AssertionCustomCall(void* stream_handle, void** buffers,
                          const char* opaque, int opaque_len,
                          XlaCustomCallStatus* status) {
-  absl::Status s =
+  Status s =
       AssertOnGpu(stream_handle, buffers[0],
                   absl::string_view{opaque, static_cast<uint64_t>(opaque_len)});
   if (!s.ok()) {

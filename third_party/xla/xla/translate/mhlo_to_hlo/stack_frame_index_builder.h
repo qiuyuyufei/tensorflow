@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ limitations under the License.
 #define XLA_TRANSLATE_MHLO_TO_HLO_STACK_FRAME_INDEX_BUILDER_H_
 
 #include <map>
-#include <string>
 #include <string_view>
 #include <tuple>
 
@@ -31,14 +30,7 @@ class StackFrameIndexBuilder {
 
   xla::StackFrameIndexProto Build() const;
 
-  struct AddStackFrameResult {
-    int last_frame_id;
-    std::string last_frame_file;
-    int last_frame_line;
-  };
-
-  AddStackFrameResult AddCallStackAndGetFirstFrameId(
-      const mlir::Location &root_loc);
+  int AddCallStackAndGetFirstFrameId(const mlir::Location &root_loc);
 
  private:
   int AddStackFrameLocation(const mlir::NameLoc &name_location,

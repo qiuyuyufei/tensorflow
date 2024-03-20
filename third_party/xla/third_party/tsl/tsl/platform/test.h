@@ -87,7 +87,11 @@ int RandomSeed();
 int PickUnusedPortOrDie();
 
 // Constant which is false internally and true in open source.
-inline constexpr bool kIsOpenSource = TSL_IS_IN_OSS;
+#ifdef PLATFORM_GOOGLE
+inline constexpr bool kIsOpenSource = false;
+#else
+inline constexpr bool kIsOpenSource = true;
+#endif  // PLATFORM_GOOGLE
 
 }  // namespace testing
 }  // namespace tsl

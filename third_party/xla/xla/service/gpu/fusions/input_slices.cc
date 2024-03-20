@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,37 +14,14 @@ limitations under the License.
 ==============================================================================*/
 #include "xla/service/gpu/fusions/input_slices.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <optional>
-#include <vector>
-
-#include "absl/log/check.h"
-#include "absl/log/log.h"
-#include "absl/strings/str_cat.h"
-#include "absl/types/span.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "xla/hlo/ir/hlo_computation.h"
-#include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
-#include "xla/hlo/ir/hlo_opcode.h"
-#include "xla/service/gpu/elemental_ir_emitter.h"
+#include "xla/service/elemental_ir_emitter.h"
 #include "xla/service/gpu/ir_emission_utils.h"
-#include "xla/service/gpu/ir_emitter_context.h"
-#include "xla/service/gpu/launch_dimensions.h"
 #include "xla/service/gpu/parallel_loop_emitter.h"
 #include "xla/service/llvm_ir/fused_ir_emitter.h"
-#include "xla/service/llvm_ir/ir_array.h"
 #include "xla/service/llvm_ir/kernel_support_library.h"
-#include "xla/service/llvm_ir/llvm_loop.h"
-#include "xla/shape.h"
-#include "xla/shape_util.h"
-#include "xla/status.h"
-#include "xla/statusor.h"
-#include "xla/util.h"
-#include "tsl/platform/statusor.h"
+#include "xla/service/llvm_ir/llvm_util.h"
 
 namespace xla {
 namespace gpu {
@@ -67,7 +44,7 @@ namespace {
 //   Write to output of slice1
 // }
 //
-absl::Status EmitElementForInputFusibleSlices(
+Status EmitElementForInputFusibleSlices(
     ElementalIrEmitter& elemental_emitter,
     const HloComputation* fused_computation,
     const std::vector<llvm_ir::IrArray>& inputs,
@@ -138,7 +115,7 @@ absl::Status EmitElementForInputFusibleSlices(
 
     ksl.If(absl::StrCat("slice", i), guarding_cond, emit_slice_elem_func);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Gets the input shape of the ROOT slices, which will be used as the kernel
@@ -148,7 +125,7 @@ absl::Status EmitElementForInputFusibleSlices(
 // Returns the input shape of the ROOT slices if all the input shapes of ROOT
 // slices are the same and the slices are non-strided. Otherwise, returns
 // FailedPrecondition.
-absl::StatusOr<Shape> GetConsistentInputShapeForRootSlices(
+StatusOr<Shape> GetConsistentInputShapeForRootSlices(
     const HloComputation* fused_computation) {
   const HloInstruction& root = *fused_computation->root_instruction();
   if (root.opcode() == HloOpcode::kSlice) {
@@ -175,42 +152,26 @@ absl::StatusOr<Shape> GetConsistentInputShapeForRootSlices(
 
 }  // namespace
 
-LaunchDimensions InputSlicesFusion::launch_dimensions() const {
-  auto* root = analysis_.fusion_roots().front();
-  const auto& shape = root->operands()[0]->shape();
-  return CalculateLaunchDimensions(shape, analysis_.device_info(),
-                                   {unroll_factor_});
+StatusOr<LaunchDimensions> InputSlicesFusion::launch_dimensions(
+    IrEmitterContext& ir_emitter_context, int kernel_index) const {
+  return analysis_.GetLaunchDimensions();
 }
 
-std::optional<IndexingMap> InputSlicesFusion::ComputeThreadIdToOutputIndexing(
-    int64_t output_id, mlir::MLIRContext* ctx) const {
-  // The mapping here is trivial and the same for all outputs - slice offsets
-  // are applied in the indexing from slice outputs to slice inputs.
-  auto launch_dims = launch_dimensions();
-  // The implementation requires the shapes and layouts to be the same, but we
-  // still use the requested output's shape for clarity.
-  const auto& shape = analysis_.fusion_roots()[output_id]->shape();
-  return GetDefaultThreadIdToOutputIndexingMap(launch_dims, unroll_factor_,
-                                               shape, ctx);
-}
-
-absl::Status InputSlicesFusion::EmitKernel(
-    IrEmitterContext& ir_emitter_context, const HloFusionInstruction& fusion,
-    const LaunchDimensions& launch_dims, std::vector<llvm_ir::IrArray> inputs,
-    std::vector<llvm_ir::IrArray> outputs, llvm::IRBuilder<>* builder) const {
+Status InputSlicesFusion::EmitKernel(
+    IrEmitterContext& ir_emitter_context, ElementalIrEmitter& elemental_emitter,
+    const HloFusionInstruction& fusion, const LaunchDimensions& launch_dims,
+    std::vector<llvm_ir::IrArray> inputs, std::vector<llvm_ir::IrArray> outputs,
+    llvm::IRBuilder<>* builder, int kernel_index) const {
   TF_ASSIGN_OR_RETURN(Shape element_shape,
                       GetConsistentInputShapeForRootSlices(
                           fusion.fused_instructions_computation()));
-  LaunchDimensionsConfig launch_config;
-  launch_config.unroll_factor = unroll_factor_;
-  GpuElementalIrEmitter elemental_emitter(ir_emitter_context, builder);
   return ParallelLoopEmitter(
-             [&](const llvm_ir::IrArray::Index index) -> absl::Status {
+             [&](const llvm_ir::IrArray::Index index) -> Status {
                return EmitElementForInputFusibleSlices(
                    elemental_emitter, fusion.fused_instructions_computation(),
                    inputs, outputs, index, builder);
              },
-             element_shape, launch_dims, builder, launch_config)
+             element_shape, launch_dims, builder)
       .EmitLoop(
           fusion.name(),
           GetIndexTypeForKernel(&fusion, launch_dims.launch_bound(), builder));

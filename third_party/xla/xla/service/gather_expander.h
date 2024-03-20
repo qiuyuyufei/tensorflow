@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ class GatherExpander : public OpExpanderPass {
  protected:
   bool InstructionMatchesPattern(HloInstruction* instruction) override;
 
-  absl::StatusOr<HloInstruction*> ExpandInstruction(
+  StatusOr<HloInstruction*> ExpandInstruction(
       HloInstruction* gather_inst) override;
 
  private:

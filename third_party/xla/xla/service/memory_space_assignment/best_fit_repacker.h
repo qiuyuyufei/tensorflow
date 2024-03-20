@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,8 +19,7 @@ limitations under the License.
 #include <cstdint>
 
 #include "absl/types/span.h"
-#include "xla/service/heap_simulator/allocation_block.h"
-#include "xla/service/heap_simulator/heap_simulator.h"
+#include "xla/service/heap_simulator.h"
 #include "xla/service/memory_space_assignment/repacking.h"
 #include "xla/statusor.h"
 
@@ -46,27 +45,17 @@ class MemorySpaceAssignmentBestFitRepacker
     BufferIntervalCompare buffer_interval_compare = nullptr;
   };
 
-  MemorySpaceAssignmentBestFitRepacker(
-      int64_t max_size, int64_t alignment,
-      SliceTimePermutationIterator::Ty slice_time_permutation_iterator_type)
+  MemorySpaceAssignmentBestFitRepacker(int64_t max_size, int64_t alignment)
       : MemorySpaceAssignmentRepacker(max_size, alignment),
-        options_(BestFitRepackOptions()),
-        slice_time_permutation_iterator_type_(
-            slice_time_permutation_iterator_type) {}
-  MemorySpaceAssignmentBestFitRepacker(
-      int64_t max_size, int64_t alignment,
-      SliceTimePermutationIterator::Ty slice_time_permutation_iterator_type,
-      BestFitRepackOptions options)
-      : MemorySpaceAssignmentRepacker(max_size, alignment),
-        options_(std::move(options)),
-        slice_time_permutation_iterator_type_(
-            slice_time_permutation_iterator_type) {}
+        options_(BestFitRepackOptions()) {}
+  MemorySpaceAssignmentBestFitRepacker(int64_t max_size, int64_t alignment,
+                                       BestFitRepackOptions options)
+      : MemorySpaceAssignmentRepacker(max_size, alignment), options_(options) {}
 
   StatusOr<bool> Repack(absl::Span<AllocationBlock*> allocations) override;
 
  private:
   BestFitRepackOptions options_;
-  SliceTimePermutationIterator::Ty slice_time_permutation_iterator_type_;
 };
 
 }  // namespace memory_space_assignment

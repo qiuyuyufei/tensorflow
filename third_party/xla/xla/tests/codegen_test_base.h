@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,14 +29,14 @@ namespace xla {
 class CodegenTestBase : public HloTestBase {
  protected:
   // Compiles hlo_module with the JIT compiler.
-  absl::StatusOr<std::unique_ptr<Executable>> CompileToExecutable(
+  StatusOr<std::unique_ptr<Executable>> CompileToExecutable(
       std::unique_ptr<HloModule> hlo_module,
       bool run_optimization_passes = true);
 
   // Compiles hlo_module with the AOT compiler.
-  absl::StatusOr<std::unique_ptr<AotCompilationResult>>
-  CompileToAotCompilationResult(std::unique_ptr<HloModule> hlo_module,
-                                const AotCompilationOptions& options);
+  StatusOr<std::unique_ptr<AotCompilationResult>> CompileToAotCompilationResult(
+      std::unique_ptr<HloModule> hlo_module,
+      const AotCompilationOptions& options);
 };
 
 }  // namespace xla

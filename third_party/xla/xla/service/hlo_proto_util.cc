@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ HloProto MakeHloProto(const HloModule& module) {
   return proto;
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>> CreateModuleFromProto(
+StatusOr<std::unique_ptr<HloModule>> CreateModuleFromProto(
     const HloModuleProto& proto, const HloModuleConfig& module_config,
     bool is_module_post_optimizations) {
   VLOG(4) << proto.ShortDebugString();
@@ -53,7 +53,7 @@ absl::StatusOr<std::unique_ptr<HloModule>> CreateModuleFromProto(
   return module;
 }
 
-absl::StatusOr<std::vector<const ShapeProto*>> EntryComputationParameterShapes(
+StatusOr<std::vector<const ShapeProto*>> EntryComputationParameterShapes(
     const HloProto& hlo_proto) {
   if (!hlo_proto.has_hlo_module()) {
     return NotFound("HloProto missing HloModuleProto.");
@@ -70,7 +70,7 @@ absl::StatusOr<std::vector<const ShapeProto*>> EntryComputationParameterShapes(
   return parameter_shapes;
 }
 
-absl::StatusOr<const ShapeProto*> EntryComputationOutputShape(
+StatusOr<const ShapeProto*> EntryComputationOutputShape(
     const HloProto& hlo_proto) {
   if (!hlo_proto.has_hlo_module()) {
     return NotFound("HloProto missing HloModuleProto.");

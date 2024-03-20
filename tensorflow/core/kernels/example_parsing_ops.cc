@@ -111,7 +111,7 @@ class ParseExampleOp : public OpKernel {
     for (int i = 0; i < keys_flat.size(); ++i) {
       keys->push_back(keys_flat(i));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Copies keys from OpInputList of scalar to std::vector<string>.
@@ -123,7 +123,7 @@ class ParseExampleOp : public OpKernel {
     for (const auto& key : key_list) {
       keys->push_back(key.scalar<tstring>()());
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Validates the shapes of input tensors.
@@ -205,7 +205,7 @@ class ParseExampleOp : public OpKernel {
             "] == ", DataTypeString(attrs_.dense_types[d]));
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Populates the FastParseExampleConfig from keys & defaults.
@@ -284,7 +284,7 @@ class ParseExampleOp : public OpKernel {
         ragged_splits.set(d, result.ragged_splits[d]);
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   ParseExampleAttrs attrs_;
@@ -566,7 +566,7 @@ class ParseSequenceExampleOp : public OpKernel {
         }
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   example::FastParseExampleConfig MakeContextConfig(
@@ -765,7 +765,7 @@ class ParseSequenceExampleOp : public OpKernel {
             d, feature_list_result.ragged_splits[d]);
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   ParseSequenceExampleAttrs attrs_;
@@ -965,7 +965,7 @@ class ParseSingleSequenceExampleOp : public OpKernel {
     options.start_block_size = std::max(options.start_block_size, block_size);
     options.max_block_size = std::max(options.max_block_size, block_size);
     protobuf::Arena arena(options);
-    auto& ex = *protobuf::Arena::Create<SequenceExample>(&arena);
+    auto& ex = *protobuf::Arena::CreateMessage<SequenceExample>(&arena);
 
     OP_REQUIRES(
         ctx, ParseProtoUnlimited(&ex, serialized_t()),

@@ -70,7 +70,7 @@ class CoordinationServiceInterface {
           std::unique_ptr<CoordinationClientCache> cache)>;
 
   using StatusOrValueCallback =
-      std::function<void(const absl::StatusOr<std::string>&)>;
+      std::function<void(const StatusOr<std::string>&)>;
 
   virtual ~CoordinationServiceInterface() = default;
 
@@ -169,8 +169,7 @@ class CoordinationServiceInterface {
 
   // Get a configuration key-value from the coordination service. If the key
   // does not exist, return NotFound error.
-  virtual absl::StatusOr<std::string> TryGetKeyValue(
-      const std::string& key) = 0;
+  virtual StatusOr<std::string> TryGetKeyValue(const std::string& key) = 0;
 
   // Gets all values under a directory (key).
   // A value is considered to be in the directory if its key is prefixed with

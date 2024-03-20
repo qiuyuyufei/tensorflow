@@ -245,8 +245,7 @@ struct BiasAddOutputKernel {
         const auto expr = output + bias;
         output = Activation::template apply<decltype(expr)>(expr);
       } else {
-        const auto bias_expr = bias.template cast<Scalar>();
-        const auto expr = output + bias_expr;
+        const auto expr = output + bias.template cast<Scalar>();
         output = Activation::template apply<decltype(expr)>(expr);
       }
     }
@@ -279,8 +278,7 @@ struct BiasAddOutputKernel<T, LeakyRelu> {
         output =
             LeakyRelu::template apply<decltype(expr)>(expr, leakyrelu_alpha);
       } else {
-        const auto bias_expr = bias.template cast<Scalar>();
-        const auto expr = output + bias_expr;
+        const auto expr = output + bias.template cast<Scalar>();
         output =
             LeakyRelu::template apply<decltype(expr)>(expr, leakyrelu_alpha);
       }
@@ -428,7 +426,7 @@ Status InitBiasAddArgs(OpKernelContext* context, BiasAddArgs<T>* args,
     args->leakyrelu_alpha = *leakyrelu_alpha;
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 template <typename T>
@@ -471,7 +469,7 @@ Status InitFusedBatchNormArgs(OpKernelContext* context, float epsilon,
     args->leakyrelu_alpha = *leakyrelu_alpha;
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

@@ -179,7 +179,7 @@ Status UpdateMetadataProtoXlaSpmd(const Mesh& mesh_config,
     }
     *proto.mutable_device_assignment() = device_assignment;
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status UpdateMetadataProtoDtensorSpmd(const Mesh& mesh_config,
@@ -238,7 +238,7 @@ Status UpdateMetadataProtoDtensorSpmd(const Mesh& mesh_config,
     }
     *proto.mutable_device_assignment() = device_assignment;
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 mlir::LogicalResult UpdateTPUCompileMetadata(const Mesh& mesh_config,

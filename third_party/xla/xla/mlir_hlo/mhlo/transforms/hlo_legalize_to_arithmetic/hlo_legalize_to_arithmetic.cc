@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -207,7 +207,6 @@ void populateScalarHloToArithmeticConversionPatterns(
       ScalarHloToArithmeticPattern<mhlo::CopyOp>,
       ScalarHloToArithmeticPattern<mhlo::CosineOp>,
       ScalarHloToArithmeticPattern<mhlo::DivOp>,
-      ScalarHloToArithmeticPattern<mhlo::ErfOp>,
       ScalarHloToArithmeticPattern<mhlo::ExpOp>,
       ScalarHloToArithmeticPattern<mhlo::Expm1Op>,
       ScalarHloToArithmeticPattern<mhlo::FloorOp>,

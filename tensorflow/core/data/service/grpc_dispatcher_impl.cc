@@ -35,8 +35,6 @@ GrpcDispatcherImpl::GrpcDispatcherImpl(
 
 Status GrpcDispatcherImpl::Start() { return impl_.Start(); }
 
-void GrpcDispatcherImpl::Stop() { impl_.Stop(); }
-
 size_t GrpcDispatcherImpl::NumActiveIterations() {
   return impl_.NumActiveIterations();
 }

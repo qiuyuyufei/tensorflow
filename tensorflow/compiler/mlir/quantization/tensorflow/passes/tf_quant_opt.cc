@@ -20,7 +20,6 @@ limitations under the License.
 #include "mlir/InitAllDialects.h"  // from @llvm-project
 #include "mlir/InitAllPasses.h"  // from @llvm-project
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"  // from @llvm-project
-#include "stablehlo/dialect/StablehloOps.h"  // from @stablehlo
 #include "tensorflow/compiler/mlir/init_mlir.h"
 #include "tensorflow/compiler/mlir/lite/quantization/ir/QuantOps.h"
 #include "tensorflow/compiler/mlir/tensorflow/dialect_registration.h"
@@ -41,8 +40,7 @@ int main(int argc, char **argv) {
                   mlir::arith::ArithDialect, mlir::tf_type::TFTypeDialect,
                   mlir::quant::QuantizationDialect,
                   mlir::quantfork::QuantizationForkDialect,
-                  mlir::tf_executor::TensorFlowExecutorDialect,
-                  mlir::stablehlo::StablehloDialect>();
+                  mlir::tf_executor::TensorFlowExecutorDialect>();
   mlir::func::registerAllExtensions(registry);
   return failed(
       mlir::MlirOptMain(argc, argv, "TF quant Pass Driver\n", registry));

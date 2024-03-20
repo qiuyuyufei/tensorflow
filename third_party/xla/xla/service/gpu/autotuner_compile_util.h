@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,9 @@ limitations under the License.
 
 #include <memory>
 #include <optional>
-#include <utility>
 #include <vector>
 
 #include "absl/functional/any_invocable.h"
-#include "absl/status/statusor.h"
-#include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_clone_context.h"
 #include "xla/hlo/ir/hlo_computation.h"
@@ -32,9 +29,8 @@ limitations under the License.
 #include "xla/service/compiler.h"
 #include "xla/service/executable.h"
 #include "xla/service/gpu/autotuner_util.h"
-#include "xla/service/shaped_buffer.h"
 #include "xla/shape.h"
-#include "xla/stream_executor/device_memory_allocator.h"
+#include "xla/statusor.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/util.h"
 #include "xla/xla.pb.h"
@@ -52,14 +48,14 @@ class AutotunerCompileUtil {
   // the debug options. In justified cases, it may override some of the provided
   // debug options.
   using GenerateModuleFn =
-      absl::AnyInvocable<absl::StatusOr<std::unique_ptr<HloModule>>(
+      absl::AnyInvocable<StatusOr<std::unique_ptr<HloModule>>(
           const DebugOptions&)>;
 
   // Generates a compile util for a platform associated with the `stream`.
   //
   // Returns an empty optional if the AutotuneConfig is deviceless, as
   // autotuning is impossible in that case.
-  static absl::StatusOr<std::optional<AutotunerCompileUtil>> Create(
+  static StatusOr<std::optional<AutotunerCompileUtil>> Create(
       const AutotuneConfig& config, const DebugOptions& opts);
 
   struct ProfilingOutput {
@@ -76,7 +72,7 @@ class AutotunerCompileUtil {
   // Runs the resulting executable with the given extractor, cached with
   // `(cache_key, config)`. Returns `std::nullopt` on expected failure, bad
   // `Status` otherwise.
-  absl::StatusOr<std::optional<ProfilingOutput>> ProfileExecutable(
+  StatusOr<std::optional<ProfilingOutput>> ProfileExecutable(
       Executable* executable, se::Stream* stream,
       absl::Span<se::DeviceMemoryBase const> input_buffers,
       absl::Span<Shape const> input_shapes);
@@ -87,14 +83,13 @@ class AutotunerCompileUtil {
   //  - `nullptr` on *expected* failure
   //  - `Executable` if everything goes fine.
   //  - `Status` on *unexpected* failure.
-  absl::StatusOr<std::unique_ptr<Executable>> Compile(
-      GenerateModuleFn extractor);
+  StatusOr<std::unique_ptr<Executable>> Compile(GenerateModuleFn extractor);
 
   // Generic method to extract an HLO using the debug options of the
   // AutotunerCompileUtil.
   //
   // Typically we can use Compile directly.
-  absl::StatusOr<std::unique_ptr<HloModule>> ExtractModule(
+  StatusOr<std::unique_ptr<HloModule>> ExtractModule(
       GenerateModuleFn extractor);
 
  private:
@@ -103,9 +98,8 @@ class AutotunerCompileUtil {
                        se::DeviceMemoryAllocator& allocator,
                        const DebugOptions& opts);
 
-  absl::StatusOr<ExecutionOutput> Execute(Executable& executable,
-                                          std::vector<ExecutionInput> arguments,
-                                          ExecutionProfile* profile = nullptr);
+  StatusOr<ExecutionOutput> Execute(Executable& executable,
+                                    std::vector<ExecutionInput> arguments);
 
   AutotuneConfig config_;
   Compiler* compiler_;

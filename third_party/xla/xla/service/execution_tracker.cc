@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -73,7 +73,7 @@ Status ExecutionTracker::Unregister(const ExecutionHandle& handle) {
   return OkStatus();
 }
 
-absl::StatusOr<const AsyncExecution*> ExecutionTracker::Resolve(
+StatusOr<const AsyncExecution*> ExecutionTracker::Resolve(
     const ExecutionHandle& handle) {
   absl::MutexLock lock(&execution_mutex_);
   auto it = handle_to_execution_.find(handle.handle());

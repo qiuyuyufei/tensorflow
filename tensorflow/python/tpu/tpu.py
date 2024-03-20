@@ -1513,7 +1513,6 @@ def under_tpu_inference_context() -> bool:
       graph = graph.outer_graph
     else:
       return False
-  return False
 
 
 class _TPUInferenceContext(control_flow_ops.XLAControlFlowContext):

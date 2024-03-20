@@ -104,7 +104,6 @@ py_strict_test(
     visibility = ["//visibility:public"],
     deps = [
         ":signature_def_utils",
-        #internal proto upb dep
         "//tensorflow:tensorflow_py",
         "//tensorflow/core:protos_all_py",
     ],

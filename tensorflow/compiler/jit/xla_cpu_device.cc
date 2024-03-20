@@ -27,7 +27,6 @@ limitations under the License.
 #include "tensorflow/compiler/jit/xla_device_ops.h"
 #include "tensorflow/compiler/tf2xla/layout_util.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
-#include "xla/stream_executor/platform_manager.h"
 #include "tensorflow/core/common_runtime/device_factory.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -46,11 +45,11 @@ Status XlaCpuDeviceFactory::ListPhysicalDevices(std::vector<string>* devices) {
   if (!flags->tf_xla_enable_xla_devices && !XlaDevicesCreationRequired()) {
     VLOG(1) << "Not creating XLA devices, tf_xla_enable_xla_devices not set "
                "and XLA device creation not requested";
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   devices->push_back(absl::StrCat("/physical_device:", DEVICE_XLA_CPU, ":0"));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status XlaCpuDeviceFactory::CreateDevices(
@@ -59,7 +58,7 @@ Status XlaCpuDeviceFactory::CreateDevices(
   XlaDeviceFlags* flags = GetXlaDeviceFlags();
   if (!flags->tf_xla_enable_xla_devices && !XlaDevicesCreationRequired()) {
     VLOG(1) << "Not creating XLA devices, tf_xla_enable_xla_devices not set";
-    return absl::OkStatus();
+    return OkStatus();
   }
   bool compile_on_demand = flags->tf_xla_compile_on_demand;
 
@@ -85,7 +84,7 @@ Status XlaCpuDeviceFactory::CreateDevices(
   (void)registrations;
 
   TF_ASSIGN_OR_RETURN(auto platform,
-                      se::PlatformManager::PlatformWithName("Host"));
+                      se::MultiPlatformManager::PlatformWithName("Host"));
 
   XlaDevice::Options options;
   options.platform = platform;
@@ -110,7 +109,7 @@ Status XlaCpuDeviceFactory::CreateDevices(
     return status;
   }
   devices->push_back(std::move(device));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 REGISTER_LOCAL_DEVICE_FACTORY(DEVICE_XLA_CPU, XlaCpuDeviceFactory);

@@ -272,13 +272,13 @@ InlinedFunctionBodyPlacer::MultiDevicePlacer(const Graph& graph,
 namespace {
 
 Status ValidateNoInline(const FunctionBody* fbody) {
-  const auto attr = AttrSlice(&fbody->record->fdef().attr());
+  const auto attr = AttrSlice(&fbody->fdef.attr());
   bool noinline = false;
   if (TryGetNodeAttr(attr, kNoInlineAttr, &noinline) && noinline) {
     return errors::InvalidArgument(
         "Can't inline function marked with '_noinline'");
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 using OutputControlSrc = InlineFunctionBodyOptions::OutputControlSource;
@@ -380,12 +380,11 @@ Status ValidateInlining(const Node* node, const FunctionBody* fbody,
 
   if (!options.inline_impl_selection_group_functions) {
     bool is_impl_selection_group_function =
-        fbody->record->fdef().attr().find("api_implements") !=
-        fbody->record->fdef().attr().end();
+        fbody->fdef.attr().find("api_implements") != fbody->fdef.attr().end();
     if (is_impl_selection_group_function) {
       return errors::InvalidArgument(
           "Inlining of implementation selection group function ",
-          fbody->record->fdef().signature().name(),
+          fbody->fdef.signature().name(),
           " is disabled by options.inline_impl_selection_group_functions");
     }
   }
@@ -394,7 +393,7 @@ Status ValidateInlining(const Node* node, const FunctionBody* fbody,
     TF_RETURN_IF_ERROR(ValidateNoInline(fbody));
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Function inlining must preserve function execution semantics with regards to
@@ -481,8 +480,7 @@ Status InlineFunctionBody(const FunctionLibraryDefinition& flib_def, Graph* g,
                           const InlineFunctionBodyOptions& options) {
   VLOG(3) << "Inline function call: " << SummarizeNode(*caller) << " ["
           << options.DebugString() << "]";
-  VLOG(4) << "Inlining function: "
-          << fbody->record->fdef().DebugString();  // NOLINT
+  VLOG(4) << "Inlining function: " << fbody->fdef.DebugString();
   VLOG(4) << "Current graphdef: " << g->ToGraphDefDebug().DebugString();
   VLOG(4) << "Caller: " << caller->DebugString();
 
@@ -584,8 +582,8 @@ Status InlineFunctionBody(const FunctionLibraryDefinition& flib_def, Graph* g,
       return errors::Internal("Null node found for input ", i);
 
     Node* n = input_identity("input", inputs[i], i);
-    input_node_name_map[arg_name(fbody->record->fdef().signature().input_arg(),
-                                 i)] = n->name();
+    input_node_name_map[arg_name(fbody->fdef.signature().input_arg(), i)] =
+        n->name();
     input_nodes.push_back(n);
   }
 
@@ -609,8 +607,7 @@ Status InlineFunctionBody(const FunctionLibraryDefinition& flib_def, Graph* g,
     if (device.has_value()) ndef.set_device(*device);
 
     // Add inlined function name to inlined node debug information.
-    PropagateDebugInfoToNode(fbody->record->fdef().signature().name(), {n},
-                             &ndef);
+    PropagateDebugInfoToNode(fbody->fdef.signature().name(), {n}, &ndef);
 
     // Add the function node name as a prefix:
     //  1) to node name to avoid collisions
@@ -704,8 +701,8 @@ Status InlineFunctionBody(const FunctionLibraryDefinition& flib_def, Graph* g,
     Node* arg = node_map[fbody->arg_nodes[i]->id()];
     Node* n = input_nodes[i];
     VLOG(4) << "    [index " << i << "] "
-            << arg_name(fbody->record->fdef().signature().input_arg(), i)
-            << " as " << n->name() << " (input: " << inputs[i].name()
+            << arg_name(fbody->fdef.signature().input_arg(), i) << " as "
+            << n->name() << " (input: " << inputs[i].name()
             << ", requested_device: " << n->requested_device() << ")";
 
     if (input_control_node) {
@@ -756,10 +753,9 @@ Status InlineFunctionBody(const FunctionLibraryDefinition& flib_def, Graph* g,
     Node* n = output_identity("output", data, i);
     outputs[i] = n;
     VLOG(4) << "    [index " << i << "] "
-            << arg_name(fbody->record->fdef().signature().output_arg(), i)
-            << " as " << n->name() << " (ret: " << data.node->name() << ":"
-            << data.index << ", requested_device: " << n->requested_device()
-            << ")";
+            << arg_name(fbody->fdef.signature().output_arg(), i) << " as "
+            << n->name() << " (ret: " << data.node->name() << ":" << data.index
+            << ", requested_device: " << n->requested_device() << ")";
     for (const Edge* e : ret->in_edges()) {
       if (e->IsControlEdge()) {
         g->AddControlEdge(e->src(), n, kDoNotCheckDuplicates);
@@ -857,7 +853,7 @@ Status InlineFunctionBody(const FunctionLibraryDefinition& flib_def, Graph* g,
 
   VLOG(4) << "Final graph: " << g->ToGraphDefDebug().DebugString();
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 bool ExpandInlineFunctions(FunctionLibraryRuntime* lib, Graph* graph,

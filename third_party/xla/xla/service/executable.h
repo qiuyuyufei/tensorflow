@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -97,7 +97,7 @@ class ExecutionInput {
 
   Status SetDynamicShape(Shape dynamic_shape);
 
-  absl::StatusOr<xla::ShapedBuffer> ToShapedBuffer(
+  xla::StatusOr<xla::ShapedBuffer> ToShapedBuffer(
       se::DeviceMemoryAllocator* allocator, int device_ordinal) const;
 
   void SetBuffer(const ShapeIndex& index, MaybeOwningDeviceMemory buffer) {
@@ -260,7 +260,7 @@ class Executable {
   // enabled.
   //
   // Returns a shaped buffer containing the result of the computation.
-  absl::StatusOr<ScopedShapedBuffer> ExecuteOnStream(
+  StatusOr<ScopedShapedBuffer> ExecuteOnStream(
       const ServiceExecutableRunOptions* run_options,
       absl::Span<const ShapedBuffer* const> arguments,
       HloExecutionProfile* hlo_execution_profile);
@@ -283,19 +283,19 @@ class Executable {
   // If the hlo_execution_profile is provided as non-nullptr, profiling will be
   // enabled. Note that profiling is tricky to use correctly, as the profiling
   // objects (when they exist) must out-live the task.
-  virtual absl::StatusOr<ScopedShapedBuffer> ExecuteAsyncOnStream(
+  virtual StatusOr<ScopedShapedBuffer> ExecuteAsyncOnStream(
       const ServiceExecutableRunOptions* run_options,
       absl::Span<const ShapedBuffer* const> arguments,
       HloExecutionProfile* hlo_execution_profile);
 
   // Same as ExecuteAsyncOnStream(), but blocks waiting for the computation to
   // complete.
-  absl::StatusOr<ExecutionOutput> ExecuteOnStream(
+  StatusOr<ExecutionOutput> ExecuteOnStream(
       const ServiceExecutableRunOptions* run_options,
       std::vector<ExecutionInput> arguments,
       HloExecutionProfile* hlo_execution_profile);
 
-  virtual absl::StatusOr<ExecutionOutput> ExecuteAsyncOnStream(
+  virtual StatusOr<ExecutionOutput> ExecuteAsyncOnStream(
       const ServiceExecutableRunOptions* run_options,
       std::vector<ExecutionInput> arguments,
       HloExecutionProfile* hlo_execution_profile) = 0;
@@ -304,26 +304,26 @@ class Executable {
   // streams. arguments[i] contains the arguments to the execution on
   // run_options[i]->stream() and the returned value is at index i of the
   // returned vector.
-  virtual absl::StatusOr<std::vector<ScopedShapedBuffer>> ExecuteOnStreams(
+  virtual StatusOr<std::vector<ScopedShapedBuffer>> ExecuteOnStreams(
       absl::Span<const ServiceExecutableRunOptions> run_options,
       absl::Span<const absl::Span<const ShapedBuffer* const>> arguments);
 
   // Convenience wrapper for calling Executable::ExecuteOnStream. Sets up a
   // timer for the execution, sets up HLO profiling if enabled, and fills in the
   // given ExecutionProfile if non-null.
-  absl::StatusOr<ScopedShapedBuffer> ExecuteOnStreamWrapper(
+  StatusOr<ScopedShapedBuffer> ExecuteOnStreamWrapper(
       const ServiceExecutableRunOptions* run_options,
       absl::Span<const ShapedBuffer* const> arguments);
 
-  absl::StatusOr<ExecutionOutput> ExecuteOnStreamWrapper(
+  StatusOr<ExecutionOutput> ExecuteOnStreamWrapper(
       const ServiceExecutableRunOptions* run_options,
       std::vector<ExecutionInput> arguments);
 
-  absl::StatusOr<ScopedShapedBuffer> ExecuteAsyncOnStreamWrapper(
+  StatusOr<ScopedShapedBuffer> ExecuteAsyncOnStreamWrapper(
       const ServiceExecutableRunOptions* run_options,
       absl::Span<const ShapedBuffer* const> arguments);
 
-  absl::StatusOr<ExecutionOutput> ExecuteAsyncOnStreamWrapper(
+  StatusOr<ExecutionOutput> ExecuteAsyncOnStreamWrapper(
       const ServiceExecutableRunOptions* run_options,
       std::vector<ExecutionInput> arguments);
 
@@ -379,19 +379,7 @@ class Executable {
                ? module_config().debug_options().xla_dump_hlo_snapshots()
                : false;
   }
-
-  HloProto const* hlo_proto() const {
-    if (hlo_proto_ != nullptr && !hlo_proto_->has_hlo_module()) {
-      *hlo_proto_->mutable_hlo_module() = module().ToProto();
-    }
-    return hlo_proto_.get();
-  }
-
-  const BufferAssignmentProto* buffer_assignment_proto() const {
-    return hlo_proto_ != nullptr && hlo_proto_->has_buffer_assignment()
-               ? &hlo_proto_->buffer_assignment()
-               : nullptr;
-  }
+  HloProto const* hlo_proto() const { return hlo_proto_.get(); }
 
   std::string& debug_info() { return debug_info_; }
   void set_debug_info(const std::string& debug_info) {
@@ -415,6 +403,9 @@ class Executable {
   // for execution.
   const std::shared_ptr<HloModule> hlo_module_;
 
+  // The serialized HLO proto. Non-null only if dumping snapshots is enabled.
+  std::unique_ptr<HloProto const> hlo_proto_;
+
   // Execution count, used to generate a unique filename for each dumped
   // execution.
   int64_t execution_count_ = 0;
@@ -424,14 +415,6 @@ class Executable {
 
   // Generic debug information as a string.
   std::string debug_info_;
-
- private:
-  // The serialized HLO proto. Non-null only if dumping snapshots is enabled.
-  // This field may also be only partially set: if only
-  // hlo_proto_->buffer_assignment is set and hlo_proto_->hlo_module isn't, the
-  // hlo_module proto will be computed on the fly when requested with
-  // hlo_proto(). This avoids wasting CPU and memory if the proto isn't needed.
-  std::unique_ptr<HloProto> hlo_proto_;
 };
 
 }  // namespace xla

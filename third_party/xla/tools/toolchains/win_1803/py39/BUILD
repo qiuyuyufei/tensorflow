@@ -66,6 +66,7 @@ cc_library(
     name = "python_headers",
     hdrs = [":python_include"],
     includes = ["python_include"],
+    visibility = ["//visibility:public"],
     deps = select({
         ":windows": [":python_lib"],
         "//conditions:default": [],
@@ -76,6 +77,7 @@ cc_library(
     name = "numpy_headers",
     hdrs = [":numpy_include"],
     includes = ["numpy_include"],
+    visibility = ["//visibility:public"],
 )
 
 config_setting(

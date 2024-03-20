@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ namespace xla {
 //     l = temp / l[..., j, j) * mask + l
 //   return l
 // Returns a (result, error) pair.
-absl::StatusOr<std::pair<XlaOp, XlaOp>> CholeskyExpander::CholeskyUnblocked(
+StatusOr<std::pair<XlaOp, XlaOp>> CholeskyExpander::CholeskyUnblocked(
     XlaOp a, PrecisionConfig::Precision precision) {
   XlaBuilder* builder = a.builder();
   TF_ASSIGN_OR_RETURN(Shape a_shape, builder->GetShape(a));
@@ -73,9 +73,8 @@ absl::StatusOr<std::pair<XlaOp, XlaOp>> CholeskyExpander::CholeskyUnblocked(
   XlaOp l = ZerosLike(a);
 
   // Construct the for loop body to iterate over rows.
-  auto body_fn =
-      [&](XlaOp i, absl::Span<const XlaOp> loop_vars,
-          XlaBuilder* body_builder) -> absl::StatusOr<std::vector<XlaOp>> {
+  auto body_fn = [&](XlaOp i, absl::Span<const XlaOp> loop_vars,
+                     XlaBuilder* body_builder) -> StatusOr<std::vector<XlaOp>> {
     std::vector<int64_t> row_shape_dims(major_dims.begin(), major_dims.end());
     std::vector<int64_t> col_shape_dims(major_dims.begin(), major_dims.end());
     auto body_a = loop_vars[0];
@@ -127,7 +126,7 @@ absl::StatusOr<std::pair<XlaOp, XlaOp>> CholeskyExpander::CholeskyUnblocked(
 XlaOp CholeskyExpander::BuildCholesky(XlaOp a, int64_t block_size,
                                       PrecisionConfig::Precision precision) {
   XlaBuilder* builder = a.builder();
-  return builder->ReportErrorOrReturn([&]() -> absl::StatusOr<XlaOp> {
+  return builder->ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
     TF_ASSIGN_OR_RETURN(Shape a_shape, builder->GetShape(a));
     const int ndims = a_shape.rank();
     if (ndims < 2) {
@@ -218,7 +217,7 @@ bool CholeskyExpander::InstructionMatchesPattern(HloInstruction* instruction) {
   return instruction->opcode() == HloOpcode::kCholesky;
 }
 
-absl::StatusOr<HloInstruction*> CholeskyExpander::ExpandInstruction(
+StatusOr<HloInstruction*> CholeskyExpander::ExpandInstruction(
     HloInstruction* instruction) {
   const CholeskyOptions& options = instruction->cholesky_options();
   const std::string name = absl::StrFormat(

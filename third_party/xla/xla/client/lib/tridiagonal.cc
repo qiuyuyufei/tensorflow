@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -50,10 +50,10 @@ Status CheckSecondToLastDimension(const Shape& op_shape, int64_t rank,
   return OkStatus();
 }
 
-absl::StatusOr<int64_t> CheckSystemAndReturnNumEquations(XlaOp lower_diagonal,
-                                                         XlaOp main_diagonal,
-                                                         XlaOp upper_diagonal,
-                                                         XlaOp rhs) {
+StatusOr<int64_t> CheckSystemAndReturnNumEquations(XlaOp lower_diagonal,
+                                                   XlaOp main_diagonal,
+                                                   XlaOp upper_diagonal,
+                                                   XlaOp rhs) {
   XlaBuilder* builder = lower_diagonal.builder();
 
   TF_ASSIGN_OR_RETURN(Shape lower_diagonal_shape,
@@ -160,9 +160,9 @@ Status ValidateTridiagonalMatMulDiagonal(const Shape& diagonal_shape,
   return OkStatus();
 }
 
-absl::StatusOr<TridiagonalMatMulShapeParams>
-CheckMatMulSystemAndReturnShapeParams(XlaOp upper_diagonal, XlaOp main_diagonal,
-                                      XlaOp lower_diagonal, XlaOp rhs) {
+StatusOr<TridiagonalMatMulShapeParams> CheckMatMulSystemAndReturnShapeParams(
+    XlaOp upper_diagonal, XlaOp main_diagonal, XlaOp lower_diagonal,
+    XlaOp rhs) {
   XlaBuilder* builder = upper_diagonal.builder();
 
   TF_ASSIGN_OR_RETURN(const Shape upper_diagonal_shape,
@@ -217,9 +217,8 @@ XlaOp UpdateEq(XlaOp updated, XlaOp i, XlaOp update) {
 }
 
 template <SolverAlgorithm algo>
-absl::StatusOr<XlaOp> TridiagonalSolverImpl(XlaOp lower_diagonal,
-                                            XlaOp main_diagonal,
-                                            XlaOp upper_diagonal, XlaOp rhs);
+StatusOr<XlaOp> TridiagonalSolverImpl(XlaOp lower_diagonal, XlaOp main_diagonal,
+                                      XlaOp upper_diagonal, XlaOp rhs);
 
 // Applies Thomas algorithm to solve a linear system where the linear operand
 // is a tri-diagonal matrix.
@@ -234,10 +233,10 @@ absl::StatusOr<XlaOp> TridiagonalSolverImpl(XlaOp lower_diagonal,
 // the right-hand-side `rhs` should be [..., num_rhs, num_equations]. The
 // solution will have the shape [..., num_rhs, num_equations].
 template <>
-absl::StatusOr<XlaOp> TridiagonalSolverImpl<kThomas>(XlaOp lower_diagonal,
-                                                     XlaOp main_diagonal,
-                                                     XlaOp upper_diagonal,
-                                                     XlaOp rhs) {
+StatusOr<XlaOp> TridiagonalSolverImpl<kThomas>(XlaOp lower_diagonal,
+                                               XlaOp main_diagonal,
+                                               XlaOp upper_diagonal,
+                                               XlaOp rhs) {
   XlaBuilder* builder = lower_diagonal.builder();
 
   TF_ASSIGN_OR_RETURN(int64_t num_eqs,
@@ -259,7 +258,7 @@ absl::StatusOr<XlaOp> TridiagonalSolverImpl<kThomas>(XlaOp lower_diagonal,
 
   auto preparation_body_fn =
       [](XlaOp i, absl::Span<const XlaOp> values,
-         XlaBuilder* builder) -> absl::StatusOr<std::vector<XlaOp>> {
+         XlaBuilder* builder) -> StatusOr<std::vector<XlaOp>> {
     auto upper_diagonal_coeffs = values[0];
     auto upper_diagonal = values[1];
     // upper_diagonal_coeffs[:, i] = upper_diagonal[:, i];
@@ -276,7 +275,7 @@ absl::StatusOr<XlaOp> TridiagonalSolverImpl<kThomas>(XlaOp lower_diagonal,
   // Forward transformation.
   auto forward_transformation_fn =
       [](XlaOp i_minus_one, absl::Span<const XlaOp> values,
-         XlaBuilder* builder) -> absl::StatusOr<std::vector<XlaOp>> {
+         XlaBuilder* builder) -> StatusOr<std::vector<XlaOp>> {
     auto lower_diagonal = values[0];
     auto main_diagonal = values[1];
     auto rhs = values[2];
@@ -334,7 +333,7 @@ absl::StatusOr<XlaOp> TridiagonalSolverImpl<kThomas>(XlaOp lower_diagonal,
                    Coefficient(main_diag_after_elimination, num_eqs - 1));
   auto bwd_reduction_fn =
       [num_eqs](XlaOp j, absl::Span<const XlaOp> values,
-                XlaBuilder* builder) -> absl::StatusOr<std::vector<XlaOp>> {
+                XlaBuilder* builder) -> StatusOr<std::vector<XlaOp>> {
     auto x_coeffs = values[0];
     auto rhs_after_elimination = values[1];
     auto upper_diagonal_coeffs = values[2];
@@ -369,10 +368,9 @@ absl::StatusOr<XlaOp> TridiagonalSolverImpl<kThomas>(XlaOp lower_diagonal,
 
 }  // namespace
 
-absl::StatusOr<XlaOp> TridiagonalSolver(SolverAlgorithm algo,
-                                        XlaOp lower_diagonal,
-                                        XlaOp main_diagonal,
-                                        XlaOp upper_diagonal, XlaOp rhs) {
+StatusOr<XlaOp> TridiagonalSolver(SolverAlgorithm algo, XlaOp lower_diagonal,
+                                  XlaOp main_diagonal, XlaOp upper_diagonal,
+                                  XlaOp rhs) {
   switch (algo) {
     case kThomas:
       return TridiagonalSolverImpl<kThomas>(lower_diagonal, main_diagonal,
@@ -396,8 +394,8 @@ absl::StatusOr<XlaOp> TridiagonalSolver(SolverAlgorithm algo,
 // The right-hand-side d is expected to have dimension
 // [..., num_rhs, num_equations].
 // The solution will have size [..., num_rhs, num_equations].
-absl::StatusOr<XlaOp> TridiagonalSolver(SolverAlgorithm algo, XlaOp diagonals,
-                                        XlaOp rhs) {
+StatusOr<XlaOp> TridiagonalSolver(SolverAlgorithm algo, XlaOp diagonals,
+                                  XlaOp rhs) {
   XlaBuilder* builder = diagonals.builder();
   TF_ASSIGN_OR_RETURN(Shape diagonals_shape, builder->GetShape(diagonals));
   const int64_t rank = diagonals_shape.rank();
@@ -442,9 +440,8 @@ absl::StatusOr<XlaOp> TridiagonalSolver(SolverAlgorithm algo, XlaOp diagonals,
 // [..., 0] is ignored.
 // The `right-hand-side` is expected to have dimension [..., M, N].
 // The solution will have size [..., M, N].
-absl::StatusOr<XlaOp> TridiagonalMatMul(XlaOp upper_diagonal,
-                                        XlaOp main_diagonal,
-                                        XlaOp lower_diagonal, XlaOp rhs) {
+StatusOr<XlaOp> TridiagonalMatMul(XlaOp upper_diagonal, XlaOp main_diagonal,
+                                  XlaOp lower_diagonal, XlaOp rhs) {
   TF_ASSIGN_OR_RETURN(const TridiagonalMatMulShapeParams shape_params,
                       CheckMatMulSystemAndReturnShapeParams(
                           upper_diagonal, main_diagonal, lower_diagonal, rhs));

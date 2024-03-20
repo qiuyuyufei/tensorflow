@@ -26,7 +26,6 @@ limitations under the License.
 #include <vector>
 
 #include "absl/base/attributes.h"
-#include "absl/base/macros.h"
 #include "absl/functional/function_ref.h"
 #include "absl/status/status.h"
 #include "absl/strings/cord.h"
@@ -46,11 +45,6 @@ limitations under the License.
 #include "tsl/platform/default/status.h"  // IWYU pragma: export
 #endif
 
-// TODO: b/323943471 - This macro should eventually be provided by Abseil.
-#ifndef ABSL_DEPRECATE_AND_INLINE
-#define ABSL_DEPRECATE_AND_INLINE()
-#endif
-
 namespace tsl {
 
 // Since April 2023, tensorflow::Status is an alias to absl::Status. The first
@@ -60,10 +54,10 @@ namespace tsl {
 //
 // Here is a set of correspondences:
 // - Use `absl::OkStatus()` instead of `tsl::OkStatus()`.
-typedef absl::Status Status ABSL_DEPRECATE_AND_INLINE();
+typedef absl::Status Status;
 
 namespace errors {
-typedef absl::StatusCode Code ABSL_DEPRECATE_AND_INLINE();
+typedef absl::StatusCode Code;
 }  // namespace errors
 namespace error {
 typedef ::tensorflow::error::Code Code;
@@ -105,14 +99,10 @@ namespace tsl {
 //
 // Returns an OK status, equivalent to a default constructed instance. Prefer
 // usage of `OkStatus()` when constructing such an OK status.
-ABSL_DEPRECATE_AND_INLINE() inline absl::Status OkStatus() {
-  return absl::OkStatus();
-};
+Status OkStatus();
 
-ABSL_DEPRECATE_AND_INLINE()
-inline absl::Status FromAbslStatus(const absl::Status& s) { return s; }
-ABSL_DEPRECATE_AND_INLINE()
-inline absl::Status ToAbslStatus(const ::absl::Status& s) { return s; }
+absl::Status FromAbslStatus(const absl::Status& s);
+absl::Status ToAbslStatus(const ::absl::Status& s);
 
 // Given `Status.message()` does not guarantee to be always backed by a
 // null-terminated string, we have this utility function when it's needed for

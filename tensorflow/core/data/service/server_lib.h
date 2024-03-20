@@ -119,7 +119,6 @@ class DispatchGrpcDataServer : public GrpcDataServerBase {
  protected:
   void AddDataServiceToBuilder(::grpc::ServerBuilder& builder) override;
   Status StartServiceInternal() override;
-  void StopServiceInternal() override;
 
  private:
   const experimental::DispatcherConfig config_;

@@ -129,7 +129,7 @@ class Feature {
     DCHECK(dtype != nullptr);
     if (serialized_.empty()) {
       *dtype = DT_INVALID;
-      return absl::OkStatus();
+      return OkStatus();
     }
     uint8 oneof_tag = static_cast<uint8>(*serialized_.data());
     serialized_.remove_prefix(1);
@@ -148,7 +148,7 @@ class Feature {
         *dtype = DT_INVALID;
         return errors::InvalidArgument("Unsupported datatype.");
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   bool GetNumElementsInBytesList(int* num_elements) {
@@ -945,7 +945,7 @@ Status FastParseSerializedExample(
     out.example_end_indices.push_back(prev_example_end_index);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status CheckConfigDataType(DataType dtype) {
@@ -953,7 +953,7 @@ Status CheckConfigDataType(DataType dtype) {
     case DT_INT64:
     case DT_FLOAT:
     case DT_STRING:
-      return absl::OkStatus();
+      return OkStatus();
     default:
       return errors::InvalidArgument("Invalid config dtype: ",
                                      DataTypeString(dtype));
@@ -983,7 +983,7 @@ Status CheckConfigDataTypes(const Config& config) {
                                      DataTypeString(c.splits_dtype));
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 template <typename T>
@@ -1442,7 +1442,7 @@ Status FastParseExample(const Config& config,
     MergeRaggedMinibatches(d);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status FastParseSingleExample(const Config& config, StringPiece serialized,
@@ -1829,7 +1829,7 @@ Status FastParseSingleExample(const Config& config, StringPiece serialized,
     }
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Private helper functions for FastParseSequenceExample.
@@ -2157,7 +2157,7 @@ Status ExtractFeaturesFromSequenceExamples(
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Populates context_features[k].length based on context_features[k].protos
@@ -2192,7 +2192,7 @@ Status GetContextFeatureLengths(const gtl::ArraySlice<tstring> example_names,
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Populates sequence_features[k].length and sequence_features[k].num_rows based
@@ -2259,7 +2259,7 @@ Status GetSequenceFeatureLengths(const gtl::ArraySlice<tstring> example_names,
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Copies src into dst[dst_offset:dst_offset+src.size], and then increments
@@ -2352,7 +2352,7 @@ Status ParseContextDenseFeatures(const FeatureProtosMap& context_features,
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Parses sparse features in `context_features`, and writes their parsed
@@ -2414,7 +2414,7 @@ Status ParseContextSparseFeatures(const FeatureProtosMap& context_features,
       out_shape(0) = max_num_cols;
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Parses ragged features in `context_features`, and writes their parsed
@@ -2492,7 +2492,7 @@ Status ParseContextRaggedFeatures(const FeatureProtosMap& context_features,
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Parses dense features in `sequence_features`, and writes their parsed
@@ -2646,7 +2646,7 @@ Status ParseSequenceDenseFeatures(const FeatureProtosMap& sequence_features,
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Parses sparse features in `sequence_features`, and writes their parsed
@@ -2774,7 +2774,7 @@ Status ParseSequenceSparseFeatures(
       out_shape(1) = max_num_cols;
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Parses ragged features in `sequence_features`, and writes their parsed
@@ -2919,7 +2919,7 @@ Status ParseSequenceRaggedFeatures(
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
@@ -3081,7 +3081,7 @@ Status FastParseSequenceExample(const FastParseExampleConfig& context_config,
       sequence_features, sequence_config, example_names, is_batch, num_examples,
       allocator, sequence_result));
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace example

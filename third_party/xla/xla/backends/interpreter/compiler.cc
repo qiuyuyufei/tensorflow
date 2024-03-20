@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ limitations under the License.
 #include "xla/status_macros.h"
 #include "xla/statusor.h"
 #include "xla/stream_executor/platform.h"
-#include "xla/stream_executor/stream_executor.h"
+#include "xla/stream_executor/stream_executor_pimpl.h"
 #include "xla/util.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/statusor.h"
@@ -61,7 +61,7 @@ namespace {
 
 // Handles custom_call ops during evaluation by routing them through the global
 // CPU registry used by other CPU-based backends.
-absl::StatusOr<Literal> HandleEvaluatorCustomCall(
+StatusOr<Literal> HandleEvaluatorCustomCall(
     const HloInstruction* custom_call, absl::Span<const Literal*> operands) {
   // Find the target C function in the global registry.
   auto* registry = CustomCallTargetRegistry::Global();
@@ -92,13 +92,12 @@ absl::StatusOr<Literal> HandleEvaluatorCustomCall(
 Status InterpreterCompiler::RunHloOptimization(HloModule* hlo_module) {
   HloPassPipeline pipeline("Interpreter");
 
-  // The TopkDecomposer generates a compare op with type=TOTALORDER and must
-  // run before the ComparisonExpander which rewrites such comparisons.
   pipeline.AddPass<TopkDecomposer>();
   pipeline.AddPass<DynamicIndexSplitter>();
   pipeline.AddPass<CholeskyExpander>();
   pipeline.AddPass<QrExpander>();
   pipeline.AddPass<EighExpander>();
+  pipeline.AddPass<ComparisonExpander>();
   pipeline.AddPass<TriangularSolveExpander>();
   pipeline.AddPass<BatchNormExpander>(
       /*rewrite_training_op=*/true,
@@ -110,7 +109,7 @@ Status InterpreterCompiler::RunHloOptimization(HloModule* hlo_module) {
   return pipeline.Run(hlo_module).status();
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>> InterpreterCompiler::RunHloPasses(
+StatusOr<std::unique_ptr<HloModule>> InterpreterCompiler::RunHloPasses(
     std::unique_ptr<HloModule> hlo_module, se::StreamExecutor* /*stream_exec*/,
     const CompileOptions& /*options*/) {
   VLOG(1) << "Run hlo passes on graph " << hlo_module->name();
@@ -118,7 +117,7 @@ absl::StatusOr<std::unique_ptr<HloModule>> InterpreterCompiler::RunHloPasses(
   return std::move(hlo_module);
 }
 
-absl::StatusOr<std::unique_ptr<Executable>> InterpreterCompiler::RunBackend(
+StatusOr<std::unique_ptr<Executable>> InterpreterCompiler::RunBackend(
     std::unique_ptr<HloModule> hlo_module, se::StreamExecutor* stream_exec,
     const CompileOptions& /*options*/) {
   TF_RET_CHECK(stream_exec != nullptr);
@@ -147,8 +146,7 @@ absl::StatusOr<std::unique_ptr<Executable>> InterpreterCompiler::RunBackend(
   return std::move(executable);
 }
 
-absl::StatusOr<std::vector<std::unique_ptr<Executable>>>
-InterpreterCompiler::Compile(
+StatusOr<std::vector<std::unique_ptr<Executable>>> InterpreterCompiler::Compile(
     std::unique_ptr<HloModuleGroup> module_group,
     std::vector<std::vector<se::StreamExecutor*>> stream_exec,
     const CompileOptions& options) {
@@ -172,7 +170,7 @@ InterpreterCompiler::Compile(
   return std::move(ret);
 }
 
-absl::StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
+StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
 InterpreterCompiler::CompileAheadOfTime(
     std::unique_ptr<HloModuleGroup> module_group,
     const AotCompilationOptions& aot_options) {

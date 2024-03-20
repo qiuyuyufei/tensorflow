@@ -51,7 +51,6 @@ py_strict_test(
     deps = [
         ":test_utils",
         ":visualize_lib",
-        #internal proto upb dep
         "//tensorflow/python/framework:test_lib",
         "//tensorflow/python/platform:client_testlib",
     ],
@@ -96,12 +95,11 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":convert_image_to_csv_lib",
-        #internal proto upb dep
-        "//third_party/py/numpy",
         "//tensorflow/python/framework:errors",
         "//tensorflow/python/framework:test_lib",
         "//tensorflow/python/platform:client_testlib",
         "//tensorflow/python/platform:resource_loader",
+        "//third_party/py/numpy",
     ],
 )
 
@@ -161,7 +159,6 @@ py_strict_test(
     deps = [
         ":flatbuffer_utils",
         ":test_utils",
-        #internal proto upb dep
         "//tensorflow/python/framework:test_lib",
         "//tensorflow/python/platform:client_testlib",
     ],

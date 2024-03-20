@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -64,7 +64,7 @@ namespace xla {
 //      "gpu",
 //    ],
 //    deps = [
-//      "//tensorflow/compiler/xla/tests:hlo_test_base",
+//      "@local_xla//xla/tests:hlo_test_base",
 //      ...
 //    ],
 //  )
@@ -90,13 +90,11 @@ class HloTestBase : public ManifestCheckingTest {
       const std::string& name = TestName(), int64_t replica_count = 1);
 
   // Parses the given string and returns module as a VerifiedHloModule.
-  absl::StatusOr<std::unique_ptr<VerifiedHloModule>>
-  ParseAndReturnVerifiedModule(absl::string_view hlo_text,
-                               int64_t replica_count = 1,
-                               int64_t num_partitions = 1);
-  absl::StatusOr<std::unique_ptr<VerifiedHloModule>>
-  ParseAndReturnVerifiedModule(absl::string_view hlo_text,
-                               const HloModuleConfig& config);
+  StatusOr<std::unique_ptr<VerifiedHloModule>> ParseAndReturnVerifiedModule(
+      absl::string_view hlo_text, int64_t replica_count = 1,
+      int64_t num_partitions = 1);
+  StatusOr<std::unique_ptr<VerifiedHloModule>> ParseAndReturnVerifiedModule(
+      absl::string_view hlo_text, const HloModuleConfig& config);
 
   // Runs the hlo_pass with the provided module and returns the result. This
   // function also verifies that the module remains unchanged when hlo_pass
@@ -106,14 +104,14 @@ class HloTestBase : public ManifestCheckingTest {
   // `RunHloPass(MyPass(), module)` all in one line.  The reason for the
   // overload that takes a pointer is that, at one point in the past, non-const
   // lvalue references were banned in Google code.
-  static absl::StatusOr<bool> RunHloPass(HloPassInterface* hlo_pass,
-                                         HloModule* module);
-  static absl::StatusOr<bool> RunHloPass(HloPassInterface& hlo_pass,
-                                         HloModule* module) {
+  static StatusOr<bool> RunHloPass(HloPassInterface* hlo_pass,
+                                   HloModule* module);
+  static StatusOr<bool> RunHloPass(HloPassInterface& hlo_pass,
+                                   HloModule* module) {
     return RunHloPass(&hlo_pass, module);
   }
-  static absl::StatusOr<bool> RunHloPass(HloPassInterface&& hlo_pass,
-                                         HloModule* module) {
+  static StatusOr<bool> RunHloPass(HloPassInterface&& hlo_pass,
+                                   HloModule* module) {
     return RunHloPass(&hlo_pass, module);
   }
 
@@ -121,8 +119,8 @@ class HloTestBase : public ManifestCheckingTest {
   // This method runs the input HLO module group pass for a `HloModuleGroup` and
   // it also verifies the module group remains unchanged when hlo_pass returns
   // false as the StatusOr value.
-  static absl::StatusOr<bool> RunHloPass(HloPassInterface&& hlo_pass,
-                                         HloModuleGroup* module_group);
+  static StatusOr<bool> RunHloPass(HloPassInterface&& hlo_pass,
+                                   HloModuleGroup* module_group);
 
   static PrecisionConfig DefaultPrecisionConfig(int operands);
 
@@ -142,10 +140,10 @@ class HloTestBase : public ManifestCheckingTest {
   }
 
   // Compiles and returns module with optimizations from a given HLO.
-  absl::StatusOr<std::unique_ptr<HloModule>> GetOptimizedModule(
+  StatusOr<std::unique_ptr<HloModule>> GetOptimizedModule(
       absl::string_view hlo);
 
-  absl::StatusOr<std::unique_ptr<HloModule>> GetOptimizedModule(
+  StatusOr<std::unique_ptr<HloModule>> GetOptimizedModule(
       std::unique_ptr<HloModule> hlo_module);
 
  protected:
@@ -204,8 +202,8 @@ class HloTestBase : public ManifestCheckingTest {
   }
 
   // Executes the given module and return the result as a Literal.
-  absl::StatusOr<Literal> Execute(std::unique_ptr<HloModule> module,
-                                  absl::Span<Literal* const> arguments);
+  StatusOr<Literal> Execute(std::unique_ptr<HloModule> module,
+                            absl::Span<Literal* const> arguments);
 
   // Same as above, except the module will be executed without running any HLO
   // passes on it.
@@ -216,7 +214,7 @@ class HloTestBase : public ManifestCheckingTest {
                              absl::Span<Literal* const> arguments);
 
   // Compile the given module to an executable.
-  absl::StatusOr<std::unique_ptr<Executable>> CreateExecutable(
+  StatusOr<std::unique_ptr<Executable>> CreateExecutable(
       std::unique_ptr<HloModule> module, bool run_hlo_passes) {
     return runner_->CreateExecutable(std::move(module), run_hlo_passes);
   }
@@ -226,18 +224,18 @@ class HloTestBase : public ManifestCheckingTest {
   // use_threads indicates whether this replicated computation will be executed
   // with a thread-per-replica, vs using an implicitly async call such as
   // Executable::ExecuteOnStreams.
-  absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::unique_ptr<HloModule> module, absl::Span<Literal* const> arguments,
       int64_t num_replicas, bool use_threads, bool run_hlo_passes = false);
 
   // Same as above, but uses specified device assignment.
-  absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::unique_ptr<HloModule> module, absl::Span<Literal* const> arguments,
       int64_t num_replicas, DeviceAssignment* device_assignment,
       bool run_hlo_passes, bool use_threads);
 
   // Same as above, but allows passing different programs for replicas.
-  absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::function<Executable*(int64_t)> executable_provider,
       std::function<int64_t(int64_t)> argument_count_provider,
       std::function<const Literal*(int64_t, int64_t)> argument_provider,
@@ -294,8 +292,7 @@ class HloTestBase : public ManifestCheckingTest {
   [[nodiscard]] ::testing::AssertionResult Run(
       const absl::string_view hlo_string, bool run_hlo_passes = true,
       ExecutionProfile* profile = nullptr,
-      const tsl::protobuf::Message* backend_config = nullptr,
-      bool use_random_data = true);
+      const tsl::protobuf::Message* backend_config = nullptr);
 
   // Same as below, except requires passing fake arguments.
   ::testing::AssertionResult RunAndCompareTwoModules(
@@ -306,8 +303,7 @@ class HloTestBase : public ManifestCheckingTest {
   // Same as below, except requires passing the modules.
   ::testing::AssertionResult RunAndCompareTwoModules(
       std::unique_ptr<HloModule> module_0, std::unique_ptr<HloModule> module_1,
-      const std::optional<ErrorSpec>& error, bool run_hlo_passes = true,
-      std::optional<int64_t> args_max_bits_of_precision = std::nullopt);
+      const std::optional<ErrorSpec>& error, bool run_hlo_passes = true);
 
   // Convenient wrapper for executing and comparing results of two hlo modules
   // with fake input. By default compares unoptimized modules. If the modules
@@ -315,22 +311,6 @@ class HloTestBase : public ManifestCheckingTest {
   ::testing::AssertionResult RunAndCompareTwoModules(
       absl::string_view hlo_string_module_0,
       absl::string_view hlo_string_module_1,
-      const std::optional<ErrorSpec>& error, bool run_hlo_passes = true,
-      std::optional<int64_t> args_max_bits_of_precision = std::nullopt);
-
-  // Same as above but allows running with different configs.
-  ::testing::AssertionResult RunAndCompareTwoModules(
-      absl::string_view hlo_string_module_0,
-      absl::string_view hlo_string_module_1, const HloModuleConfig& config_0,
-      const HloModuleConfig& config_1, const std::optional<ErrorSpec>& error,
-      bool run_hlo_passes = true,
-      std::optional<int64_t> args_max_bits_of_precision = std::nullopt);
-
-  // Same as above but requires explicit arguments.
-  ::testing::AssertionResult RunAndCompareTwoModules(
-      absl::string_view hlo_string_module_0,
-      absl::string_view hlo_string_module_1,
-      absl::Span<Literal* const> arguments,
       const std::optional<ErrorSpec>& error, bool run_hlo_passes = true);
 
   // Executes an hlo module with fake inputs on multiple replicas.
@@ -421,7 +401,7 @@ class HloTestBase : public ManifestCheckingTest {
       HloModule*, std::unique_ptr<HloComputation> computation);
   void UpdateEntryComputationLayout(HloModule* module);
 
-  absl::StatusOr<std::unique_ptr<HloRunnerInterface>> GetHloRunner();
+  StatusOr<std::unique_ptr<HloRunnerInterface>> GetHloRunner();
 
  protected:
   // Helper functions to get test and reference platforms.
@@ -436,14 +416,14 @@ class HloTestBase : public ManifestCheckingTest {
   // Given the test module, makes a reference module that is ready to run on the
   // reference platform. This assumes that the given module is ready to run on
   // the test platform.
-  absl::StatusOr<std::unique_ptr<HloModule>> MakeReferenceModule(
+  StatusOr<std::unique_ptr<HloModule>> MakeReferenceModule(
       const HloModule& test_module,
       const std::function<void(HloModule*)>& reference_preprocessor);
 
   // Runs the module on two platforms with or without running hlo passes and
   // compares the results. Returns whether the results are near or equal. If any
   // error happens before the results are computed, returns the error status.
-  absl::StatusOr<::testing::AssertionResult> RunAndCompareInternal(
+  StatusOr<::testing::AssertionResult> RunAndCompareInternal(
       std::unique_ptr<HloModule> module,
       const absl::Span<Literal* const> arguments,
       const std::optional<ErrorSpec>& error, bool run_hlo_passes,
@@ -452,14 +432,14 @@ class HloTestBase : public ManifestCheckingTest {
   // Runs the two module on with or without running hlo passes and
   // compares the results. Returns whether the results are near or equal. If any
   // error happens before the results are computed, returns the error status.
-  absl::StatusOr<::testing::AssertionResult> RunAndCompareTwoModulesInternal(
+  StatusOr<::testing::AssertionResult> RunAndCompareTwoModulesInternal(
       std::unique_ptr<HloModule> module_0, std::unique_ptr<HloModule> module_1,
       const absl::Span<Literal* const> arguments,
       const std::optional<ErrorSpec>& error, bool run_hlo_passes);
 
   // Returns either an HloRunner or HloRunnerPjRt implementation depending if
   // there exists a registered PjRtClientFactory.
-  absl::StatusOr<std::unique_ptr<HloRunnerInterface>> GetHloRunnerForTest(
+  StatusOr<std::unique_ptr<HloRunnerInterface>> GetHloRunnerForTest(
       se::Platform* test_platform);
 };
 

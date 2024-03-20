@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,10 +16,11 @@ limitations under the License.
 
 #include <memory>
 
-#include "absl/status/status.h"
 #include "xla/python/profiler/internal/python_hooks.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
+#include "tsl/platform/macros.h"
+#include "tsl/platform/status.h"
 #include "tsl/profiler/lib/profiler_interface.h"
 #include "tsl/profiler/protobuf/xplane.pb.h"
 
@@ -34,11 +35,11 @@ class PythonTracer : public tsl::profiler::ProfilerInterface {
       : options_(options) {}
   ~PythonTracer() override;
 
-  absl::Status Start() override;  // TENSORFLOW_STATUS_OK
+  tsl::Status Start() override;  // TENSORFLOW_STATUS_OK
 
-  absl::Status Stop() override;  // TENSORFLOW_STATUS_OK
+  tsl::Status Stop() override;  // TENSORFLOW_STATUS_OK
 
-  absl::Status CollectData(  // TENSORFLOW_STATUS_OK
+  tsl::Status CollectData(  // TENSORFLOW_STATUS_OK
       tensorflow::profiler::XSpace* space) override;
 
  private:
@@ -52,34 +53,34 @@ class PythonTracer : public tsl::profiler::ProfilerInterface {
 
 PythonTracer::~PythonTracer() { Stop().IgnoreError(); }  // NOLINT
 
-absl::Status PythonTracer::Start() {  // TENSORFLOW_STATUS_OK
+tsl::Status PythonTracer::Start() {  // TENSORFLOW_STATUS_OK
   if (recording_) {
     return tsl::errors::Internal("PythonTracer already started");
   }
   VLOG(1) << __FUNCTION__;
   recording_ = true;
   PythonHooks::GetSingleton()->Start(options_);
-  return absl::OkStatus();
+  return tsl::OkStatus();
 }
 
-absl::Status PythonTracer::Stop() {  // TENSORFLOW_STATUS_OK
+tsl::Status PythonTracer::Stop() {  // TENSORFLOW_STATUS_OK
   if (!recording_) {
     return tsl::errors::Internal("PythonTracer not started");
   }
   VLOG(1) << __FUNCTION__;
   context_ = PythonHooks::GetSingleton()->Stop();
   recording_ = false;
-  return absl::OkStatus();
+  return tsl::OkStatus();
 }
 
-absl::Status PythonTracer::CollectData(  // TENSORFLOW_STATUS_OK
+tsl::Status PythonTracer::CollectData(  // TENSORFLOW_STATUS_OK
     tensorflow::profiler::XSpace* space) {
   VLOG(2) << "Collecting data to XSpace from PythonTracer.";
   if (context_) {
     context_->Finalize(space);
     context_.reset();
   }
-  return absl::OkStatus();
+  return tsl::OkStatus();
 }
 
 }  // namespace

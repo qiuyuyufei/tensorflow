@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ TEST_F(BadRngShapeValidationTest, DefaultConstructedShapeCreatesError) {
   Shape default_constructed;
   RngUniform(zero, one, default_constructed);
 
-  absl::StatusOr<XlaComputation> computation = builder.Build();
+  StatusOr<XlaComputation> computation = builder.Build();
   EXPECT_FALSE(computation.ok());
   LOG(INFO) << "status received: " << computation.status();
   EXPECT_THAT(computation.status().message(),
@@ -57,7 +57,7 @@ TEST_F(BadRngShapeValidationTest, ShapeWithoutLayoutIsOk) {
 
   RngUniform(zero, one, sans_layout);
 
-  absl::StatusOr<XlaComputation> computation = builder.Build();
+  StatusOr<XlaComputation> computation = builder.Build();
   ASSERT_TRUE(computation.ok());
   LOG(INFO) << computation.status();
 }

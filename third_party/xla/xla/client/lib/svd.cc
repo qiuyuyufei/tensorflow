@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -107,9 +107,8 @@ struct OneSidedJacobiRotation {
 //
 // A[i, j:] * H = [sigma, 0, 0, ..., 0]
 //
-absl::StatusOr<HouseHolderResult> HouseRow(
-    XlaOp a, XlaOp i, XlaOp j, XlaOp eps,
-    PrecisionConfig::Precision precision) {
+StatusOr<HouseHolderResult> HouseRow(XlaOp a, XlaOp i, XlaOp j, XlaOp eps,
+                                     PrecisionConfig::Precision precision) {
   XlaBuilder* builder = a.builder();
   TF_ASSIGN_OR_RETURN(Shape a_shape, builder->GetShape(a));
   const int64_t num_dims = a_shape.rank();
@@ -173,9 +172,8 @@ absl::StatusOr<HouseHolderResult> HouseRow(
 //
 // H * A[i:, j] = [xnorm, 0, 0, ..., 0]
 //
-absl::StatusOr<HouseHolderResult> HouseCol(
-    XlaOp a, XlaOp i, XlaOp j, XlaOp eps,
-    PrecisionConfig::Precision precision) {
+StatusOr<HouseHolderResult> HouseCol(XlaOp a, XlaOp i, XlaOp j, XlaOp eps,
+                                     PrecisionConfig::Precision precision) {
   XlaBuilder* builder = a.builder();
   TF_ASSIGN_OR_RETURN(Shape a_shape, builder->GetShape(a));
   const int64_t num_dims = a_shape.rank();
@@ -252,7 +250,7 @@ absl::StatusOr<HouseHolderResult> HouseCol(
 //            A = np.matmul(A, R)
 //    return LL, A, RR
 //
-absl::StatusOr<SVDResult> HouseHolderBidiagonalization(
+StatusOr<SVDResult> HouseHolderBidiagonalization(
     XlaOp a, XlaOp eps, PrecisionConfig::Precision precision) {
   XlaBuilder* builder = a.builder();
   TF_ASSIGN_OR_RETURN(Shape a_shape, builder->GetShape(a));
@@ -270,13 +268,13 @@ absl::StatusOr<SVDResult> HouseHolderBidiagonalization(
       IdentityMatrix(builder, a_shape.element_type(), n, n), batch_dims);
 
   auto while_cond_fn = [&](absl::Span<const XlaOp> values,
-                           XlaBuilder* cond_builder) -> absl::StatusOr<XlaOp> {
+                           XlaBuilder* cond_builder) -> StatusOr<XlaOp> {
     auto i = values[0];
     return Lt(i, ScalarLike(i, n - 2));
   };
   auto while_body_fn =
       [&](absl::Span<const XlaOp> values,
-          XlaBuilder* body_builder) -> absl::StatusOr<std::vector<XlaOp>> {
+          XlaBuilder* body_builder) -> StatusOr<std::vector<XlaOp>> {
     auto i = values[0];
     auto one = ScalarLike(i, 1);
 
@@ -359,8 +357,7 @@ absl::StatusOr<SVDResult> HouseHolderBidiagonalization(
 //         s = 0.0
 //     return c, s
 //
-absl::StatusOr<JacobiRotation> MakeJacobi(XlaOp ps, XlaOp qs, XlaOp pqs,
-                                          XlaOp eps) {
+StatusOr<JacobiRotation> MakeJacobi(XlaOp ps, XlaOp qs, XlaOp pqs, XlaOp eps) {
   auto zero = ScalarLike(ps, 0.0);
   auto one = ScalarLike(ps, 1.0);
   auto two = ScalarLike(ps, 2.0);
@@ -414,10 +411,8 @@ absl::StatusOr<JacobiRotation> MakeJacobi(XlaOp ps, XlaOp qs, XlaOp pqs,
 //     rot_l = rot @ rot_r
 //    return rot_l, rot_r
 //
-absl::StatusOr<OneSidedJacobiRotation> GetOneSidedJacobiRotation(XlaOp a,
-                                                                 XlaOp p,
-                                                                 XlaOp q,
-                                                                 XlaOp eps) {
+StatusOr<OneSidedJacobiRotation> GetOneSidedJacobiRotation(XlaOp a, XlaOp p,
+                                                           XlaOp q, XlaOp eps) {
   XlaOp a_pp = DynamicSliceInMinorDims(a, {p, p}, {1, 1});
   XlaOp a_pq = DynamicSliceInMinorDims(a, {p, q}, {1, 1});
   XlaOp a_qp = DynamicSliceInMinorDims(a, {q, p}, {1, 1});
@@ -454,8 +449,8 @@ absl::StatusOr<OneSidedJacobiRotation> GetOneSidedJacobiRotation(XlaOp a,
 }
 
 // Apply one-sided Jacobi on elements at indices pp, pq, qp, qq.
-absl::StatusOr<SVDResult> OneSidedJacobiUpdate(SVDResult svd_result, XlaOp p,
-                                               XlaOp q, XlaOp eps) {
+StatusOr<SVDResult> OneSidedJacobiUpdate(SVDResult svd_result, XlaOp p, XlaOp q,
+                                         XlaOp eps) {
   XlaOp u = svd_result.u;
   XlaOp v = svd_result.v;
   XlaOp d = svd_result.d;
@@ -568,7 +563,7 @@ absl::StatusOr<SVDResult> OneSidedJacobiUpdate(SVDResult svd_result, XlaOp p,
   return svd_result;
 }
 
-absl::StatusOr<XlaOp> ComputeToleranceComparison(XlaOp w, XlaOp epsilon) {
+StatusOr<XlaOp> ComputeToleranceComparison(XlaOp w, XlaOp epsilon) {
   XlaBuilder* builder = w.builder();
   TF_ASSIGN_OR_RETURN(Shape shape, builder->GetShape(w));
   auto num_dims = static_cast<int32_t>(shape.rank());
@@ -605,14 +600,14 @@ absl::StatusOr<XlaOp> ComputeToleranceComparison(XlaOp w, XlaOp epsilon) {
 }
 
 // Main boby of One-sided Jacobi Method.
-absl::StatusOr<std::vector<XlaOp>> WhileLoopFn(
+StatusOr<std::vector<XlaOp>> WhileLoopFn(
     absl::Span<const XlaOp> initial_values,  //
     int matrix_dimension,                    //
     int max_sweep_updates,                   //
     absl::string_view name,                  //
     XlaBuilder* builder) {
   auto while_cond_fn = [&](absl::Span<const XlaOp> values,
-                           XlaBuilder* cond_builder) -> absl::StatusOr<XlaOp> {
+                           XlaBuilder* cond_builder) -> StatusOr<XlaOp> {
     auto k = values[0];
     auto max_sweeps = ScalarLike(k, max_sweep_updates);
     auto sweep_update_cond = Gt(max_sweeps, k);
@@ -628,27 +623,27 @@ absl::StatusOr<std::vector<XlaOp>> WhileLoopFn(
 
   auto while_body_fn =
       [&](absl::Span<const XlaOp> values,
-          XlaBuilder* body_builder) -> absl::StatusOr<std::vector<XlaOp>> {
+          XlaBuilder* body_builder) -> StatusOr<std::vector<XlaOp>> {
     auto while_cond_fn_inner =
         [&](absl::Span<const XlaOp> values_inner,
-            XlaBuilder* inner_cond_builder) -> absl::StatusOr<XlaOp> {
+            XlaBuilder* inner_cond_builder) -> StatusOr<XlaOp> {
       auto p = values_inner[0];
       return Lt(p, ScalarLike(p, matrix_dimension - 1));
     };
 
-    auto while_body_fn_inner = [&](absl::Span<const XlaOp> values_inner,
-                                   XlaBuilder* inner_body_builder)
-        -> absl::StatusOr<std::vector<XlaOp>> {
+    auto while_body_fn_inner =
+        [&](absl::Span<const XlaOp> values_inner,
+            XlaBuilder* inner_body_builder) -> StatusOr<std::vector<XlaOp>> {
       auto while_cond_fn_innermost =
           [&](absl::Span<const XlaOp> values_innermost,
-              XlaBuilder* innermost_cond_builder) -> absl::StatusOr<XlaOp> {
+              XlaBuilder* innermost_cond_builder) -> StatusOr<XlaOp> {
         auto q = values_innermost[1];
         return Lt(q, ScalarLike(q, matrix_dimension));
       };
       auto while_body_fn_innermost =
           [&](absl::Span<const XlaOp> values_innermost,
               XlaBuilder* innermost_body_builder)
-          -> absl::StatusOr<std::vector<XlaOp>> {
+          -> StatusOr<std::vector<XlaOp>> {
         auto p = values_innermost[0];
         auto q = values_innermost[1];
 
@@ -736,8 +731,7 @@ absl::StatusOr<std::vector<XlaOp>> WhileLoopFn(
 // Sort singular values in decending order, and make sure they are non-negative
 // by flipping the signs of negative diagonal values and transferring the signs
 // to V. And for numeric stability, renormalize U and V.
-absl::StatusOr<SVDResult> SortBySingularValuesAndPostProcessing(
-    SVDResult result) {
+StatusOr<SVDResult> SortBySingularValuesAndPostProcessing(SVDResult result) {
   XlaBuilder* builder = result.d.builder();
   TF_ASSIGN_OR_RETURN(Shape shape, builder->GetShape(result.d));
   const int64_t num_dims = shape.rank();

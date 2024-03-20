@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ limitations under the License.
 #define MLIR_HLO_DIALECT_MHLO_IR_HLO_OPS
 
 include "mlir/Dialect/Shape/IR/ShapeBase.td"
-include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -195,8 +194,8 @@ class MHLO_UnaryElementwiseOp<string mnemonic, list<Trait> traits,
 // Abs supports complex to real, so element type is not guaranteed to match.
 def MHLO_AbsOp: MHLO_UnaryElementwiseOp<"abs",
     [Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>],
-     RankedTensorOf<[MHLO_SInt, MHLO_Float, MHLO_Complex, MHLO_QuantizedInt]>,
-     RankedTensorOf<[MHLO_SInt, MHLO_Float, MHLO_QuantizedInt]>> {
+     TensorOf<[HLO_SInt, HLO_Float, HLO_Complex, HLO_QuantizedInt]>,
+     TensorOf<[HLO_SInt, HLO_Float, HLO_QuantizedInt]>> {
   let summary = "Abs operation";
   let description = [{
     Performs element-wise abs operation on `operand` tensor and produces a
@@ -306,23 +305,6 @@ def MHLO_CosineOp: MHLO_UnaryElementwiseOp<"cosine",
   let hasCustomHLOConverter = 1;
 }
 
-def MHLO_ErfOp: MHLO_UnaryElementwiseOp<"erf",
-    [Pure, HLO_CompatibleOperandsAndResultType], MHLO_FpTensor> {
-  let summary = "Erf operation";
-  let description = [{
-    Performs element-wise erf operation on `operand` tensor and produces a
-    `result` tensor.
-
-    See:
-    https://github.com/openxla/stablehlo/blob/main/docs/spec.md#erf
-
-    Example:
-    ```mlir
-    %result = mhlo.erf %operand : tensor<2x2xf32>
-    ```
-  }];
-  let hasFolder = 1;
-}
 def MHLO_ExpOp: MHLO_UnaryElementwiseOp<"exponential",
     [Pure, HLO_CompatibleOperandsAndResultType], MHLO_FpComplexOrQuantizedIntTensor> {
   let summary = "Exp operation";
@@ -595,7 +577,7 @@ def MHLO_RsqrtOp: MHLO_UnaryElementwiseOp<"rsqrt",
 
 def MHLO_SignOp: MHLO_UnaryElementwiseOp<"sign",
     [Pure, HLO_CompatibleOperandsAndResultType],
-    RankedTensorOf<[MHLO_SInt, MHLO_Float, MHLO_Complex, HLO_QuantizedInt]>> {
+    TensorOf<[MHLO_SInt, MHLO_Float, MHLO_Complex, HLO_QuantizedInt]>> {
   let summary = "Sign operation";
   let description = [{
     Returns the sign of the `operand` element-wise and produces a `result`
@@ -960,7 +942,7 @@ def MHLO_SubtractOp : MHLO_BinaryElementwiseOp<"subtract",
 }
 
 def MHLO_StochasticConvertOp : MHLO_Op<"stochastic_convert",
-      [Pure, Elementwise, AllShapesMatch<["operand", "random", "result"]>]> {
+      [Pure, AllShapesMatch<["operand", "random", "result"]>]> {
   let summary = "StochasticConvert operation";
   let description = [{
     This operation is a work in progress, so it is not yet included in
@@ -971,7 +953,7 @@ def MHLO_StochasticConvertOp : MHLO_Op<"stochastic_convert",
     number passed in.
   }];
 
-  let arguments = (ins MHLO_FpTensor:$operand, RankedTensorOf<[MHLO_UInt]>:$random);
+  let arguments = (ins MHLO_FpTensor:$operand, TensorOf<[MHLO_UInt]>:$random);
   let results = (outs MHLO_Tensor:$result);
   let hasCustomHLOConverter = 1;
   let hasVerifier = 1;
@@ -1180,7 +1162,7 @@ def MHLO_ReplicaIdOp : MHLO_Op<"replica_id", [Pure,
     %result = mhlo.replica_id : tensor<ui32>
     ```
   }];
-  let results = (outs UI32RankedTensor);
+  let results = (outs TensorOf<[UI32]>);
 
   let assemblyFormat = "attr-dict `:` type(results)";
 }
@@ -1264,6 +1246,9 @@ def MHLO_AsyncStartOp : MHLO_Op<"async_start", []> {
     `called_computation` is the function that will be run asynchronously
     `execution_thread` is the name of the thread in which it will be run. The main
       thread is called "main". All threads have names.
+    `group_id` labels a set of async-start, async-done, and zero or more
+      async-update ops corresponding to the same computation. We
+      represent a missing group_id with either an negative value or None.
 
     This returns all the state needed between async ops. After buffer
     assignment, the return values represents the space needed to hold the input,
@@ -1273,7 +1258,8 @@ def MHLO_AsyncStartOp : MHLO_Op<"async_start", []> {
   let arguments = (ins
     Variadic<MHLO_TensorOrTokenOrTuple>:$inputs,
     FlatSymbolRefAttr:$called_computation,
-    StrAttr:$execution_thread
+    StrAttr:$execution_thread,
+    OptionalAttr<I64Attr>:$group_id
   );
 
   let results = (outs MHLO_AsyncBundle);
@@ -1296,7 +1282,8 @@ def MHLO_AsyncUpdateOp : MHLO_Op<"async_update", [DeclareOpInterfaceMethods<Infe
   let arguments = (ins
     MHLO_AsyncBundle:$bundle,
     FlatSymbolRefAttr:$called_computation,
-    StrAttr:$execution_thread
+    StrAttr:$execution_thread,
+    OptionalAttr<I64Attr>:$group_id
     );
 
   let results = (outs MHLO_AsyncBundle);
@@ -1320,7 +1307,8 @@ def MHLO_AsyncDoneOp : MHLO_Op<"async_done", [DeclareOpInterfaceMethods<InferTyp
   let arguments = (ins
     MHLO_AsyncBundle:$bundle,
     FlatSymbolRefAttr:$called_computation,
-    StrAttr:$execution_thread
+    StrAttr:$execution_thread,
+    OptionalAttr<I64Attr>:$group_id
     );
 
   let results = (outs Variadic<MHLO_TensorOrTokenOrTuple>);
@@ -1467,9 +1455,8 @@ def MHLO_AllGatherOp : MHLO_Op<"all_gather", [SameOperandsAndResultElementType]>
   string summary = "AllGather operation";
   string description = [{
     Within each process group in the process grid, concatenates the values of the
-    operand tensor from each process along `all_gather_dim` and produces a
-    result tensor. The `computation` is applied separately for each operand in
-    `operands`, producing one result per operand.
+    `operand` tensor from each process along `all_gather_dim` and produces a
+    `result` tensor.
 
     See:
     https://github.com/openxla/stablehlo/blob/main/docs/spec.md#all_gather
@@ -1487,13 +1474,13 @@ def MHLO_AllGatherOp : MHLO_Op<"all_gather", [SameOperandsAndResultElementType]>
   }];
 
   let arguments = (ins
-    Variadic<MHLO_Tensor>:$operands,
+    MHLO_Tensor:$operand,
     I64Attr:$all_gather_dim,
     I64ElementsAttr:$replica_groups,
     OptionalAttr<MHLO_ChannelHandle>:$channel_handle,
     UnitAttr:$use_global_device_ids
   );
-  let results = (outs Variadic<MHLO_Tensor>);
+  let results = (outs MHLO_Tensor);
   // use_global_device_ids is rarely used, so we add simplified builder methods
   // for convenience.
   let builders = [
@@ -1508,6 +1495,7 @@ def MHLO_AllGatherOp : MHLO_Op<"all_gather", [SameOperandsAndResultElementType]>
 }
 
 def MHLO_AllReduceOp : MHLO_Op<"all_reduce", [
+    SameOperandsAndResultElementType,
     SingleBlockImplicitTerminator<"ReturnOp">,
     InferTensorType
   ]> {
@@ -1561,7 +1549,8 @@ def MHLO_AllReduceOp : MHLO_Op<"all_reduce", [
   let hasCustomHLOConverter = 1;
 }
 
-def MHLO_ReduceScatterOp : MHLO_Op<"reduce_scatter", []> {
+def MHLO_ReduceScatterOp : MHLO_Op<"reduce_scatter",
+    [SameOperandsAndResultElementType]> {
   let summary = "ReduceScatter operation";
   let description = [{
      Within each process group in the process grid, performs reduction, using
@@ -1706,12 +1695,6 @@ def MHLO_ReduceOp: MHLO_ShapedInterfaceOp<"reduce", [
   // TODO(hinsu): Verify that the attached body arguments and results are
   // compatible with reduce op's operands.
   let regions = (region SizedRegion<1>:$body);
-
-  // Builder
-  let builders = [
-    OpBuilder<(ins "ValueRange":$inputs, "ValueRange":$init_values,
-      "DenseIntElementsAttr":$dimensions, "TypeRange":$element_types)>,
-  ];
 
   // TODO(b/129422361): ReduceOp has special conversion logic to HLO.
   let hasCustomHLOConverter = 1;
@@ -1965,17 +1948,17 @@ def MHLO_BatchNormGradOp : MHLO_Op<"batch_norm_grad", [Pure,
   }];
 
   let arguments = (ins
-    MHLO_FpTensor:$operand,
+    RankedTensorOf<[MHLO_Float]>:$operand,
     1DTensorOf<[MHLO_Float]>:$scale,
     1DTensorOf<[MHLO_Float]>:$mean,
     1DTensorOf<[MHLO_Float]>:$variance,
-    MHLO_FpTensor:$grad_output,
+    RankedTensorOf<[MHLO_Float]>:$grad_output,
     F32Attr:$epsilon,
     I64Attr:$feature_index
   );
 
   let results = (outs
-      MHLO_FpTensor:$grad_operand,
+      RankedTensorOf<[MHLO_Float]>:$grad_operand,
       1DTensorOf<[MHLO_Float]>:$grad_scale,
       1DTensorOf<[MHLO_Float]>:$grad_offset);
 
@@ -2002,7 +1985,7 @@ def MHLO_BatchNormInferenceOp : MHLO_Op<"batch_norm_inference",
   }];
 
   let arguments = (ins
-    MHLO_FpTensor:$operand,
+    RankedTensorOf<[MHLO_Float]>:$operand,
     1DTensorOf<[MHLO_Float]>:$scale,
     1DTensorOf<[MHLO_Float]>:$offset,
     1DTensorOf<[MHLO_Float]>:$mean,
@@ -2011,7 +1994,7 @@ def MHLO_BatchNormInferenceOp : MHLO_Op<"batch_norm_inference",
     I64Attr:$feature_index
   );
 
-  let results = (outs MHLO_FpTensor:$result);
+  let results = (outs RankedTensorOf<[MHLO_Float]>:$result);
 }
 
 def MHLO_BatchNormTrainingOp : MHLO_Op<"batch_norm_training",
@@ -2036,7 +2019,7 @@ def MHLO_BatchNormTrainingOp : MHLO_Op<"batch_norm_training",
   }];
 
   let arguments = (ins
-    MHLO_FpTensor:$operand,
+    RankedTensorOf<[MHLO_Float]>:$operand,
     1DTensorOf<[MHLO_Float]>:$scale,
     1DTensorOf<[MHLO_Float]>:$offset,
     F32Attr:$epsilon,
@@ -2044,7 +2027,7 @@ def MHLO_BatchNormTrainingOp : MHLO_Op<"batch_norm_training",
   );
 
   let results = (outs
-      MHLO_FpTensor:$output,
+      RankedTensorOf<[MHLO_Float]>:$output,
       1DTensorOf<[MHLO_Float]>:$batch_mean,
       1DTensorOf<[MHLO_Float]>:$batch_var);
 
@@ -2260,42 +2243,6 @@ def MHLO_ConcatenateOp : MHLO_ShapedInterfaceOp<"concatenate",
   let hasFolder = 1;
 }
 
-def MHLO_CollectiveBroadcastOp: MHLO_Op<"collective_broadcast",
-    [HLO_CompatibleOperandsAndResultType]> {
-  let summary = "CollectiveBroadcast operation";
-  let description = [{
-    Within each process group in the process grid, send the value of the
-    `operand` tensor from the source process to the target processes and produce a
-    `result` tensor.
-
-    See:
-    https://github.com/openxla/stablehlo/blob/main/docs/spec.md#collective_broadcast
-
-    Example:
-    ```mlir
-    %result = "mhlo.collective_broadcast"(%operand) {
-      replica_groups = dense<[[0, 1]]> : tensor<1x2xi64>,
-      channel_handle = #mhlo.channel_handle<handle = 0, type = 0>
-    } : (tensor<1x2xi64>) -> tensor<1x2xi64>
-    ```
-  }];
-
-  let arguments = (ins
-    MHLO_Tensor:$operand,
-    I64ElementsAttr:$replica_groups,
-    OptionalAttr<MHLO_ChannelHandle>:$channel_handle
-  );
-  let results = (outs MHLO_Tensor);
-  let hasCustomHLOConverter = 1;
-  let hasVerifier = 1;
-  // channel_handle is only used for the SPMD partitioner, so we add a
-  // simplified builder method for convenience.
-  let builders = [
-    OpBuilder<(ins
-      "::mlir::Type":$result_type, "::mlir::Value":$operand,
-      "::mlir::DenseIntElementsAttr":$replica_groups)>];
-}
-
 def MHLO_CollectivePermuteOp: MHLO_Op<"collective_permute",
     [Pure, HLO_CompatibleOperandsAndResultType]> {
   let summary = "CollectivePermute operation";
@@ -2330,44 +2277,6 @@ def MHLO_CollectivePermuteOp: MHLO_Op<"collective_permute",
     OpBuilder<(ins
       "::mlir::Type":$result_type, "::mlir::Value":$operand,
       "::mlir::DenseIntElementsAttr":$source_target_pairs)>];
-}
-
-def MHLO_CompositeOp : MHLO_Op<"composite", [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
-  let summary = "Composite operation";
-  let description = [{
-    Encapsulates an operation made up (composed) of other StableHLO operations,
-    taking `inputs` and `composite_attributes` and producing `results`. The
-    semantics of the op are implemented by the `decomposition` attribute. The
-    `composite` op can be replaced with its decomposition without changing program
-    semantics. In cases where inlining the decomposition does not provide the same
-    op semantics, prefer using `custom_call`.
-
-    The `version` field (defaults to `0`) is used to denote when a composite's
-    semantics change.
-
-    See:
-    https://github.com/openxla/stablehlo/blob/main/docs/spec.md#composite
-
-    Example:
-    ```mlir
-    %results = mhlo.composite "my.op" %arg0, %arg1 {
-      decomposition = @my_op,
-      composite_attributes = { my_attribute = "my_value" },
-      version = 1 : i32
-    } : (tensor<f32>, tensor<f32>) -> tensor<f32>
-    ```
-  }];
-
-  let arguments = (ins
-    Variadic<MHLO_TensorOrTokenOrTuple>:$inputs,
-    StrAttr:$name,
-    DefaultValuedOptionalAttr<DictionaryAttr, "{}">:$composite_attributes,
-    FlatSymbolRefAttr:$decomposition,
-    DefaultValuedOptionalAttr<I32Attr, "0">:$version
-  );
-  let results = (outs Variadic<MHLO_TensorOrTokenOrTuple>);
-  let hasCustomHLOConverter = 1;
-  let assemblyFormat = "$name $inputs attr-dict `:` functional-type(operands, results)";
 }
 
 def MHLO_ConvolutionOp : MHLO_Op<"convolution", [Pure]> {
@@ -2423,8 +2332,7 @@ def MHLO_ConvolutionOp : MHLO_Op<"convolution", [Pure]> {
   }];
 }
 
-def MHLO_CopyOp: MHLO_Op<"copy",
-      [Pure, Elementwise, HLO_CompatibleOperandsAndResultType]> {
+def MHLO_CopyOp: MHLO_Op<"copy", [Pure, HLO_CompatibleOperandsAndResultType]> {
   let summary = "Copy operation";
   let description = [{
     This operation is private to the XLA compiler, so it is does not yet have
@@ -2527,7 +2435,7 @@ def MHLO_CustomCallOp: MHLO_Op<"custom_call",
     ```
   }];
   let arguments = (ins
-    Variadic<MHLO_CustomCallValue>:$inputs,
+    Variadic<MHLO_TensorOrTokenOrTuple>:$inputs,
     StrAttr:$call_target_name,
     DefaultValuedOptionalAttr<BoolAttr, "false">:$has_side_effect,
     OptionalAttr<AnyAttrOf<[StrAttr, DictionaryAttr]>>:$backend_config,
@@ -2547,7 +2455,7 @@ def MHLO_CustomCallOp: MHLO_Op<"custom_call",
             "Aliasing attribute for outputs and operands of CustomCall">,
         "{}">:$output_operand_aliases
   );
-  let results = (outs Variadic<MHLO_CustomCallValue>);
+  let results = (outs Variadic<MHLO_TensorOrTokenOrTuple>);
   let hasCustomHLOConverter = 1;
   let hasVerifier = 1;
 
@@ -2627,29 +2535,6 @@ def MHLO_DotGeneralOp: MHLO_ShapedInterfaceOp<"dot_general", [Pure]> {
 
   let results = (outs MHLO_Tensor);
   // DotGeneral op required custom exporter to pass the preferred element type
-  // to Xla builder.
-  let hasCustomHLOConverter = 1;
-  let hasVerifier = 1;
-}
-
-def MHLO_SparseDotOp: MHLO_Op<"sparse_dot", [Pure]> {
-  let summary = "Sparse dot operation";
-  let description = [{
-    Similar to `dot_general` operation, with one or both of the operands being
-    sparse. An additional argument provides sparsity meta information.
-    Disclaimer: this op is experimental / a work in progress.
-  }];
-  let arguments = (ins
-    MHLO_Tensor:$lhs,
-    MHLO_Tensor:$rhs,
-    Variadic<MHLO_Tensor>:$meta,
-    OptionalAttr<MHLO_SparsityDescriptor>:$lhs_sparsity,
-    OptionalAttr<MHLO_SparsityDescriptor>:$rhs_sparsity,
-    MHLO_DotDimensionNumbers:$dot_dimension_numbers,
-    MHLO_PrecisionConfigAttr:$precision_config
-  );
-  let results = (outs MHLO_Tensor);
-  // SparseDot op required custom exporter to pass the preferred element type
   // to Xla builder.
   let hasCustomHLOConverter = 1;
   let hasVerifier = 1;
@@ -2847,7 +2732,7 @@ def MHLO_ReshapeOp: MHLO_Op<"reshape",
     ```
   }];
 
-  let arguments = (ins MHLO_AnyTensor:$operand);
+  let arguments = (ins MHLO_Tensor:$operand);
 
   let results = (outs MHLO_StaticShapeTensor);
   let hasFolder = 1;
@@ -2875,8 +2760,8 @@ def MHLO_DynamicReshapeOp: MHLO_ShapedInterfaceOp<"dynamic_reshape", [Pure]> {
     ```
   }];
 
-  let arguments = (ins MHLO_AnyTensor:$operand, MHLO_DimensionTensor:$output_shape);
-  let results = (outs MHLO_AnyTensor:$result);
+  let arguments = (ins MHLO_Tensor:$operand, MHLO_DimensionTensor:$output_shape);
+  let results = (outs MHLO_Tensor:$result);
 
   let hasCanonicalizer = 1;
   // Cannot be exported to legacy formats.
@@ -2917,7 +2802,7 @@ def MHLO_ScatterOp: MHLO_Op<"scatter",
   }];
   let arguments = (ins
     Variadic<MHLO_Tensor>:$inputs,
-    RankedTensorOf<[AnyInteger, Index]>:$scatter_indices,
+    TensorOf<[AnyInteger, Index]>:$scatter_indices,
     Variadic<MHLO_Tensor>:$updates,
     MHLO_ScatterDimensionNumbers:$scatter_dimension_numbers,
     DefaultValuedOptionalAttr<BoolAttr, "false">:$indices_are_sorted,
@@ -3091,29 +2976,33 @@ def MHLO_TopKOp : MHLO_Op<"topk", [RecursiveMemoryEffects, InferTensorType]> {
   let summary = "TopK operation";
   let description = [{
     Returns top `k` values and their indices, along the last
-    dimension of the operand if `largest=true` or the bottom `k` values if
-    `largest=false`.
+    dimension of the operand using the given `comparator` (for usual topk
+    behavior, it should be strict-greater-than operation).
 
     See:
     https://www.tensorflow.org/xla/operation_semantics#top-k
 
     Example:
     ```mlir
-    %values, %indices = mhlo.topk(%operand, k=5, largest=true)
-      : tensor<100xf32> -> (tensor<5xf32>, tensor<5xi32>)
+    %values, %indices = mhlo.topk(%operand, k=5) {
+      ^bb0(%arg0: tensor<f32>, %arg1: tensor<f32>):
+        %predicate = mhlo.compare GT, %arg0, %arg1 : (tensor<f32>, tensor<f32>) -> tensor<i1>
+        mhlo.return %predicate : tensor<i1>
+    } : tensor<100xf32> -> (tensor<5xf32>, tensor<5xi32>)
     ```
   }];
 
   let arguments = (ins
     MHLO_Tensor:$operand,
-    I64Attr:$k,
-    DefaultValuedOptionalAttr<BoolAttr, "true">:$largest
+    I64Attr:$k
   );
+  let regions = (region SizedRegion<1>:$body);
   let results = (outs MHLO_Tensor:$values,
                       MHLO_Tensor:$indices);
 
+  let hasVerifier = 1;
   let assemblyFormat = [{
-    `(`$operand `,` `k` `=` $k (`,` `largest` `=` $largest^)? `)` attr-dict `:`
+    `(`$operand `,` `k` `=` $k`)` $body attr-dict `:`
     type($operand) `->` `(`type($values)`,` type($indices)`)`
   }];
   let hasCustomHLOConverter = 1;
@@ -3160,8 +3049,8 @@ def MHLO_PartitionIdOp : MHLO_Op<"partition_id", [
     %result = mhlo.partition_id : tensor<ui32>
     ```
   }];
-  let results = (outs UI32RankedTensor);
-  let results = (outs UI32RankedTensor);
+  let results = (outs TensorOf<[UI32]>);
+  let results = (outs TensorOf<[UI32]>);
   let hasCustomHLOConverter = 1;
 
   let assemblyFormat = "attr-dict `:` type(results)";
@@ -3569,7 +3458,7 @@ def MHLO_XlaRngGetAndUpdateStateOp: MHLO_Op<"xla.rng_get_and_update_state", [Dec
 
 // TODO(b/230662142): Implement unknown scales/zero_point cases.
 def MHLO_UniformQuantizeOp : MHLO_UnaryElementwiseOp<"uniform_quantize",
-      [Pure], RankedTensorOf<[MHLO_Float, MHLO_QuantizedInt]>,
+      [Pure], TensorOf<[HLO_Float, MHLO_QuantizedInt]>,
       MHLO_QuantizedIntTensor> {
   let summary = "UniformQuantize operation";
   let description = [{
@@ -3673,8 +3562,8 @@ def MHLO_BitcastOp : MHLO_Op<"bitcast", [Pure]> {
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def MHLO_ReducePrecisionOp : MHLO_Op<"reduce_precision",
-      [HLO_CompatibleOperandsAndResultType, Pure, Elementwise]> {
+def MHLO_ReducePrecisionOp :
+    MHLO_Op<"reduce_precision", [HLO_CompatibleOperandsAndResultType, Pure]> {
   let summary = "ReducePrecision operation";
   let description = [{
     Performs element-wise conversion of `operand` to another floating-point type

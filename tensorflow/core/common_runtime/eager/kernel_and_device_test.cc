@@ -118,7 +118,7 @@ void BM_KernelAndDeviceInit(::testing::benchmark::State& state) {
   KernelAndDeviceOp k(nullptr, false, env.function_library_runtime(), nullptr,
                       nullptr, env.cpu_device());
   for (auto s : state) {
-    TF_CHECK_OK(k.Init({}, ndef, nullptr, std::nullopt));
+    TF_CHECK_OK(k.Init({}, ndef, nullptr));
   }
 }
 BENCHMARK(BM_KernelAndDeviceInit);
@@ -138,7 +138,7 @@ void BM_KernelAndDeviceRun(::testing::benchmark::State& state) {
   TestEnv env;
   KernelAndDeviceOp k(nullptr, false, env.function_library_runtime(), nullptr,
                       nullptr, env.cpu_device());
-  TF_CHECK_OK(k.Init({}, ndef, nullptr, std::nullopt));
+  TF_CHECK_OK(k.Init({}, ndef, nullptr));
   const EagerKernelArgs args(std::move(inputs));
   for (auto s : state) {
     TF_CHECK_OK(k.Run(nullptr, args, &outputs, nullptr, std::nullopt,

@@ -123,8 +123,8 @@ FailureOr<Value> CreateConstantOrConvertOp(Operation *op, Value operand,
   // Check whether the rhs operand has constant op.
   TF::TensorProtoAttr tensor_proto_attr;
   if (!matchPattern(operand, m_Constant(&tensor_proto_attr))) {
-    return Value(rewriter.create<mhlo::BitcastConvertOp>(
-        op->getLoc(), new_operand_type, operand));
+    return Value(rewriter.create<mhlo::ConvertOp>(
+        op->getLoc(), operand, new_operand_type.getElementType()));
   }
 
   auto dense_attr_or = GetDenseAttrFromTensorProtoAttr(
@@ -360,12 +360,11 @@ class ConvertUniformQuantizeOp
 
     auto result = rewriter.create<mhlo::UniformQuantizeOp>(
         op->getLoc(), *output_type, op.getInput());
-    rewriter.replaceOpWithNewOp<mhlo::BitcastConvertOp>(
-        op,
-        output_type->clone(output_type->getElementType()
-                               .dyn_cast<quant::QuantizedType>()
-                               .getStorageType()),
-        result);
+    rewriter.replaceOpWithNewOp<mhlo::ConvertOp>(
+        op, result,
+        output_type->getElementType()
+            .dyn_cast<quant::QuantizedType>()
+            .getStorageType());
 
     return success();
   }
@@ -393,8 +392,8 @@ class ConvertUniformDequantizeOp
     if (failed(input_quant_type)) {
       return failure();
     }
-    input = rewriter.create<mhlo::BitcastConvertOp>(op->getLoc(),
-                                                    *input_quant_type, input);
+    input = rewriter.create<mhlo::ConvertOp>(
+        op->getLoc(), input, input_quant_type->getElementType());
 
     rewriter.replaceOpWithNewOp<mhlo::UniformDequantizeOp>(
         op, op.getOutput().getType(), input);
@@ -432,16 +431,15 @@ class ConvertUniformRequantizeOp
       return failure();
     }
 
-    auto input_quant = rewriter.create<mhlo::BitcastConvertOp>(
-        op->getLoc(), *input_quant_type, input);
+    auto input_quant = rewriter.create<mhlo::ConvertOp>(
+        op->getLoc(), input, input_quant_type->getElementType());
     auto result = rewriter.create<mhlo::UniformQuantizeOp>(
         op->getLoc(), *output_type, input_quant);
-    rewriter.replaceOpWithNewOp<mhlo::BitcastConvertOp>(
-        op,
-        output_type->clone(output_type->getElementType()
-                               .dyn_cast<quant::QuantizedType>()
-                               .getStorageType()),
-        result);
+    rewriter.replaceOpWithNewOp<mhlo::ConvertOp>(
+        op, result,
+        output_type->getElementType()
+            .dyn_cast<quant::QuantizedType>()
+            .getStorageType());
     return success();
   }
 };
@@ -463,8 +461,8 @@ class ConvertUniformQuantizedDotOp
     if (failed(lhs_quant_type)) {
       return failure();
     }
-    lhs = rewriter.create<mhlo::BitcastConvertOp>(op->getLoc(), *lhs_quant_type,
-                                                  adaptor.getLhs());
+    lhs = rewriter.create<mhlo::ConvertOp>(op->getLoc(), adaptor.getLhs(),
+                                           lhs_quant_type->getElementType());
 
     // Uniform Quantized type for the rhs.
     int64_t rhs_quantized_dimension = op.getRhsQuantizationAxis();
@@ -500,12 +498,11 @@ class ConvertUniformQuantizedDotOp
     auto result =
         rewriter.create<mhlo::DotOp>(op->getLoc(), *output_type, lhs, *rhs_or,
                                      /*precision_config=*/nullptr);
-    rewriter.replaceOpWithNewOp<mhlo::BitcastConvertOp>(
-        op,
-        output_type->clone(output_type->getElementType()
-                               .dyn_cast<quant::QuantizedType>()
-                               .getStorageType()),
-        result);
+    rewriter.replaceOpWithNewOp<mhlo::ConvertOp>(
+        op, result,
+        output_type->getElementType()
+            .dyn_cast<quant::QuantizedType>()
+            .getStorageType());
     return success();
   }
 };
@@ -528,8 +525,8 @@ class ConvertUniformQuantizedConvolutionOp
     if (failed(lhs_quant_type)) {
       return failure();
     }
-    lhs = rewriter.create<mhlo::BitcastConvertOp>(op->getLoc(), *lhs_quant_type,
-                                                  adaptor.getLhs());
+    lhs = rewriter.create<mhlo::ConvertOp>(op->getLoc(), adaptor.getLhs(),
+                                           lhs_quant_type->getElementType());
 
     auto rhs_type = GetUniformQuantizedType(
         op, op.getRhs().getType(), op.getRhsScales(), op.getRhsZeroPoints(),
@@ -562,12 +559,11 @@ class ConvertUniformQuantizedConvolutionOp
     SmallVector<Value, 2> operands{lhs, *rhs_or};
     auto result = rewriter.create<mhlo::ConvolutionOp>(
         op->getLoc(), *output_type, operands, *converted_attrs_or);
-    rewriter.replaceOpWithNewOp<mhlo::BitcastConvertOp>(
-        op,
-        output_type->clone(output_type->getElementType()
-                               .dyn_cast<quant::QuantizedType>()
-                               .getStorageType()),
-        result);
+    rewriter.replaceOpWithNewOp<mhlo::ConvertOp>(
+        op, result,
+        output_type->getElementType()
+            .dyn_cast<quant::QuantizedType>()
+            .getStorageType());
     return success();
   }
 };
@@ -595,12 +591,12 @@ class ConvertUniformQuantizedAddOp
     if (failed(lhs_quant_type)) {
       return failure();
     }
-    lhs = rewriter.create<mhlo::BitcastConvertOp>(op->getLoc(), *lhs_quant_type,
-                                                  adaptor.getLhs());
+    lhs = rewriter.create<mhlo::ConvertOp>(op->getLoc(), adaptor.getLhs(),
+                                           lhs_quant_type->getElementType());
 
     // rhs (bias) is always 1D that broadcasts to the last dim of lhs.
     auto broadcast_dims =
-        rewriter.getDenseI64ArrayAttr({lhs_type.getRank() - 1});
+        mhlo::GetI64ElementsAttr({lhs_type.getRank() - 1}, &rewriter);
 
     auto rhs_type = GetUniformQuantizedType(
         op, op.getRhs().getType(), op.getRhsScales(), op.getRhsZeroPoints(),
@@ -630,12 +626,11 @@ class ConvertUniformQuantizedAddOp
     // quantizer) to be identical, respectively.
     auto result = rewriter.create<chlo::BroadcastAddOp>(
         op->getLoc(), *output_type, lhs, *rhs_or, broadcast_dims);
-    rewriter.replaceOpWithNewOp<mhlo::BitcastConvertOp>(
-        op,
-        output_type->clone(output_type->getElementType()
-                               .dyn_cast<quant::QuantizedType>()
-                               .getStorageType()),
-        result);
+    rewriter.replaceOpWithNewOp<mhlo::ConvertOp>(
+        op, result,
+        output_type->getElementType()
+            .dyn_cast<quant::QuantizedType>()
+            .getStorageType());
     return success();
   }
 };
@@ -656,7 +651,8 @@ class ConvertUniformQuantizedClipByValueOp
     if (quantization_axis >= 0) {
       broadcast_dims_values.push_back(quantization_axis);
     }
-    auto broadcast_dims = rewriter.getDenseI64ArrayAttr(broadcast_dims_values);
+    auto broadcast_dims =
+        mhlo::GetI64ElementsAttr(broadcast_dims_values, &rewriter);
 
     auto min_max_type = GetUniformQuantizedType(
         op, op.getMin().getType(), op.getScales(), op.getZeroPoints(),
@@ -683,19 +679,13 @@ class ConvertUniformQuantizedClipByValueOp
     if (failed(output_type)) {
       return failure();
     }
-    operand = rewriter.create<mhlo::BitcastConvertOp>(op->getLoc(),
-                                                      *output_type, operand);
+    operand = rewriter.create<mhlo::ConvertOp>(op->getLoc(), operand,
+                                               output_type->getElementType());
 
     Value res_min_clipped = rewriter.create<chlo::BroadcastMaxOp>(
         op->getLoc(), *output_type, operand, *min_or, broadcast_dims);
-    Value res_max_clipped = rewriter.create<chlo::BroadcastMinOp>(
-        op->getLoc(), *output_type, res_min_clipped, *max_or, broadcast_dims);
-    rewriter.replaceOpWithNewOp<mhlo::BitcastConvertOp>(
-        op,
-        output_type->clone(output_type->getElementType()
-                               .dyn_cast<quant::QuantizedType>()
-                               .getStorageType()),
-        res_max_clipped);
+    rewriter.replaceOpWithNewOp<chlo::BroadcastMinOp>(
+        op, *output_type, res_min_clipped, *max_or, broadcast_dims);
     return success();
   }
 };

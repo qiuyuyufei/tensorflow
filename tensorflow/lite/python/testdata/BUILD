@@ -81,9 +81,7 @@ cc_library(
     name = "test_delegate",
     testonly = 1,
     srcs = ["test_delegate.cc"],
-    visibility = [
-        "//visibility:private",  # Only private by automation, not intent. Owner may accept CLs adding visibility. See go/scheuklappen#explicit-private.
-    ],
+    visibility = ["//tensorflow/lite:__subpackages__"],
     deps = [
         "//tensorflow/lite/core/c:common",
     ],
@@ -150,8 +148,8 @@ tf_custom_op_py_strict_library(
     srcs_version = "PY3",
     deps = [
         ":gen_double_op_wrapper",
+        "//tensorflow/python/framework",
         "//tensorflow/python/framework:dtypes",
-        "//tensorflow/python/framework:load_library",
         "//tensorflow/python/platform:resource_loader",
     ],
 )
@@ -160,9 +158,7 @@ cc_library(
     name = "test_registerer",
     srcs = ["test_registerer.cc"],
     hdrs = ["test_registerer.h"],
-    visibility = [
-        "//visibility:private",  # Only private by automation, not intent. Owner may accept CLs adding visibility. See go/scheuklappen#explicit-private.
-    ],
+    visibility = ["//tensorflow/lite:__subpackages__"],
     deps = [
         "//tensorflow/lite:framework",
         "//tensorflow/lite/kernels:builtin_ops",

@@ -1,11 +1,6 @@
 load("//tensorflow:strict.default.bzl", "py_strict_binary", "py_strict_library")
-load(
-    "//tensorflow:tensorflow.bzl",
-    "tf_cc_binary",
-    "tf_cc_test",
-    "tf_features_nolayering_check_if_ios",
-)
-load("//tensorflow:tensorflow.default.bzl", "pybind_extension")
+
+# copybara:uncomment(oss-unused) load("//tools/build_defs/build_test:build_test.bzl", "build_test")
 load(
     "//tensorflow/lite:build_def.bzl",
     "tflite_custom_android_library",
@@ -20,7 +15,13 @@ load(
     "generated_test_models_all",
 )
 load("//tensorflow/lite/testing:tflite_model_test.bzl", "tflite_model_test")
-# copybara:uncomment(oss-unused) load("//tools/build_defs/build_test:build_test.bzl", "build_test")
+load("//tensorflow:tensorflow.default.bzl", "pybind_extension")
+load(
+    "//tensorflow:tensorflow.bzl",
+    "tf_cc_binary",
+    "tf_cc_test",
+    "tf_features_nolayering_check_if_ios",
+)
 
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
@@ -95,18 +96,14 @@ _test_size_override = {
         ":util",
         "//tensorflow/lite:builtin_op_data",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite:string",
         "//tensorflow/lite/kernels:builtin_ops",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_googlesource_code_re2//:re2",
     ] + select({
         "//conditions:default": [
-            "@local_tsl//tsl/platform:env",
-            "@local_tsl//tsl/platform:status",
-            "@local_tsl//tsl/platform:subprocess",
-            "@local_tsl//tsl/util:command_line_flags",
+            "//tensorflow/core:framework_internal",
+            "//tensorflow/core:lib",
+            "//tensorflow/core:test",
         ],
         "//tensorflow:android": [
             "//tensorflow/core:portable_tensorflow_lib",

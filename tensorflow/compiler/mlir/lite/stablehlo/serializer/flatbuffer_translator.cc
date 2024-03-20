@@ -329,9 +329,10 @@ CreateBroadcastInDimOperator(mlir::stablehlo::BroadcastInDimOp& hlo_op,
   auto inputs = fbb->CreateVector(operands);
   auto outputs = fbb->CreateVector(results);
 
-  auto dims = hlo_op.getBroadcastDimensions();
-  auto broadcast_dimension =
-      fbb->CreateVector(std::vector<int64_t>(dims.begin(), dims.end()));
+  std::vector<int64_t> broadcast_dimension_vec =
+      GetOptionalVector<int64_t>(hlo_op.getBroadcastDimensions(), 0, 0);
+
+  auto broadcast_dimension = fbb->CreateVector(broadcast_dimension_vec);
 
   auto options = ::stablehlo::flatbuf::CreateBroadcastInDimOptions(
       *fbb, broadcast_dimension);
@@ -411,7 +412,7 @@ CreateFlatBufferOperator(mlir::Operation* op, uint32_t opcode_index,
   return std::nullopt;
 }
 
-static absl::StatusOr<::stablehlo::flatbuf::DataType> GetDataType(
+static StatusOr<::stablehlo::flatbuf::DataType> GetDataType(
     Type type, bool is_signed = true) {
   if (type.isF16()) return ::stablehlo::flatbuf::DataType_FLOAT16;
   if (type.isF32()) return ::stablehlo::flatbuf::DataType_FLOAT32;

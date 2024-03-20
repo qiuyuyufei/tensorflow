@@ -18,7 +18,6 @@ limitations under the License.
 #include <memory>
 #include <optional>
 #include <string>
-#include <utility>
 
 #include "absl/status/status.h"
 #include "absl/strings/numbers.h"
@@ -58,7 +57,6 @@ limitations under the License.
 #include "tensorflow/core/profiler/utils/xplane_schema.h"
 #include "tensorflow/core/profiler/utils/xplane_utils.h"
 #include "tsl/platform/errors.h"
-#include "tsl/platform/file_system.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/profiler/convert/xplane_to_trace_events.h"
 #include "tsl/profiler/protobuf/xplane.pb.h"
@@ -119,10 +117,7 @@ StatusOr<std::string> ConvertXSpaceToTraceEvents(
       ProcessMegascaleDcn(xspace.get());
       TraceEventsContainer trace_container;
       ConvertXSpaceToTraceEventsContainer(host_name, *xspace, &trace_container);
-      std::unique_ptr<tsl::WritableFile> file;
-      TF_RETURN_IF_ERROR(
-          tensorflow::Env::Default()->NewWritableFile(*sstable_path, &file));
-      TF_RETURN_IF_ERROR(trace_container.StoreAsLevelDbTable(std::move(file)));
+      TF_RETURN_IF_ERROR(trace_container.StoreAsLevelDbTable(*sstable_path));
     }
     TF_ASSIGN_OR_RETURN(TraceViewOption trace_option,
                         GetTraceViewOption(options));
@@ -331,7 +326,7 @@ StatusOr<std::string> ConvertMultiXSpacesToToolData(
     return ConvertMultiXSpacesToOverviewPage(session_snapshot);
   } else if (tool_name == "input_pipeline_analyzer") {
     return ConvertMultiXSpacesToInputPipeline(session_snapshot);
-  } else if (tool_name == "framework_op_stats") {
+  } else if (tool_name == "tensorflow_stats") {
     return ConvertMultiXSpacesToTfStats(session_snapshot);
   } else if (tool_name == "kernel_stats") {
     return ConvertMultiXSpacesToKernelStats(session_snapshot);

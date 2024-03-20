@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,18 +17,17 @@ limitations under the License.
 #define XLA_SERVICE_GPU_MULTI_OUTPUT_FUSION_H_
 
 #include <memory>
+#include <queue>
+#include <vector>
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/statusor.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
-#include "xla/hlo/ir/hlo_computation.h"
-#include "xla/hlo/ir/hlo_dfs_reachability.h"
-#include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_module.h"
+#include "xla/hlo/ir/hlo_reachability.h"
 #include "xla/service/gpu/gpu_fusible.h"
 #include "xla/service/gpu/model/gpu_hlo_cost_analysis.h"
-#include "xla/service/hlo_cost_analysis.h"
 #include "xla/service/hlo_pass_interface.h"
+#include "xla/statusor.h"
 #include "xla/stream_executor/device_description.h"
 
 namespace xla {
@@ -102,7 +101,7 @@ class GpuMultiOutputFusion : public HloModulePass {
   absl::string_view name() const override { return "multi_output_fusion"; }
 
   using HloPassInterface::Run;
-  absl::StatusOr<bool> Run(
+  StatusOr<bool> Run(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads) override;
 
@@ -110,7 +109,7 @@ class GpuMultiOutputFusion : public HloModulePass {
   bool FuseSiblings(HloInstruction* parent, FusionInfoCache* fusion_info_cache,
                     GpuHloCostAnalysis* cost_analysis);
 
-  absl::StatusOr<bool> DoMultiOutputFusion();
+  StatusOr<bool> DoMultiOutputFusion();
 
   // Recompute reachability for the current computation.
   void RecomputeReachability();
@@ -122,7 +121,7 @@ class GpuMultiOutputFusion : public HloModulePass {
   HloComputation* computation_;
 
   // The reachability map of current computation.
-  std::unique_ptr<HloDfsReachability> reachability_;
+  std::unique_ptr<HloReachabilityMap> reachability_;
 
   se::DeviceDescription device_info_;
   HloCostAnalysis::ShapeSizeFunction shape_size_function_;

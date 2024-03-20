@@ -1,13 +1,10 @@
-load("//tsl:tsl.bzl", "internal_visibility")
-load("//tsl:tsl.default.bzl", "get_compatible_with_portable", "tsl_grpc_cc_dependencies")
+load("//tsl/platform:rules_cc.bzl", "cc_library")
 load("//tsl/platform:build_config.bzl", "tsl_cc_test")
-load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
+load("//tsl:tsl.default.bzl", "get_compatible_with_portable", "tsl_grpc_cc_dependencies")
+load("//tsl:tsl.bzl", "set_external_visibility")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = internal_visibility([
-        "//tsl:internal",
-    ]),
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -16,6 +13,7 @@ cc_library(
     srcs = ["preemption_notifier.cc"],
     hdrs = ["preemption_notifier.h"],
     compatible_with = get_compatible_with_portable(),
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:env",
         "//tsl/platform:errors",
@@ -31,6 +29,7 @@ tsl_cc_test(
     name = "preemption_notifier_test",
     size = "small",
     srcs = ["preemption_notifier_test.cc"],
+    visibility = ["//visibility:public"],
     deps = [
         ":preemption_notifier",
         "//tsl/platform:env",
@@ -50,6 +49,7 @@ cc_library(
     name = "preemption_sync_manager",
     srcs = ["preemption_sync_manager.cc"],
     hdrs = ["preemption_sync_manager.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":preemption_notifier",
         "//tsl/distributed_runtime:call_options",
@@ -70,6 +70,7 @@ tsl_cc_test(
     name = "preemption_sync_manager_test",
     size = "small",
     srcs = ["preemption_sync_manager_test.cc"],
+    visibility = ["//visibility:public"],
     deps = [
         ":preemption_notifier",
         ":preemption_sync_manager",

@@ -32,7 +32,7 @@ class MemmappedTensorAllocator : public Allocator {
     if (!status.ok()) {
       return status;
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
   string Name() override { return "MemmappedTensorAllocator"; }
 

@@ -15,4 +15,3 @@
 *tsl*
 *lite*
 *TFL*
-*quantization*

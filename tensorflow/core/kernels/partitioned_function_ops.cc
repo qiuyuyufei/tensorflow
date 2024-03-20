@@ -162,7 +162,7 @@ Status PartitionedCallOp::FillOutputDevices(
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status PartitionedCallOp::Instantiate(FunctionLibraryRuntime* lib,
@@ -227,7 +227,7 @@ Status PartitionedCallOp::Instantiate(FunctionLibraryRuntime* lib,
 
   TF_RETURN_IF_ERROR(
       lib->Instantiate(func_->name(), AttrSlice(&func_->attr()), opts, handle));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void PartitionedCallOp::RunFunction(FunctionLibraryRuntime::Handle handle,

@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,7 +32,6 @@ limitations under the License.
 #include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "xla/hlo/ir/hlo_sharding.h"
 #include "xla/pjrt/host_callback.h"
-#include "xla/pjrt/mlir_to_hlo.h"
 #include "xla/pjrt/pjrt_client.h"
 #include "xla/pjrt/pjrt_executable.h"
 #include "xla/pjrt/pjrt_future.h"
@@ -59,6 +58,7 @@ limitations under the License.
 #include "xla/xla_data.pb.h"
 #include "tsl/concurrency/ref_count.h"
 #include "tsl/platform/errors.h"
+#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace ifrt {
@@ -66,7 +66,7 @@ namespace ifrt {
 namespace {
 
 // Returns the op sharding of the root instruction in the entry computation.
-absl::StatusOr<const xla::HloInstructionProto*> FindRootInstruction(
+StatusOr<const xla::HloInstructionProto*> FindRootInstruction(
     const HloModuleProto& proto) {
   for (const auto& computation : proto.computations()) {
     if (computation.id() == proto.entry_computation_id()) {
@@ -82,8 +82,7 @@ absl::StatusOr<const xla::HloInstructionProto*> FindRootInstruction(
 
 // Returns the output element types of the first module in a
 // `PjRtLoadedExecutable`.
-absl::StatusOr<std::vector<xla::PrimitiveType>>
-GetFirstModuleOutputElementTypes(
+StatusOr<std::vector<xla::PrimitiveType>> GetFirstModuleOutputElementTypes(
     xla::PjRtLoadedExecutable* pjrt_loaded_executable) {
   auto element_types = pjrt_loaded_executable->GetOutputElementTypes();
   TF_RETURN_IF_ERROR(element_types.status());
@@ -95,8 +94,7 @@ GetFirstModuleOutputElementTypes(
 
 // Returns the output dimensions of the first module in a
 // `PjRtLoadedExecutable`.
-absl::StatusOr<std::vector<xla::DimensionVector>>
-GetFirstModuleOutputDimensions(
+StatusOr<std::vector<xla::DimensionVector>> GetFirstModuleOutputDimensions(
     xla::PjRtLoadedExecutable* pjrt_loaded_executable) {
   auto dimensions = pjrt_loaded_executable->GetOutputDimensions();
   TF_RETURN_IF_ERROR(dimensions.status());
@@ -108,7 +106,7 @@ GetFirstModuleOutputDimensions(
 
 // Returns the output shardings of the first module in a
 // `PjRtLoadedExecutable`.
-absl::StatusOr<std::optional<HloSharding>> GetFirstModuleOutputSharding(
+StatusOr<std::optional<HloSharding>> GetFirstModuleOutputSharding(
     xla::PjRtLoadedExecutable* pjrt_loaded_executable,
     const xla::Shape& shape) {
   auto output_shardings = pjrt_loaded_executable->GetOutputShardings();
@@ -131,7 +129,7 @@ absl::StatusOr<std::optional<HloSharding>> GetFirstModuleOutputSharding(
 
 // Returns the flattened output memory_kinds of the first module in a
 // `UnimplementedError` will be converted into `std::nullopt`.
-absl::StatusOr<std::optional<std::vector<absl::string_view>>>
+StatusOr<std::optional<std::vector<absl::string_view>>>
 GetFirstModuleOutputMemoryKinds(
     xla::PjRtLoadedExecutable* pjrt_loaded_executable) {
   auto output_memory_kinds = pjrt_loaded_executable->GetOutputMemoryKinds();
@@ -153,7 +151,7 @@ struct ShapePartialInfo {
   std::vector<xla::DimensionVector> dimensions;
 };
 
-absl::StatusOr<ShapePartialInfo> CreateShapePartialInfo(
+StatusOr<ShapePartialInfo> CreateShapePartialInfo(
     absl::Span<const xla::Shape> shapes) {
   ShapePartialInfo partial_info;
   partial_info.element_types.reserve(shapes.size());
@@ -178,29 +176,29 @@ char PjRtCompatibleLoadedExecutable::ID = 0;
 char PjRtExecutable::ID = 0;
 char PjRtLoadedExecutable::ID = 0;
 
-absl::StatusOr<std::unique_ptr<Executable>> PjRtExecutable::Create(
+StatusOr<std::unique_ptr<Executable>> PjRtExecutable::Create(
     std::unique_ptr<xla::PjRtExecutable> pjrt_executable) {
   return std::unique_ptr<Executable>(new PjRtExecutable(
       std::shared_ptr<xla::PjRtExecutable>(pjrt_executable.release())));
 }
 
-absl::StatusOr<std::unique_ptr<Executable>> PjRtExecutable::Create(
+StatusOr<std::unique_ptr<Executable>> PjRtExecutable::Create(
     std::shared_ptr<xla::PjRtExecutable> pjrt_executable) {
   return std::unique_ptr<Executable>(
       new PjRtExecutable(std::move(pjrt_executable)));
 }
 
-absl::StatusOr<std::optional<std::string>> PjRtExecutable::Fingerprint() const {
+StatusOr<std::optional<std::string>> PjRtExecutable::Fingerprint() const {
   DCHECK(this);
   return pjrt_executable_->FingerprintExecutable();
 }
 
-absl::StatusOr<std::string> PjRtExecutable::Serialize() const {
+StatusOr<std::string> PjRtExecutable::Serialize() const {
   DCHECK(this);
   return pjrt_executable_->SerializeExecutable();
 }
 
-absl::StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
+StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
     PjRtCompatibleClient* client,
     std::unique_ptr<xla::PjRtLoadedExecutable> pjrt_loaded_executable,
     std::vector<tsl::RCReference<LoadedHostCallback>> loaded_host_callbacks) {
@@ -210,7 +208,7 @@ absl::StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
                 std::move(loaded_host_callbacks));
 }
 
-absl::StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
+StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
     PjRtCompatibleClient* client,
     std::shared_ptr<xla::PjRtLoadedExecutable> pjrt_loaded_executable,
     std::vector<tsl::RCReference<LoadedHostCallback>> loaded_host_callbacks) {
@@ -233,7 +231,7 @@ absl::StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
                         result_memory_kinds, loaded_host_callbacks);
 }
 
-static absl::StatusOr<std::vector<xla::Shape>> ResultShapesOfModule(
+static StatusOr<std::vector<xla::Shape>> ResultShapesOfModule(
     mlir::ModuleOp module) {
   auto main = module.lookupSymbol<mlir::func::FuncOp>("main");
   if (!main) {
@@ -249,7 +247,7 @@ static absl::StatusOr<std::vector<xla::Shape>> ResultShapesOfModule(
   return result_shapes;
 }
 
-absl::StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
+StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
     PjRtCompatibleClient* client, mlir::ModuleOp module,
     xla::CompileOptions compile_options,
     std::vector<tsl::RCReference<LoadedHostCallback>> loaded_host_callbacks) {
@@ -263,7 +261,6 @@ absl::StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
       build_options.use_spmd_partitioning() &&
       build_options.num_partitions() > 1 &&
       (build_options.use_auto_spmd_partitioning() ||
-       build_options.any_allow_spmd_sharding_propagation_to_parameters() ||
        build_options.any_allow_spmd_sharding_propagation_to_output());
   TF_ASSIGN_OR_RETURN(
       auto pjrt_loaded_executable,
@@ -320,7 +317,7 @@ absl::StatusOr<std::unique_ptr<LoadedExecutable>> PjRtLoadedExecutable::Create(
   }
 }
 
-absl::StatusOr<std::unique_ptr<LoadedExecutable>>
+StatusOr<std::unique_ptr<LoadedExecutable>>
 PjRtLoadedExecutable::CreateInternal(
     PjRtCompatibleClient* client,
     std::shared_ptr<xla::PjRtLoadedExecutable> pjrt_loaded_executable,
@@ -473,10 +470,9 @@ PjRtLoadedExecutable::PjRtLoadedExecutable(
 
 PjRtLoadedExecutable::~PjRtLoadedExecutable() = default;
 
-absl::StatusOr<PjRtLoadedExecutable::ExecuteResult>
-PjRtLoadedExecutable::Execute(absl::Span<tsl::RCReference<Array>> args,
-                              const ExecuteOptions& options,
-                              std::optional<DeviceList> devices) {
+StatusOr<PjRtLoadedExecutable::ExecuteResult> PjRtLoadedExecutable::Execute(
+    absl::Span<tsl::RCReference<Array>> args, const ExecuteOptions& options,
+    std::optional<DeviceList> devices) {
   DCHECK(this);
   // TODO(hyeontaek): Check input sharding consistency.
 
@@ -533,7 +529,7 @@ PjRtLoadedExecutable::Execute(absl::Span<tsl::RCReference<Array>> args,
   auto opts = options;
 
   if (!all_loaded_host_callbacks_->empty() && !returned_future_supported) {
-    return Internal(
+    return InternalError(
         "Host callback not supported without returned future support in "
         "runtime: %s",
         client_->runtime_type());
@@ -613,7 +609,7 @@ PjRtLoadedExecutable::Execute(absl::Span<tsl::RCReference<Array>> args,
   if (pjrt_outputs.size() != num_computations) {
     return FailedPrecondition(
         "Unexpected number of computations in outputs: %d vs. %d",
-        pjrt_outputs.size(), num_computations);
+        pjrt_outputs.front().size(), num_computations);
   }
   const int num_outputs = pjrt_outputs.front().size();
   if (num_outputs != output_dtypes_.size()) {
@@ -671,22 +667,13 @@ PjRtLoadedExecutable::Execute(absl::Span<tsl::RCReference<Array>> args,
   return result;
 }
 
-absl::StatusOr<std::optional<std::string>> PjRtLoadedExecutable::Fingerprint()
-    const {
+StatusOr<std::optional<std::string>> PjRtLoadedExecutable::Fingerprint() const {
   DCHECK(this);
-  absl::StatusOr<std::string> fingerprint =
-      pjrt_loaded_executable_->FingerprintExecutable();
-  if (fingerprint.ok()) {
-    return {fingerprint.value()};
-  } else if (fingerprint.status().code() == absl::StatusCode::kUnimplemented) {
-    // Return nullopt in case of unimplemented error.
-    return std::nullopt;
-  } else {
-    return fingerprint.status();
-  }
+  return client_->pjrt_client()->ExecutableFingerprint(
+      *pjrt_loaded_executable_);
 }
 
-absl::StatusOr<std::string> PjRtLoadedExecutable::Serialize() const {
+StatusOr<std::string> PjRtLoadedExecutable::Serialize() const {
   DCHECK(this);
   return pjrt_loaded_executable_->SerializeExecutable();
 }

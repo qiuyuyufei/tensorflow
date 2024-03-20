@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "tensorflow/core/common_runtime/gpu/gpu_device.h"
 
+#include "xla/stream_executor/device_id_utils.h"
 #include "xla/stream_executor/gpu/gpu_cudamallocasync_allocator.h"
 #include "xla/stream_executor/gpu/gpu_init.h"
 #include "tensorflow/core/common_runtime/gpu/gpu_process_state.h"
@@ -45,8 +46,9 @@ using ::testing::SizeIs;
 const char* kDeviceNamePrefix = "/job:localhost/replica:0/task:0";
 
 int64_t GetTotalGPUMemory(tsl::PlatformDeviceId gpu_id) {
-  se::StreamExecutor* se =
-      se::GPUMachineManager()->ExecutorForDevice(gpu_id.value()).value();
+  se::StreamExecutor* se = se::DeviceIdUtil::ExecutorForPlatformDeviceId(
+                               se::GPUMachineManager(), gpu_id)
+                               .value();
 
   int64_t total_memory, available_memory;
   CHECK(se->DeviceMemoryUsage(&available_memory, &total_memory));
@@ -54,8 +56,8 @@ int64_t GetTotalGPUMemory(tsl::PlatformDeviceId gpu_id) {
 }
 
 se::CudaComputeCapability GetComputeCapability() {
-  return se::GPUMachineManager()
-      ->ExecutorForDevice(0)
+  return se::DeviceIdUtil::ExecutorForPlatformDeviceId(se::GPUMachineManager(),
+                                                       tsl::PlatformDeviceId(0))
       .value()
       ->GetDeviceDescription()
       .cuda_compute_capability();

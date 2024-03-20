@@ -14,11 +14,11 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/core/data/service/snapshot/utils.h"
 
+#include <cstdint>
 #include <vector>
 
 #include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
-#include "tensorflow/core/data/service/byte_size.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor.pb.h"
 #include "tsl/platform/errors.h"
@@ -27,14 +27,14 @@ limitations under the License.
 namespace tensorflow {
 namespace data {
 
-ByteSize EstimatedSize(const std::vector<Tensor>& tensors) {
-  ByteSize byte_size;
+int64_t EstimatedSizeBytes(const std::vector<Tensor>& tensors) {
+  int64_t size_bytes = 0;
   for (const Tensor& tensor : tensors) {
     TensorProto proto;
     tensor.AsProtoTensorContent(&proto);
-    byte_size += ByteSize::Bytes(proto.ByteSizeLong());
+    size_bytes += proto.ByteSizeLong();
   }
-  return byte_size;
+  return size_bytes;
 }
 
 }  // namespace data

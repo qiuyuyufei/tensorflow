@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,15 +36,13 @@ class CpuElementalIrEmitter : public ElementalIrEmitter {
         ir_emitter_(ir_emitter) {}
 
  protected:
-  absl::StatusOr<llvm::Value*> EmitAtan2(PrimitiveType prim_type,
-                                         llvm::Value* lhs, llvm::Value* rhs,
-                                         absl::string_view name) override;
-  absl::StatusOr<llvm::Value*> EmitTanh(PrimitiveType prim_type,
-                                        llvm::Value* value) override;
-  absl::StatusOr<llvm::Value*> EmitErf(PrimitiveType prim_type,
-                                       llvm::Value* value) override;
+  StatusOr<llvm::Value*> EmitAtan2(PrimitiveType prim_type, llvm::Value* lhs,
+                                   llvm::Value* rhs,
+                                   absl::string_view name) override;
+  StatusOr<llvm::Value*> EmitTanh(PrimitiveType prim_type,
+                                  llvm::Value* value) override;
 
-  absl::StatusOr<std::vector<llvm::Value*>> EmitThreadLocalCall(
+  StatusOr<std::vector<llvm::Value*>> EmitThreadLocalCall(
       const HloComputation& callee, absl::Span<llvm::Value* const> parameters,
       absl::string_view name, bool is_reducer) override {
     return ir_emitter_->EmitThreadLocalCall(callee, parameters, name,

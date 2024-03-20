@@ -24,6 +24,7 @@ package(
 #         "@llvm-project//llvm:FileCheck",
 #         "@llvm-project//llvm:not",
 #         "@llvm-project//mlir:run_lit.sh",
+#         "//tensorflow/compiler/mlir/tfrt:lhlo-tfrt-opt",
 #     ],
 # )
 #

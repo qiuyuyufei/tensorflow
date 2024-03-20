@@ -1,5 +1,5 @@
 
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -123,7 +123,7 @@ class ReduceDecomposerVisitor : public DfsHloRewriteVisitor {
   }
 
  private:
-  absl::StatusOr<HloInstruction*> GetOutput(HloInstruction* instr, int idx) {
+  StatusOr<HloInstruction*> GetOutput(HloInstruction* instr, int idx) {
     if (instr->shape().IsTuple()) {
       return MakeGetTupleElementHlo(instr, idx);
     } else {
@@ -147,7 +147,7 @@ class ReduceDecomposerVisitor : public DfsHloRewriteVisitor {
 
 }  // namespace
 
-absl::StatusOr<bool> ReduceDecomposer::Run(
+StatusOr<bool> ReduceDecomposer::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   TF_ASSIGN_OR_RETURN(bool changed1,

@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -263,7 +263,7 @@ class LayoutAssignment : public HloModulePass {
   // Assign layouts to the given module. Returns whether the module was changed
   // (any layouts were changed).
   using HloPassInterface::Run;
-  absl::StatusOr<bool> Run(
+  StatusOr<bool> Run(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads) override;
 
@@ -273,9 +273,7 @@ class LayoutAssignment : public HloModulePass {
    public:
     explicit LayoutConstraints(HloComputation* computation,
                                ComputationLayout* computation_layout,
-                               int64_t priority)
-        : computation_(computation),
-          computation_constraint_(computation, computation_layout, priority) {}
+                               int64_t priority);
     ~LayoutConstraints() = default;
 
     const HloComputation* computation() const { return computation_; }
@@ -464,8 +462,8 @@ class LayoutAssignment : public HloModulePass {
   Status PropagateUnconstraintedBuffers(LayoutConstraints* constraints);
   const BufferLayoutConstraint* GetBufferLayoutConstraint(
       const LogicalBuffer& buffer) const;
-  absl::StatusOr<const BufferLayoutConstraint*>
-  GetInstructionBufferLayoutConstraint(const HloInstruction* instruction) const;
+  StatusOr<const BufferLayoutConstraint*> GetInstructionBufferLayoutConstraint(
+      const HloInstruction* instruction) const;
   // Find a bufferset in the bufferset cache. This is useful since we can
   // currently create the flattened buffer set for the same instruction many
   // times, which is often slow.
@@ -479,8 +477,8 @@ class LayoutAssignment : public HloModulePass {
   // buffers of its operands and would return true for each of its operands.
   bool AnyOperandBufferForwarded(const HloInstruction* instruction,
                                  int64_t operand_no) const;
-  absl::StatusOr<Layout> InferArrayLayout(const HloInstruction* instruction,
-                                          const ShapeIndex& index);
+  StatusOr<Layout> InferArrayLayout(const HloInstruction* instruction,
+                                    const ShapeIndex& index);
 
   // Propagates a buffer layout constraint into the operands that use it.
   Status PropagateBufferConstraintToUses(
@@ -619,7 +617,7 @@ class LayoutAssignment : public HloModulePass {
   // Creates and returns a copy of the given instruction with a different
   // layout. Tuple-shaped instructions will be deep-copied, and the last Tuple
   // instruction producing the copy is returned.
-  absl::StatusOr<HloInstruction*> CreateCopyWithNewLayout(
+  StatusOr<HloInstruction*> CreateCopyWithNewLayout(
       const Shape& shape_with_layout, HloInstruction* instruction);
 
   // Creates a copy of the given operand if the operand's layout does not match

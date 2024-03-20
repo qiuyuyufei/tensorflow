@@ -35,7 +35,7 @@ class MLIRContextResource : public ResourceBase {
 
   static Status Create(MLIRContextResource** resource) {
     *resource = new MLIRContextResource();
-    return absl::OkStatus();
+    return OkStatus();
   }
   mlir::MLIRContext* GetContext() { return &mlir_ctx_; }
   std::string DebugString() const override {
@@ -84,7 +84,7 @@ Status MlirXlaOpKernel::ContextToXlaArgs(
     }
     xla_args.push_back(arg);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 MlirXlaOpKernel::MlirXlaOpKernel(OpKernelConstruction* ctx)
@@ -149,7 +149,7 @@ Status MlirXlaOpKernel::ConstructXlaOp(XlaOpKernelContext* ctx) {
     ctx->SetOutput(i, returns[i]);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void MlirXlaOpKernel::Compile(XlaOpKernelContext* ctx) {

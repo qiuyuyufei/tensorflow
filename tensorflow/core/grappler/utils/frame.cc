@@ -111,7 +111,7 @@ inline Status FrameView::InferFromGraphViewT(const GraphViewT& graph_view) {
             " does not match frame ids for it's fanout ", fanout_node->name());
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   };
 
   while (!ready_node_indices.empty()) {
@@ -138,7 +138,7 @@ inline Status FrameView::InferFromGraphViewT(const GraphViewT& graph_view) {
   }
 
   num_frames_ = static_cast<int>(frame_name_to_id.size());
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status FrameView::InferFromGraphView(const utils::GraphView& graph_view) {

@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/flat_hash_set.h"
-#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -36,7 +35,7 @@ namespace {
 
 class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
   // Turn copy->pad into pad->copy
-  absl::Status HandlePad(HloInstruction* hlo) override {
+  Status HandlePad(HloInstruction* hlo) override {
     HloInstruction* operand = hlo->mutable_operand(0);
     HloInstruction* c = hlo->mutable_operand(1);
     if (operand->opcode() == HloOpcode::kCopy) {
@@ -50,11 +49,11 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
       HloInstruction* later_copy = MakeCopyHlo(earlier_pad, hlo->shape());
       TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, later_copy));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Turn copy->slice into slice->copy, as slice is layout-preserving.
-  absl::Status HandleSlice(HloInstruction* hlo) override {
+  Status HandleSlice(HloInstruction* hlo) override {
     HloInstruction* operand = hlo->mutable_operand(0);
     if (operand->opcode() == HloOpcode::kCopy) {
       HloInstruction* copied = operand->mutable_operand(0);
@@ -67,12 +66,12 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
       HloInstruction* later_copy = MakeCopyHlo(earlier_slice, hlo->shape());
       TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, later_copy));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Turn copy->reduce_window into reduce_window->copy, as reduce_window is
   // layout-preserving.
-  absl::Status HandleReduceWindow(HloInstruction* hlo) override {
+  Status HandleReduceWindow(HloInstruction* hlo) override {
     HloInstruction* operand = hlo->mutable_operand(0);
     if (operand->opcode() == HloOpcode::kCopy) {
       HloInstruction* copied = operand->mutable_operand(0);
@@ -86,10 +85,10 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
           MakeCopyHlo(earlier_reduce_window, hlo->shape());
       TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, later_copy));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
-  absl::Status HandleReduce(HloInstruction* hlo) override {
+  Status HandleReduce(HloInstruction* hlo) override {
     HloInstruction* operand = hlo->mutable_operand(0);
     // Reductions can handle transposes, e.g. via column reduction.
     if (operand->opcode() == HloOpcode::kCopy && !hlo->shape().IsTuple()) {
@@ -98,18 +97,18 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
                                                    hlo->mutable_operand(1)}));
       TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, new_reduce));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
-  absl::Status HandleBitcastConvert(HloInstruction* hlo) override {
-    return absl::OkStatus();
+  Status HandleBitcastConvert(HloInstruction* hlo) override {
+    return OkStatus();
   }
 
   // Sink kCopy across elementwise unary.
-  absl::Status HandleElementwiseUnary(HloInstruction* hlo) override {
+  Status HandleElementwiseUnary(HloInstruction* hlo) override {
     HloInstruction* operand = hlo->mutable_operand(0);
     if (hlo->opcode() == HloOpcode::kReducePrecision) {
-      return absl::OkStatus();
+      return OkStatus();
     }
     if (operand->opcode() == HloOpcode::kCopy) {
       HloInstruction* copied = operand->mutable_operand(0);
@@ -120,11 +119,11 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
           MakeCopyHlo(earlier_elementwise, hlo->shape());
       TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, later_copy));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Sink kCopy across reverse
-  absl::Status HandleReverse(HloInstruction* hlo) override {
+  Status HandleReverse(HloInstruction* hlo) override {
     HloInstruction* operand = hlo->mutable_operand(0);
     if (operand->opcode() == HloOpcode::kCopy) {
       HloInstruction* copied = operand->mutable_operand(0);
@@ -134,11 +133,11 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
       HloInstruction* later_copy = MakeCopyHlo(earlier_reverse, hlo->shape());
       TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, later_copy));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Sink kCopy across convert.
-  absl::Status HandleConvert(HloInstruction* hlo) override {
+  Status HandleConvert(HloInstruction* hlo) override {
     HloInstruction* operand = hlo->mutable_operand(0);
     if (operand->opcode() == HloOpcode::kCopy) {
       HloInstruction* copied = operand->mutable_operand(0);
@@ -147,11 +146,11 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
       HloInstruction* later_copy = MakeCopyHlo(earlier_convert, hlo->shape());
       TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, later_copy));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Sink kCopy across elementwise binary.
-  absl::Status HandleElementwiseBinary(HloInstruction* hlo) override {
+  Status HandleElementwiseBinary(HloInstruction* hlo) override {
     HloInstruction* a = hlo->mutable_operand(0);
     HloInstruction* b = hlo->mutable_operand(1);
     if (a->opcode() == HloOpcode::kCopy && b->opcode() == HloOpcode::kCopy) {
@@ -174,14 +173,14 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
         TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, later_copy));
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Move copy across kConcat if it occurs on all operands.
-  absl::Status HandleConcatenate(HloInstruction* hlo) override {
+  Status HandleConcatenate(HloInstruction* hlo) override {
     const HloInstruction* first = hlo->operand(0);
     if (first->opcode() != HloOpcode::kCopy) {
-      return absl::OkStatus();
+      return OkStatus();
     }
     const HloInstruction* inner_op = first->operand(0);
     const Layout& inner_op_layout = inner_op->shape().layout();
@@ -193,7 +192,7 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
           op->operand(0)->shape().layout() != inner_op_layout) {
         VLOG(3) << "Mismatch between " << op->ToString()
                 << " and expected op layout " << inner_op_layout.ToString();
-        return absl::OkStatus();
+        return OkStatus();
       }
       new_operands.push_back(op->mutable_operand(0));
     }
@@ -205,13 +204,13 @@ class MoveCopyToUsersVisitor : public DfsHloRewriteVisitor {
 
     HloInstruction* new_copy = MakeCopyHlo(new_concat, hlo->shape());
     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, new_copy));
-    return absl::OkStatus();
+    return OkStatus();
   }
 };
 
 }  // end namespace
 
-absl::StatusOr<bool> MoveCopyToUsers::Run(
+StatusOr<bool> MoveCopyToUsers::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   return MoveCopyToUsersVisitor{}.RunOnModule(module, execution_threads);

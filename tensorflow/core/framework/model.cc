@@ -18,14 +18,12 @@ limitations under the License.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <queue>
 
 #include "absl/time/clock.h"
 #include "tensorflow/core/framework/cancellation.h"
-#include "tensorflow/core/framework/metrics.h"
 #include "tensorflow/core/framework/model.pb.h"
 #include "tensorflow/core/lib/gtl/cleanup.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -155,7 +153,7 @@ class ModelTimingPriorityQueue {
   }
 
   // Pops the top item from the queue, i.e. node with the largest total time.
-  absl::StatusOr<std::pair<double, Node*>> PopSlowestStageRoot() {
+  StatusOr<std::pair<double, Node*>> PopSlowestStageRoot() {
     if (stage_roots_queue_.empty()) {
       return errors::Internal(
           "Model timing priority queue is empty during stage-based "
@@ -551,7 +549,7 @@ class InterleaveMany : public Node {
         self_processing_time + inputs_processing_time;
   }
 
-  Status ToProto(ModelProto::Node* node_proto) const override {
+  Status ToProto(ModelProto::Node* node_proto) const {
     TF_RETURN_IF_ERROR(Node::ToProto(node_proto));
     node_proto->set_node_class(NodeClass::INTERLEAVE_MANY);
     return OkStatus();
@@ -763,7 +761,7 @@ class AsyncInterleaveMany : public Node {
         self_processing_time + inputs_processing_time;
   }
 
-  double MaximumBufferedBytes() const override TF_SHARED_LOCKS_REQUIRED(mu_) {
+  double MaximumBufferedBytes() const TF_SHARED_LOCKS_REQUIRED(mu_) {
     auto* parameter = gtl::FindOrNull(parameters_, kMaxBufferedElements);
     if (parameter == nullptr) {
       parameter = gtl::FindOrNull(parameters_, kParallelism);
@@ -774,7 +772,7 @@ class AsyncInterleaveMany : public Node {
     return (*parameter)->value * AverageBufferedElementSizeLocked();
   }
 
-  Status ToProto(ModelProto::Node* node_proto) const override {
+  Status ToProto(ModelProto::Node* node_proto) const {
     TF_RETURN_IF_ERROR(Node::ToProto(node_proto));
     node_proto->set_node_class(NodeClass::ASYNC_INTERLEAVE_MANY);
     return OkStatus();
@@ -866,7 +864,7 @@ class KnownRatio : public Node {
         self_processing_time + inputs_processing_time;
   }
 
-  Status ToProto(ModelProto::Node* node_proto) const override {
+  Status ToProto(ModelProto::Node* node_proto) const {
     TF_RETURN_IF_ERROR(Node::ToProto(node_proto));
     node_proto->set_node_class(NodeClass::KNOWN_RATIO);
     node_proto->set_ratio(ratio_);
@@ -883,9 +881,9 @@ class AsyncRatio : public Node {
              std::vector<std::shared_ptr<Parameter>> parameters,
              bool is_legacy_prefetch_autotuned = false)
       : Node(args),
-        is_legacy_prefetch_autotuned_(is_legacy_prefetch_autotuned),
         ratio_(ratio),
-        memory_ratio_(memory_ratio) {
+        memory_ratio_(memory_ratio),
+        is_legacy_prefetch_autotuned_(is_legacy_prefetch_autotuned) {
     for (auto& parameter : parameters) {
       parameters_[parameter->name] = std::move(parameter);
     }
@@ -1114,10 +1112,6 @@ class AsyncRatio : public Node {
     return result;
   }
 
-  // Whether this node represents a prefetch node tuned by the legacy prefetch
-  // autotuner, rather than the model.
-  const bool is_legacy_prefetch_autotuned_;
-
  private:
   // Identifies how many input elements need to be created to construct an
   // element for the dataset.
@@ -1130,6 +1124,9 @@ class AsyncRatio : public Node {
   // budget bound with given num_parallel_calls (or buffer_size) combined with
   // the estimated average size of buffered elements.
   const double memory_ratio_;
+  // Whether this node represents a prefetch node tuned by the legacy prefetch
+  // autotuner, rather than the model.
+  const bool is_legacy_prefetch_autotuned_;
 };
 
 class UnknownRatio : public Node {
@@ -1246,7 +1243,7 @@ class UnknownRatio : public Node {
         self_processing_time + inputs_processing_time;
   }
 
-  Status ToProto(ModelProto::Node* node_proto) const override {
+  Status ToProto(ModelProto::Node* node_proto) const {
     TF_RETURN_IF_ERROR(Node::ToProto(node_proto));
     node_proto->set_node_class(NodeClass::UNKNOWN_RATIO);
     return OkStatus();
@@ -1300,7 +1297,7 @@ class Unknown : public Node {
         TotalProcessingTimeForInputs(*total_processing_times);
   }
 
-  Status ToProto(ModelProto::Node* node_proto) const override {
+  Status ToProto(ModelProto::Node* node_proto) const {
     TF_RETURN_IF_ERROR(Node::ToProto(node_proto));
     node_proto->set_node_class(NodeClass::UNKNOWN);
     return OkStatus();
@@ -1329,23 +1326,11 @@ class AsyncKnownRatio : public AsyncRatio {
         parameters);
   }
 
-  Status ToProto(ModelProto::Node* node_proto) const override {
+  Status ToProto(ModelProto::Node* node_proto) const {
     TF_RETURN_IF_ERROR(Node::ToProto(node_proto));
     node_proto->set_node_class(NodeClass::ASYNC_KNOWN_RATIO);
     node_proto->set_ratio(Ratio());
     node_proto->set_memory_ratio(MemoryRatio());
-    if (is_legacy_prefetch_autotuned_) {
-      // Update buffer_size parameter to make sense from a user perspective.
-      if (node_proto->parameters_size() != 1) {
-        return absl::InternalError(absl::StrCat(
-            "Expected prefetch node to have one parameter, but it has ",
-            node_proto->parameters_size()));
-      }
-      auto* parameter = node_proto->mutable_parameters(0);
-      // Legacy autotuner only modifies the state_value, not the model value.
-      parameter->set_value(parameter->state_value());
-      parameter->set_tunable(true);
-    }
     return OkStatus();
   }
 };
@@ -1386,7 +1371,7 @@ class AsyncUnknownRatio : public AsyncRatio {
         Args{id_, name_, std::move(output)}, parameters);
   }
 
-  Status ToProto(ModelProto::Node* node_proto) const override {
+  Status ToProto(ModelProto::Node* node_proto) const {
     TF_RETURN_IF_ERROR(Node::ToProto(node_proto));
     node_proto->set_node_class(NodeClass::ASYNC_UNKNOWN_RATIO);
     return OkStatus();
@@ -1951,26 +1936,6 @@ void Node::CollectBufferParametersToUpsize(
   }
 }
 
-void Node::SyncStateValuesToParameterValues(const std::string& parameter_name) {
-  // We need to first collect the parameters because `parameter->state->mu` must
-  // be locked before the node mutex `mu_`;
-  std::vector<Parameter*> parameters;
-  {
-    tf_shared_lock l(mu_);
-    for (auto& [node_name, parameter] : parameters_) {
-      if ((parameter->state == nullptr) ||
-          (parameter->name != parameter_name)) {
-        continue;
-      }
-      parameters.push_back(parameter.get());
-    }
-  }
-  for (auto& parameter : parameters) {
-    tf_shared_lock l(*parameter->state->mu);
-    parameter->value = parameter->state->value;
-  }
-}
-
 Node::NodeVector Node::CollectNodesLocked(
     TraversalOrder order, bool collect_node(const std::shared_ptr<Node>)) const
     TF_SHARED_LOCKS_REQUIRED(mu_) {
@@ -2237,13 +2202,11 @@ Status Node::FromProto(ModelProto::Node node_proto,
   return FromProtoHelper(node_proto, *node);
 }
 
-Model::Model(std::optional<std::string> dataset_name)
-    : dataset_name_(std::move(dataset_name)),
-      optimization_period_ms_(kOptimizationPeriodMinMs),
+Model::Model()
+    : optimization_period_ms_(kOptimizationPeriodMinMs),
       safe_to_collect_metrics_(std::make_shared<GuardedBool>(true)) {
-  model_id_ = strings::StrCat(reinterpret_cast<uint64>(this));
-  model_gauge_cell_ = metrics::GetTFDataModelGauge(model_id_);
-
+  model_gauge_cell_ = metrics::GetTFDataModelGauge(
+      strings::StrCat(reinterpret_cast<uint64>(this)));
   // Capture `safe_to_collect_metrics_` by value to avoid use-after-free issues
   // when the callback is invoked after the model has been destroyed.
   model_gauge_cell_->Set(
@@ -2262,9 +2225,6 @@ Model::Model(std::optional<std::string> dataset_name)
               tf_shared_lock l(gap_mu_);
               *model_proto.mutable_gap_times() = {gap_times_usec_.begin(),
                                                   gap_times_usec_.end()};
-              if (dataset_name_.has_value()) {
-                model_proto.set_dataset_name(dataset_name_.value());
-              }
               return model_proto.DebugString();
             }
             LOG(WARNING) << s.message();
@@ -2277,8 +2237,6 @@ Model::Model(std::optional<std::string> dataset_name)
 Model::~Model() {
   mutex_lock l(safe_to_collect_metrics_->mu);
   safe_to_collect_metrics_->val = false;
-  // Reset the pipeline processing time to 0
-  metrics::RecordPipelineProcessingTime(model_id_, 0);
 }
 
 void Model::AddNode(Node::Factory factory, const string& name,
@@ -2333,7 +2291,6 @@ void Model::Optimize(AutotuneAlgorithm algorithm,
     tf_shared_lock l(mu_);
     snapshot = output_->Snapshot();
   }
-  MaybeSyncStateValuesToValues(snapshot);
   int64_t total_ram_budget;
   if (fixed_ram_budget.has_value()) {
     total_ram_budget = fixed_ram_budget.value();
@@ -2399,40 +2356,7 @@ void Model::Optimize(AutotuneAlgorithm algorithm,
     mutex_lock l(mu_);
     snapshot_ = snapshot;
     optimization_params_ = optimization_params;
-
-    if (snapshot_) {
-      double pipeline_processing_usec = 0;
-      ModelTiming model_timing(snapshot_);
-      auto bfs_stage_roots = model_timing.GetStageRoots();
-      for (const auto& root : bfs_stage_roots) {
-        auto* root_timing = model_timing.GetTiming(root.get());
-        if (root_timing == nullptr) {
-          constexpr int TEN_MINUTES = 60 * 10;
-          LOG_EVERY_N_SEC(ERROR, TEN_MINUTES)
-              << "Encounter an error when computing the pipeline processing "
-                 "time for "
-                 "/tensorflow/data/pipeline_processing_time";
-          pipeline_processing_usec = 0;
-          break;
-        }
-
-        double root_total_time_usec = root_timing->total_time_nsec *
-                                      root_timing->pipeline_ratio /
-                                      EnvTime::kMicrosToNanos;
-
-        pipeline_processing_usec =
-            std::max(pipeline_processing_usec, root_total_time_usec);
-      }
-      // Only updates the pipeline processing time when it is greater than 0.
-      // If it is zero, we assume the pipeline processing time is the same
-      // as the previous one and do not update it.
-      if (pipeline_processing_usec > 0) {
-        metrics::RecordPipelineProcessingTime(model_id_,
-                                              pipeline_processing_usec);
-      }
-    }
   }
-  VLOG(2) << ram_budget_manager.DebugString();
 }
 
 void Model::RemoveNode(std::shared_ptr<Node> node) {
@@ -2452,13 +2376,18 @@ Model::ModelParameters Model::CollectTunableParameters(
   return node->CollectTunableParameters();
 }
 
-void Model::MaybeSyncStateValuesToValues(std::shared_ptr<Node> snapshot) {
-  auto subtree_nodes = snapshot->CollectNodes(TraversalOrder::BFS, IsAnyNode);
-  for (const auto& node : subtree_nodes) {
-    if (!absl::StartsWith(node->name(), kDataService)) {
+void Model::MaybeSyncStateValuesToValues(Model::ModelParameters* parameters) {
+  for (auto& [node_name, parameter] : *parameters) {
+    // We only sync state values to values for `DataService` nodes because the
+    // `buffer_size` parameter is set by the `DataServiceClient` directly.
+    if (!absl::StartsWith(node_name, kDataService)) {
       continue;
     }
-    node->SyncStateValuesToParameterValues(kBufferSize);
+    if (parameter->name != kBufferSize) {
+      continue;
+    }
+    mutex_lock l(*parameter->state->mu);
+    parameter->value = parameter->state->value;
   }
 }
 
@@ -2655,6 +2584,7 @@ void Model::OptimizeHillClimbHelper(
   VLOG(2) << "Starting optimization of tunable parameters with Hill Climb.";
   const double processing_time = TotalProcessingTime(snapshot);
   auto parameters = CollectTunableParameters(snapshot);
+  MaybeSyncStateValuesToValues(&parameters);
   if (parameters.empty()) {
     VLOG(2) << "There are no tunable parameters.";
     return;
@@ -2796,7 +2726,7 @@ double Model::ComputeSnapshotProcessingTimeNsec() const {
   }
 
   ModelTimingPriorityQueue priority_queue(*model_timing);
-  absl::StatusOr<std::pair<double, Node*>> critical_root_status =
+  StatusOr<std::pair<double, Node*>> critical_root_status =
       priority_queue.PopSlowestStageRoot();
   if (!critical_root_status.ok()) {
     return 0.0;
@@ -2847,7 +2777,7 @@ void Model::OptimizeStageBasedAsyncInterleaveManyNodes(
   ModelTimingPriorityQueue priority_queue(model_timing);
   NodeParallelismParameters node_parallelism;
   while (!cancellation_manager->IsCancelled()) {
-    absl::StatusOr<std::pair<double, Node*>> critical_root_status =
+    StatusOr<std::pair<double, Node*>> critical_root_status =
         priority_queue.PopSlowestStageRoot();
     if (!critical_root_status.ok()) {
       // All async interleave many nodes have been processed.
@@ -2928,7 +2858,7 @@ void Model::OptimizeStageBasedNonAsyncInterleaveManyNodes(
   }
   ModelTiming model_timing(snapshot);
   ModelTimingPriorityQueue priority_queue(model_timing);
-  absl::StatusOr<std::pair<double, Node*>> critical_root_status =
+  StatusOr<std::pair<double, Node*>> critical_root_status =
       priority_queue.PopSlowestStageRoot();
   if (!critical_root_status.ok()) {
     metrics::RecordTFDataAutotuneStoppingCriteria("empty_critical_queue");
@@ -3167,16 +3097,7 @@ double Model::TotalProcessingTime(std::shared_ptr<Node> node) {
 Status Model::ToProto(ModelProto* model_proto) {
   tf_shared_lock l(mu_);
   model_proto->set_id_counter(id_counter_);
-  TF_RETURN_IF_ERROR(ModelToProtoHelper(output_, model_proto));
-  model_proto->set_id_counter(id_counter_);
-  *model_proto->mutable_optimization_params() = optimization_params_;
-  if (dataset_name_.has_value()) {
-    model_proto->set_dataset_name(dataset_name_.value());
-  }
-  tf_shared_lock gap_lock(gap_mu_);
-  *model_proto->mutable_gap_times() = {gap_times_usec_.begin(),
-                                       gap_times_usec_.end()};
-  return OkStatus();
+  return ModelToProtoHelper(output_, model_proto);
 }
 
 Status Model::FromProto(ModelProto model_proto, std::unique_ptr<Model>* model) {

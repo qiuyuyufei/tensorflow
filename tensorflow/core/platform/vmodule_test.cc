@@ -45,8 +45,7 @@ int RealMain(const char* argv0, bool do_vlog) {
         tsl::internal::LogMessage::VmoduleActivated("vmodule_test.cc", 7) &&
         tsl::internal::LogMessage::VmoduleActivated("shoobadooba.h", 3);
     if (!ok) {
-      fprintf(stderr,
-              "vmodule activated levels not as expected.\n[  FAILED  ]\n");
+      fprintf(stderr, "vmodule activated levels not as expected.\n");
       return EXIT_FAILURE;
     }
 #endif
@@ -83,7 +82,7 @@ int RealMain(const char* argv0, bool do_vlog) {
   }
 
   // Read data from the child's stdout.
-  constexpr int kBufferSizeBytes = 8192;
+  constexpr int kBufferSizeBytes = 4096;
   char buffer[kBufferSizeBytes];
   size_t result = fread(buffer, sizeof(buffer[0]), kBufferSizeBytes - 1, f);
   if (result == 0) {
@@ -104,10 +103,6 @@ int RealMain(const char* argv0, bool do_vlog) {
   if (strstr(buffer, kExpected) == nullptr) {
     fprintf(stderr, "error: unexpected output from child: \"%.*s\"\n",
             kBufferSizeBytes, buffer);
-    fprintf(stderr,
-            "\n\nCould not find string \"%s\" in the above log buffer.\n[  "
-            "FAILED  ]\n",
-            kExpected);
     return EXIT_FAILURE;
   }
   bool ok = strstr(buffer, "VLOG(7)\n") != nullptr &&
@@ -116,14 +111,10 @@ int RealMain(const char* argv0, bool do_vlog) {
   if (!ok) {
     fprintf(stderr, "error: VLOG output not as expected: \"%.*s\"\n",
             kBufferSizeBytes, buffer);
-    fprintf(stderr,
-            "\n\nCould not find expected VLOG statements in the above log "
-            "buffer.\n[  FAILED  ]\n");
     return EXIT_FAILURE;
   }
 
   // Success!
-  fprintf(stderr, "\n[  PASSED  ]\n");
   return EXIT_SUCCESS;
 }
 

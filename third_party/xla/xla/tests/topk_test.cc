@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,25 +22,37 @@ namespace {
 
 class TopkTest : public HloTestBase {};
 
-XLA_TEST_F(TopkTest, LargestTopK) {
+XLA_TEST_F(TopkTest, SimpleTopK) {
   absl::string_view hlo = R"(
 HloModule topk
 
+compare {
+  p.0.lhs = bf16[] parameter(0)
+  p.0.rhs = bf16[] parameter(1)
+  ROOT lt = pred[] compare(p.0.lhs, p.0.rhs), direction=GT
+}
+
 ENTRY TopK {
   x = bf16[10,10] parameter(0)
-  ROOT topk = (bf16[10,2], s32[10,2]) topk(x), k=2, largest=true
+  ROOT topk = (bf16[10,2], s32[10,2]) topk(x), k=2, to_apply=compare
 }
 )";
   EXPECT_TRUE(RunAndCompare(hlo, ErrorSpec{1e-5, 1e-5}));
 }
 
-XLA_TEST_F(TopkTest, SmallestTopK) {
+XLA_TEST_F(TopkTest, SimpleTopKReverseDirection) {
   absl::string_view hlo = R"(
 HloModule topk
 
+compare {
+  p.0.lhs = bf16[] parameter(0)
+  p.0.rhs = bf16[] parameter(1)
+  ROOT lt = pred[] compare(p.0.lhs, p.0.rhs), direction=LT
+}
+
 ENTRY TopK {
   x = bf16[10,10] parameter(0)
-  ROOT topk = (bf16[10,2], s32[10,2]) topk(x), k=2, largest=false
+  ROOT topk = (bf16[10,2], s32[10,2]) topk(x), k=2, to_apply=compare
 }
 )";
   EXPECT_TRUE(RunAndCompare(hlo, ErrorSpec{1e-5, 1e-5}));

@@ -307,7 +307,7 @@ Status SessionMgr::CreateSession(
     activity_watcher::MaybeEnableMultiWorkersWatching(
         coordination_service_agent_.get());
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void SessionMgr::ResetDefaultWorkerCache(WorkerCacheInterface* worker_cache) {
@@ -374,7 +374,7 @@ Status SessionMgr::UpdateSession(
   TF_RETURN_IF_ERROR(worker_session->UpdateWorkerCacheAndDevices(
       std::unique_ptr<WorkerCacheInterface>(worker_cache),
       std::move(added_remote_devices), removed_remote_devices));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status SessionMgr::DeleteSession(const std::string& session) {
@@ -383,20 +383,7 @@ Status SessionMgr::DeleteSession(const std::string& session) {
   if (it != sessions_.end()) {
     sessions_.erase(it);
   }
-  return absl::OkStatus();
-}
-
-Status SessionMgr::DeleteAllSessions() {
-  std::map<std::string, std::shared_ptr<WorkerSession>> tmp_sessions;
-  {
-    mutex_lock l(mu_);
-    swap(sessions_, tmp_sessions);
-  }
-  for (auto& session : tmp_sessions) {
-    session.second.reset();
-  }
-
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status SessionMgr::WorkerSessionForSessionLocked(
@@ -419,7 +406,7 @@ Status SessionMgr::WorkerSessionForSessionLocked(
       *out_session = it->second;
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status SessionMgr::WorkerSessionForSession(

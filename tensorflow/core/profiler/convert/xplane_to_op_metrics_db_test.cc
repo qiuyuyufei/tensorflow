@@ -226,7 +226,6 @@ TEST(ConvertXPlaneToOpMetricsDb, TpuDeviceOpMetricsDb) {
 #if defined(PLATFORM_GOOGLE)
   EXPECT_THAT(op_metrics,
               EqualsProto(R"pb(metrics_db {
-                                 hlo_module_id: 1
                                  self_time_ps: 10000
                                  flops: 68
                                  occurrences: 2

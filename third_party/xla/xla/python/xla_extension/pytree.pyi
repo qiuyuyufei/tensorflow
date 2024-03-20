@@ -1,4 +1,4 @@
-# Copyright 2021 The OpenXLA Authors.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -53,6 +53,7 @@ class PyTreeDef:
   def children(self) -> List[PyTreeDef]: ...
   @staticmethod
   def make_from_node_data_and_children(
+      self,
       registry: PyTreeRegistry,
       node_data: Optional[Tuple[Type, Any]],
       children: Iterable[PyTreeDef],
@@ -70,7 +71,7 @@ class PyTreeDef:
   def serialize_using_proto(self) -> bytes: ...
   @staticmethod
   def deserialize_using_proto(
-      registry: PyTreeRegistry, data: bytes
+      self, registry: PyTreeRegistry, data: bytes
   ) -> PyTreeDef:
     ...
 

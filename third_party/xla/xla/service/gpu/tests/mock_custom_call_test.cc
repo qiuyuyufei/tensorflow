@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "xla/service/gpu/tests/gpu_codegen_test.h"
+#include "xla/tests/hlo_test_base.h"
 
 namespace xla {
 namespace gpu {

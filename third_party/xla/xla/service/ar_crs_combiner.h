@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -77,7 +77,7 @@ class ArCrsCombiner : public HloModulePass {
         spmd_partition_(spmd_partition) {}
   absl::string_view name() const override { return "ar-crs-combiner"; }
   using HloPassInterface::Run;
-  absl::StatusOr<bool> Run(
+  StatusOr<bool> Run(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads) override;
 
@@ -161,7 +161,7 @@ class ArCrsCombiner : public HloModulePass {
 
   // Performs the graph rewrite that eliminates the early AllReduce and turns
   // the later CRS into an AllReduce.
-  absl::StatusOr<bool> RewriteGraph();
+  StatusOr<bool> RewriteGraph();
 
   int num_spatial_partitions_;
 

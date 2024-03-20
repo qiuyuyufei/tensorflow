@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,13 +16,8 @@ limitations under the License.
 #ifndef XLA_SERVICE_OPERAND_UPCASTER_H_
 #define XLA_SERVICE_OPERAND_UPCASTER_H_
 
-#include <utility>
-
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
-#include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/op_expander_pass.h"
-#include "xla/util.h"
 
 namespace xla {
 
@@ -38,7 +33,7 @@ class OperandUpcaster : public OpExpanderPass {
  protected:
   bool InstructionMatchesPattern(HloInstruction* instruction) override;
 
-  absl::StatusOr<HloInstruction*> ExpandInstruction(
+  StatusOr<HloInstruction*> ExpandInstruction(
       HloInstruction* instruction) override;
 };
 

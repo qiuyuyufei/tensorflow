@@ -138,9 +138,8 @@ mlir::LogicalResult ApplyPatterns(Operation *op, RewritePatternSet &patterns,
       GetDefaultLegalConversionTargets(*op->getContext(), legalize_chlo);
 
   DenseSet<Operation *> unconverted_ops;
-  ConversionConfig config;
-  config.unlegalizedOps = &unconverted_ops;
-  auto result = applyPartialConversion(op, target, std::move(patterns), config);
+  auto result =
+      applyPartialConversion(op, target, std::move(patterns), &unconverted_ops);
   if (failed(result)) {
     IncrementFailedLegalizationCount(op, target);
   }

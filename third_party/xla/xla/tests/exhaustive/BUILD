@@ -5,8 +5,7 @@ load("//xla/tests:build_defs.bzl", "xla_test")
 load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = [":friends"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -26,6 +25,7 @@ cc_library(
     srcs = ["exhaustive_op_test_utils.cc"],
     hdrs = ["exhaustive_op_test_utils.h"],
     tags = ["no_pip"],
+    visibility = ["//visibility:public"],
     deps = [
         "//xla:bit_cast",
         "//xla:shape_util",

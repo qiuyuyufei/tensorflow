@@ -25,8 +25,6 @@ limitations under the License.
 
 using dnnl::memory;
 
-using dnnl::memory;
-
 namespace tensorflow {
 
 class MklTestingUtil {

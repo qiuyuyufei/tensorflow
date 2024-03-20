@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,34 +17,17 @@ limitations under the License.
 #define XLA_STREAM_EXECUTOR_LAZY_OP_RUNNER_H_
 
 #include <atomic>
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 
 #include "absl/base/call_once.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "xla/stream_executor/blas.h"
 #include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/stream.h"
-#include "tsl/platform/statusor.h"
-#include "tsl/protobuf/dnn.pb.h"
 
 namespace stream_executor {
 namespace dnn {
-
-namespace internal {
-// Returns the DnnSupport object for the given stream.
-inline absl::StatusOr<DnnSupport*> GetDnnFromStream(Stream* stream) {
-  auto dnn = stream->parent()->AsDnn();
-  if (dnn == nullptr) {
-    return absl::InternalError("No DNN support for stream");
-  }
-  return dnn;
-}
-}  // namespace internal
 
 // A lazily-initialized OpRunner from an AlgorithmDesc.
 //
@@ -74,10 +57,10 @@ class LazyOpRunner {
  public:
   // Construct from a pre-initialized OpRunner; all calls to GetOrCreateRunner
   // will return a pointer to exactly this runner.
-  static absl::StatusOr<std::unique_ptr<LazyOpRunner>> FromOpRunner(
+  static tsl::StatusOr<std::unique_ptr<LazyOpRunner>> FromOpRunner(
       std::unique_ptr<const OpRunner<typename Op::Signature>> runner) {
     if (!runner) {
-      return absl::InternalError("Null runner argument to FromOpRunner");
+      return tsl::errors::Internal("Null runner argument to FromOpRunner");
     }
     TF_ASSIGN_OR_RETURN(auto desc, runner->ToAlgorithmDesc());
     // Private constructor cannot be called by make_unique :(
@@ -99,7 +82,7 @@ class LazyOpRunner {
   // executor will be errors.
   //
   // The result is owned by LazyOpRunner.
-  absl::StatusOr<const OpRunner<typename Op::Signature>*> GetOrCreateRunner(
+  tsl::StatusOr<const OpRunner<typename Op::Signature>*> GetOrCreateRunner(
       typename Op::Config config, Stream* stream) {
     absl::call_once(once_flag_, [&] {
       if (runner_) return;  // runner was passed via constructor argument
@@ -117,11 +100,11 @@ class LazyOpRunner {
   }
 
   // Get the contained runner with the invariant that it's already initialized.
-  absl::StatusOr<const OpRunner<typename Op::Signature>*> GetRunner() {
+  tsl::StatusOr<const OpRunner<typename Op::Signature>*> GetRunner() {
     if (auto* runner = runner_ptr_.load(std::memory_order_acquire)) {
       return runner;
     }
-    return absl::InternalError("LazyOpRunner::GetRunner: not initialized");
+    return tsl::errors::Internal("LazyOpRunner::GetRunner: not initialized");
   }
 
   bool operator==(const LazyOpRunner& other) const {
@@ -136,7 +119,7 @@ class LazyOpRunner {
   LazyOpRunner(AlgorithmDesc desc,
                std::unique_ptr<const OpRunner<typename Op::Signature>> runner)
       : desc_(std::move(desc)),
-        error_(absl::OkStatus()),
+        error_(tsl::OkStatus()),
         runner_(std::move(runner)),
         runner_ptr_(runner_.get()) {}
 
@@ -144,7 +127,7 @@ class LazyOpRunner {
 
   // We use absl::call_once to lazily initialize `runner_` (or `error_`).
   absl::once_flag once_flag_;
-  absl::Status error_;  // holds error if runner can't be initialized
+  tsl::Status error_;  // holds error if runner can't be initialized
   std::unique_ptr<const OpRunner<typename Op::Signature>> runner_;
 
   // Once we initialize `runner_` we publish a pointer through atomic so that
@@ -165,12 +148,11 @@ struct ConvOp {
     const ConvolutionDescriptor& convolution_descriptor;
   };
 
-  static absl::StatusOr<std::unique_ptr<const OpRunner<ConvSignature>>>
+  static tsl::StatusOr<std::unique_ptr<const OpRunner<ConvSignature>>>
   RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
                           Stream* stream) {
-    TF_ASSIGN_OR_RETURN(auto dnn, internal::GetDnnFromStream(stream));
-    return dnn->ConvolveRunnerFromDesc(
-        stream, desc, config.kind, config.input_type, config.output_type,
+    return stream->ConvolveRunnerFromDesc(
+        desc, config.kind, config.input_type, config.output_type,
         config.input_descriptor, config.filter_descriptor,
         config.output_descriptor, config.convolution_descriptor);
   }
@@ -191,12 +173,11 @@ struct GraphConvOp {
     std::string serialized_graph;
   };
 
-  static absl::StatusOr<std::unique_ptr<const OpRunner<Signature>>>
+  static tsl::StatusOr<std::unique_ptr<const OpRunner<Signature>>>
   RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
                           Stream* stream) {
-    TF_ASSIGN_OR_RETURN(auto dnn, internal::GetDnnFromStream(stream));
-    return dnn->GraphConvolveRunnerFromDesc(
-        stream, desc, config.kind, config.input_type, config.output_type,
+    return stream->GraphConvolveRunnerFromDesc(
+        desc, config.kind, config.input_type, config.output_type,
         config.input_descriptor, config.filter_descriptor,
         config.output_descriptor, config.convolution_descriptor,
         config.serialized_graph);
@@ -219,48 +200,16 @@ struct FusedConvOp {
     ActivationMode activation_mode;
   };
 
-  static absl::StatusOr<std::unique_ptr<const OpRunner<FusedConvSignature>>>
+  static tsl::StatusOr<std::unique_ptr<const OpRunner<FusedConvSignature>>>
   RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
                           Stream* stream) {
-    TF_ASSIGN_OR_RETURN(auto dnn, internal::GetDnnFromStream(stream));
-    return dnn->FusedConvolveRunnerFromDesc(
-        stream, desc, config.kind, config.input_type, config.bias_type,
+    return stream->FusedConvolveRunnerFromDesc(
+        desc, config.kind, config.input_type, config.bias_type,
         config.output_type, config.conv_scale, config.side_input_scale,
         config.leakyrelu_alpha, config.input_descriptor,
         config.filter_descriptor, config.bias_descriptor,
         config.output_descriptor, config.convolution_descriptor,
         config.activation_mode);
-  }
-};
-
-// Implementation of the concept required by LazyOpRunner, for NormRunner.
-struct NormOp {
-  using Signature = NormSignature;
-
-  struct Config {
-    NormKind kind;
-    double epsilon;
-    const TensorDescriptor& x_descriptor;
-    const TensorDescriptor& scale_descriptor;
-    const TensorDescriptor& y_or_dx_descriptor;
-    std::optional<TensorDescriptor> bias_descriptor;
-    std::optional<TensorDescriptor> dy_descriptor;
-    std::optional<TensorDescriptor> expectation_descriptor;
-    std::optional<TensorDescriptor> norm_factor_descriptor;
-    std::optional<TensorDescriptor> dscale_descriptor;
-    std::optional<TensorDescriptor> dbias_descriptor;
-  };
-
-  static absl::StatusOr<std::unique_ptr<const OpRunner<Signature>>>
-  RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
-                          Stream* stream) {
-    TF_ASSIGN_OR_RETURN(auto dnn, internal::GetDnnFromStream(stream));
-    return dnn->NormRunnerFromDesc(
-        stream, desc, config.kind, config.epsilon, config.x_descriptor,
-        config.scale_descriptor, config.y_or_dx_descriptor,
-        config.bias_descriptor, config.dy_descriptor,
-        config.expectation_descriptor, config.norm_factor_descriptor,
-        config.dscale_descriptor, config.dbias_descriptor);
   }
 };
 
@@ -273,10 +222,10 @@ struct FusedMatmulOp {
   // this feature.
   struct Config {};
 
-  static absl::StatusOr<std::unique_ptr<const OpRunner<Signature>>>
+  static tsl::StatusOr<std::unique_ptr<const OpRunner<Signature>>>
   RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
                           Stream* stream) {
-    return absl::UnimplementedError("Unimplemented");
+    return tsl::errors::Unimplemented("Unimplemented");
   }
 };
 
@@ -295,21 +244,17 @@ struct FusedMHAOp {
     std::optional<TensorDescriptor> activation_descriptor;
     std::optional<double> dropout_rate;
     std::optional<int64_t> seed;
-    bool is_flash_attention;
-    bool is_causal_mask;
   };
 
-  static absl::StatusOr<std::unique_ptr<const OpRunner<FusedMHASignature>>>
+  static tsl::StatusOr<std::unique_ptr<const OpRunner<FusedMHASignature>>>
   RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
                           Stream* stream) {
-    TF_ASSIGN_OR_RETURN(auto dnn, internal::GetDnnFromStream(stream));
-    return dnn->FusedMHARunnerFromDesc(
-        stream, desc, config.kind, config.bmm1_lhs_descriptor,
+    return stream->FusedMHARunnerFromDesc(
+        desc, config.kind, config.bmm1_lhs_descriptor,
         config.bmm1_rhs_descriptor, config.bmm2_rhs_descriptor,
         config.intermediate_bmm2_lhs_descriptor, config.output_descriptor,
         config.activation_descriptor, config.mask_descriptor,
-        config.bias_descriptor, config.scale, config.dropout_rate, config.seed,
-        config.is_flash_attention, config.is_causal_mask);
+        config.bias_descriptor, config.scale, config.dropout_rate, config.seed);
   }
 };
 
@@ -327,33 +272,26 @@ struct FusedMHABackwardOp {
     const TensorDescriptor& d_bmm1_lhs_descriptor;
     const TensorDescriptor& d_bmm1_rhs_descriptor;
     const TensorDescriptor& d_bmm2_rhs_descriptor;
-    std::optional<TensorDescriptor> d_s_descriptor;
+    const TensorDescriptor& d_s_descriptor;
     std::optional<TensorDescriptor> mask_descriptor;
     std::optional<TensorDescriptor> d_bias_descriptor;
-    std::optional<TensorDescriptor> fwd_output_descriptor;
-    std::optional<TensorDescriptor> bias_descriptor;
     std::optional<double> dropout_rate;
     std::optional<int64_t> seed;
-    bool is_flash_attention;
-    bool is_causal_mask;
   };
 
-  static absl::StatusOr<
+  static tsl::StatusOr<
       std::unique_ptr<const OpRunner<FusedMHABackwardSignature>>>
   RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
                           Stream* stream) {
-    TF_ASSIGN_OR_RETURN(auto dnn, internal::GetDnnFromStream(stream));
-    return dnn->FusedMHABackwardRunnerFromDesc(
-        stream, desc, config.kind, config.bmm1_grad_gemm1_rhs_descriptor,
+    return stream->FusedMHABackwardRunnerFromDesc(
+        desc, config.kind, config.bmm1_grad_gemm1_rhs_descriptor,
         config.bmm1_grad_gemm2_rhs_descriptor,
         config.bmm2_grad_gemm1_lhs_descriptor,
         config.bmm2_grad_gemm2_rhs_descriptor, config.d_output_descriptor,
         config.d_bmm1_lhs_descriptor, config.d_bmm1_rhs_descriptor,
         config.d_bmm2_rhs_descriptor, config.d_s_descriptor,
-        config.mask_descriptor, config.d_bias_descriptor,
-        config.fwd_output_descriptor, config.bias_descriptor, config.scale,
-        config.dropout_rate, config.seed, config.is_flash_attention,
-        config.is_causal_mask);
+        config.mask_descriptor, config.d_bias_descriptor, config.scale,
+        config.dropout_rate, config.seed);
   }
 };
 

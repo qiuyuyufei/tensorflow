@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ limitations under the License.
 #include <optional>
 #include <type_traits>
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "mhlo/IR/hlo_ops.h"
@@ -26,6 +27,7 @@ limitations under the License.
 #include "mlir/Dialect/Complex/IR/Complex.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/TypeUtilities.h"
@@ -79,10 +81,6 @@ template <>
 struct MhloToScalarOp<mhlo::CosineOp> {
   using FOp = ::mlir::math::CosOp;
   using COp = ::mlir::complex::CosOp;
-};
-template <>
-struct MhloToScalarOp<mhlo::ErfOp> {
-  using FOp = ::mlir::math::ErfOp;
 };
 template <>
 struct MhloToScalarOp<mhlo::ExpOp> {
@@ -474,9 +472,10 @@ inline Value mapMhloOpToStdScalarOp<mhlo::ReducePrecisionOp>(
   mlir::ImplicitLocOpBuilder b(loc, *builder);
 
   // Integer and float types for casting and constant generation.
-  auto floatType = getElementTypeOrSelf(argTypes.front()).cast<FloatType>();
+  auto floatType =
+      argTypes.front().cast<TensorType>().getElementType().cast<FloatType>();
   int64_t nbits = floatType.getWidth();
-  auto intType = mlir::IntegerType::get(loc.getContext(), nbits);
+  auto intType = mlir::IntegerType::get(loc.getContext(), floatType.getWidth());
 
   Value xAsInt = b.create<arith::BitcastOp>(intType, adaptor.getOperand());
 
@@ -1075,18 +1074,13 @@ template <>
 inline Value mapMhloOpToStdScalarOp<mhlo::LogisticOp>(
     Location loc, ArrayRef<Type> resultTypes, ArrayRef<Type> /*argTypes*/,
     mhlo::LogisticOp::Adaptor adaptor, OpBuilder* b) {
-  // 1.0 / (1.0 + exp(-x))
+  // 1.0 / (1.0 - exp(-x))
   Value negX = mapMhloOpToStdScalarOp<mhlo::NegOp>(
       loc, resultTypes, resultTypes, {adaptor.getOperand()}, b);
   Value expNegX = mapMhloOpToStdScalarOp<mhlo::ExpOp>(loc, resultTypes,
                                                       resultTypes, {{negX}}, b);
 
-  Type type = getElementTypeOrSelf(resultTypes[0]);
-  Value oneFloat =
-      type.isa<ComplexType>()
-          ? b->create<arith::ConstantOp>(loc, b->getF32FloatAttr(1.0))
-          : getConstantOrSplat(b, loc, resultTypes[0],
-                               FloatAttr::get(type, 1.0f));
+  Value oneFloat = b->create<arith::ConstantOp>(loc, b->getF32FloatAttr(1.0));
   Value one = mapConvertOpToStdScalarOp(loc, resultTypes, resultTypes,
                                         {oneFloat.getType()}, {{oneFloat}}, b);
   Value oneAddExprNegX = mapMhloOpToStdScalarOp<mhlo::AddOp>(
@@ -1102,9 +1096,8 @@ inline Value mapMhloOpToStdScalarOp<mhlo::PowOp>(Location loc,
                                                  mhlo::PowOp::Adaptor adaptor,
                                                  OpBuilder* b) {
   auto lb = ImplicitLocOpBuilder(loc, *b);
-  // TODO: b/315868720 Consider alternate lowerings of mhlo::PowOp with integer
-  // operands. Floating point can use std::powf
-  auto resultType = getElementTypeOrSelf(resultTypes.front());
+  // Floating point can use std::powf
+  auto resultType = resultTypes.front();
   if (resultType.isa<ComplexType, FloatType>()) {
     return MapMhloOpToScalarOpImpl<IsFloatType, math::PowFOp, IsComplexType,
                                    complex::PowOp>{}(loc, resultTypes, argTypes,
@@ -1330,17 +1323,14 @@ struct MhloOpToStdScalarOp {
   static Value mapOpOfType(Location loc, ArrayRef<Type> resultTypes,
                            ArrayRef<Type> argTypes,
                            typename MhloOpTy::Adaptor adaptor, OpBuilder* b) {
+    if (std::is_same<MhloOpTy, mhlo::ConvertOp>::value) {
+      // Note: this assumes that the caller is passing result/arg types with
+      // appropriate signedness.
+      return impl::mapConvertOpToStdScalarOp(
+          loc, resultTypes, resultTypes, argTypes, adaptor.getOperands(), b);
+    }
     return impl::mapMhloOpToStdScalarOp<MhloOpTy>(loc, resultTypes, argTypes,
                                                   adaptor, b);
-  }
-
-  static Value mapConvertOpToStdScalarOp(Location loc,
-                                         ArrayRef<Type> targetTypes,
-                                         ArrayRef<Type> resultTypes,
-                                         ArrayRef<Type> argTypes,
-                                         ValueRange args, OpBuilder* b) {
-    return impl::mapConvertOpToStdScalarOp(loc, targetTypes, resultTypes,
-                                           argTypes, args, b);
   }
 };
 

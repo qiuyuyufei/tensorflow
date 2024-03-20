@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -39,57 +39,56 @@ class HloRunnerPjRt : public HloRunnerInterface {
   ~HloRunnerPjRt() override;
 
   // Transfers data between the host and device.
-  absl::StatusOr<std::unique_ptr<PjRtBuffer>> TransferLiteralToDevice(
+  StatusOr<std::unique_ptr<PjRtBuffer>> TransferLiteralToDevice(
       const Literal& literal);
-  absl::StatusOr<std::vector<std::unique_ptr<PjRtBuffer>>>
-  TransferLiteralsToDevice(absl::Span<const Literal* const> literals);
-  absl::StatusOr<Literal> TransferLiteralFromDevice(PjRtBuffer& buffer);
+  StatusOr<std::vector<std::unique_ptr<PjRtBuffer>>> TransferLiteralsToDevice(
+      absl::Span<const Literal* const> literals);
+  StatusOr<Literal> TransferLiteralFromDevice(PjRtBuffer& buffer);
 
   // Executes the given module with given literals as input and returns the
   // result as a Literal.
-  absl::StatusOr<Literal> Execute(std::unique_ptr<HloModule> module,
-                                  absl::Span<const Literal* const> arguments,
-                                  bool run_hlo_passes,
-                                  ExecutionProfile* profile) override;
+  StatusOr<Literal> Execute(std::unique_ptr<HloModule> module,
+                            absl::Span<const Literal* const> arguments,
+                            bool run_hlo_passes,
+                            ExecutionProfile* profile) override;
 
   // As Execute(), but accepts and returns device buffers instead of host
   // buffers.
-  absl::StatusOr<std::vector<std::unique_ptr<PjRtBuffer>>>
-  ExecuteWithDeviceBuffers(
+  StatusOr<std::vector<std::unique_ptr<PjRtBuffer>>> ExecuteWithDeviceBuffers(
       PjRtLoadedExecutable* executable,
       const std::vector<std::unique_ptr<PjRtBuffer>>& arguments);
 
   // Creates an executable object for an HloModule.
-  absl::StatusOr<std::unique_ptr<PjRtLoadedExecutable>> CreateExecutable(
+  StatusOr<std::unique_ptr<PjRtLoadedExecutable>> CreateExecutable(
       HloModule* module, CompileOptions compile_options);
 
   // Creates an executable object given an HLO module. If run_hlo_passes is
   // true, the HLO passes will be run as part of compilation.
-  absl::StatusOr<std::unique_ptr<Executable>> CreateExecutable(
+  StatusOr<std::unique_ptr<Executable>> CreateExecutable(
       std::unique_ptr<HloModule> module, bool run_hlo_passes) override;
 
-  absl::StatusOr<Literal> ExecuteWithExecutable(
+  StatusOr<Literal> ExecuteWithExecutable(
       Executable* executable, absl::Span<const Literal* const> arguments,
       ExecutionProfile* profile) override;
 
-  absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::unique_ptr<HloModule> module,
       const ReplicatedExecuteOptions& options) override;
 
   // Same as above, but with specified device assignment.
-  absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::unique_ptr<HloModule> module,
       const ReplicatedExecuteOptions& options,
       DeviceAssignment* device_assignment) override;
 
-  absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::function<Executable*(int64_t)> executable_provider,
       std::function<int64_t(int64_t)> argument_count_provider,
       std::function<const Literal*(int64_t, int64_t)> argument_provider,
       const ReplicatedExecuteOptions& options,
       DeviceAssignment* device_assignment) override;
 
-  absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  StatusOr<std::vector<Literal>> ExecuteReplicated(
       Executable* executable,
       const HloRunnerInterface::ReplicatedExecuteOptions& options,
       DeviceAssignment* device_assignment, ExecutionProfile* profile = nullptr);
@@ -106,11 +105,11 @@ class HloRunnerPjRt : public HloRunnerInterface {
   std::vector<std::vector<PjRtBuffer*>> BufferMatToPointerMat(
       std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>& buffer);
 
-  absl::StatusOr<CompileOptions> GenerateDefaultCompileOptions(
-      HloModule* module, bool run_hlo_passes);
+  StatusOr<CompileOptions> GenerateDefaultCompileOptions(HloModule* module,
+                                                         bool run_hlo_passes);
 
-  absl::StatusOr<std::vector<Literal>> ExecuteReplicatedImpl(
-      std::function<absl::StatusOr<std::vector<std::unique_ptr<PjRtBuffer>>>(
+  StatusOr<std::vector<Literal>> ExecuteReplicatedImpl(
+      std::function<StatusOr<std::vector<std::unique_ptr<PjRtBuffer>>>(
           absl::Span<const std::vector<PjRtBuffer*>>&)>
           execution_helper,
       std::function<int64_t(int64_t)> argument_count_provider,

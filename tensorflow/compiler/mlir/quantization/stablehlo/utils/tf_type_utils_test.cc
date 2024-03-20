@@ -90,7 +90,7 @@ std::unique_ptr<MLIRContext> CreateContext() {
   return context;
 }
 
-TEST(GetDenseAttrFromTensorProtoAttrTest, Qint8ToUQ8Succeeds) {
+TEST(GetDenseAttrFromTensorProtoAttrTest, Qint8ToUQ8) {
   auto context = CreateContext();
   TensorType result_tensor_type = RankedTensorType::get(
       {2, 2}, quant::UniformQuantizedType::get(
@@ -109,7 +109,7 @@ TEST(GetDenseAttrFromTensorProtoAttrTest, Qint8ToUQ8Succeeds) {
   EXPECT_EQ(dense_attr->getValues<int8_t>()[3], 4);
 }
 
-TEST(GetDenseAttrFromTensorProtoAttrTest, Qint8ToInt8Succeeds) {
+TEST(GetDenseAttrFromTensorProtoAttrTest, Qint8ToInt8) {
   auto context = CreateContext();
   TensorType result_tensor_type =
       RankedTensorType::get({2, 2}, IntegerType::get(context.get(), 8));
@@ -125,7 +125,7 @@ TEST(GetDenseAttrFromTensorProtoAttrTest, Qint8ToInt8Succeeds) {
   EXPECT_EQ(dense_attr->getValues<int8_t>()[3], 4);
 }
 
-TEST(GetDenseAttrFromTensorProtoAttrTest, Qint32ToUQ32Succeeds) {
+TEST(GetDenseAttrFromTensorProtoAttrTest, Qint32ToUQ32) {
   auto context = CreateContext();
   TensorType result_tensor_type = RankedTensorType::get(
       {2, 2},
@@ -145,7 +145,7 @@ TEST(GetDenseAttrFromTensorProtoAttrTest, Qint32ToUQ32Succeeds) {
   EXPECT_EQ(dense_attr->getValues<int32_t>()[3], 4);
 }
 
-TEST(GetDenseAttrFromTensorProtoAttrTest, Qint32ToInt32Succeeds) {
+TEST(GetDenseAttrFromTensorProtoAttrTest, Qint32ToInt32) {
   auto context = CreateContext();
   TensorType result_tensor_type =
       RankedTensorType::get({2, 2}, IntegerType::get(context.get(), 32));
@@ -161,7 +161,7 @@ TEST(GetDenseAttrFromTensorProtoAttrTest, Qint32ToInt32Succeeds) {
   EXPECT_EQ(dense_attr->getValues<int32_t>()[3], 4);
 }
 
-TEST(GetDenseAttrFromTensorProtoAttrTest, UnsupportedQint16Fails) {
+TEST(GetDenseAttrFromTensorProtoAttrTest, UnsupportedQint16) {
   auto context = CreateContext();
   TensorType result_tensor_type =
       RankedTensorType::get({2, 2}, IntegerType::get(context.get(), 16));
@@ -170,7 +170,7 @@ TEST(GetDenseAttrFromTensorProtoAttrTest, UnsupportedQint16Fails) {
       GetDenseAttrFromTensorProtoAttr(GetQint16Tensor(), result_tensor_type)));
 }
 
-TEST(IsTFQintTypeTest, ValidTFQintTypeSucceeds) {
+TEST(IsTFQintTypeTest, IsTFQintType) {
   auto context = CreateContext();
 
   EXPECT_TRUE(IsTFQintType(TF::Qint8Type::get(context.get())));
@@ -183,7 +183,7 @@ TEST(IsTFQintTypeTest, ValidTFQintTypeSucceeds) {
   EXPECT_FALSE(IsTFQintType(TF::Float8E5M2RefType::get(context.get())));
 }
 
-TEST(GetIntTypeFromTFQintTest, ChecksIntTypesFromTFQint) {
+TEST(GetIntTypeFromTFQintTest, GetIntTypeFromTFQint) {
   auto context = CreateContext();
 
   auto type = GetIntTypeFromTFQint(TF::Qint8Type::get(context.get()));

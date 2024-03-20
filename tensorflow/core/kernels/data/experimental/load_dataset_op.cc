@@ -87,7 +87,7 @@ class LoadDatasetOp::Dataset : public DatasetBase {
 
   Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
     inputs->clear();
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  protected:
@@ -122,7 +122,7 @@ class LoadDatasetOp::Dataset : public DatasetBase {
          std::make_pair(kReaderFuncTarguments,
                         reader_func_arguments_types_attr)},  // Attrs
         output));
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -210,7 +210,7 @@ class LoadDatasetOp::Dataset : public DatasetBase {
       // We need to take a reference here as we will use the input_ and
       // its iterator.
       input_->Ref();
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     mutex mu_;

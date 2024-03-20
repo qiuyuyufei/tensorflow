@@ -435,13 +435,10 @@ class ConverterErrorMetricTest(test_util.TensorFlowTestCase,
     self.convert_and_check_location_info(
         converter, converter_error_data_pb2.ConverterErrorData.UNKNOWNLOC)
     exported_error = metrics._gauge_conversion_errors.get_cell(
-        'CONVERT_TF_TO_TFLITE_MODEL',
-        'PrepareCompositeFunctionsPass',
-        'tf.Const',
-        'UNKNOWN',
-    ).value()
+        'CONVERT_TF_TO_TFLITE_MODEL', 'PrepareCompositeFunctionsPass', '',
+        'UNKNOWN').value()
     self.assertEqual(exported_error,
-                     "\'width\' attribute is not set or not an integer")
+                     "\'width\' attribute is not set or not an integer\n")
 
   def test_need_flex_ops(self):
 

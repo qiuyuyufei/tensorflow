@@ -44,6 +44,7 @@ cc_library(
     srcs = if_mobile([
         "gif_io.cc",
         "//tensorflow/core/platform:gif_hdrs",
+        "@local_tsl//tsl/platform:gif_hdrs",
     ]),
     hdrs = [
         "gif_io.h",

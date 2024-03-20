@@ -437,10 +437,11 @@ TEST(XplaneUtilsTest, TestAggregateXPlanes) {
               IgnoringRepeatedFieldOrdering(EqualsProto(
                   R"pb(lines {
                          id: 1
-                         name: "Framework Ops"
+                         name: "TensorFlow Ops"
                          events {
                            metadata_id: 1
                            duration_ps: 9000
+                           stats { metadata_id: 4 int64_value: 0 }
                            stats { metadata_id: 2 int64_value: 4000 }
                            stats { metadata_id: 3 int64_value: 4000 }
                            num_occurrences: 2
@@ -448,18 +449,21 @@ TEST(XplaneUtilsTest, TestAggregateXPlanes) {
                          events {
                            metadata_id: 3
                            duration_ps: 5000
+                           stats { metadata_id: 4 int64_value: 0 }
                            stats { metadata_id: 2 int64_value: 2000 }
                            num_occurrences: 2
                          }
                          events {
                            metadata_id: 4
                            duration_ps: 6000
+                           stats { metadata_id: 4 int64_value: 0 }
                            stats { metadata_id: 3 int64_value: 2000 }
                            num_occurrences: 1
                          }
                          events {
                            metadata_id: 2
                            duration_ps: 10000
+                           stats { metadata_id: 4 int64_value: 0 }
                            stats { metadata_id: 2 int64_value: 5000 }
                            num_occurrences: 2
                          }

@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,7 +37,6 @@ limitations under the License.
 #include "xla/xla.pb.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/lib/core/status_test_util.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace {
@@ -330,7 +329,7 @@ TEST_F(HloVerifierTest, CheckConditionalBranchContainsAsyncThread) {
     branch1 {
       fparam = f32[4] parameter(0)
       %async-start = ((f32[4]), f32[4], s32[]) custom-call-start(f32[4] fparam), async_execution_thread="parallel_thread", custom_call_target="foo"
-      ROOT %async-done = f32[4] custom-call-done(((f32[4]), f32[4], s32[]) %async-start)
+      ROOT %async-done = f32[4] custom-call-done(((f32[4]), f32[4], s32[]) %async-start), async_execution_thread="parallel_thread", custom_call_target="foo"
     }
 
     branch2 {
@@ -856,7 +855,7 @@ TEST_F(HloVerifierTestLayoutSensitive, AsyncStartAndAsyncDone) {
   ENTRY AsyncStartAndAsyncDone {
     p0 = f32[2,3]{1,0:S(1)} parameter(0)
     async-start = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-start(p0), custom_call_target="foo"
-    ROOT async-done = f32[2,3]{1,0:S(2)} custom-call-done(async-start)
+    ROOT async-done = f32[2,3]{1,0:S(2)} custom-call-done(async-start), custom_call_target="foo"
   }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
@@ -873,9 +872,9 @@ TEST_F(HloVerifierTestLayoutSensitive, AsyncStartAndAsyncUpdateAndAsyncDone) {
   ENTRY AsyncStartAndAsyncUpdateAndAsyncDone {
     p0 = f32[2,3]{1,0:S(1)} parameter(0)
     async-start = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-start(p0), custom_call_target="foo"
-    async-update.1 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-start)
-    async-update.2 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-update.1)
-    ROOT async-done = f32[2,3]{1,0:S(2)} custom-call-done(async-update.2)
+    async-update.1 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-start), custom_call_target="foo"
+    async-update.2 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-update.1), custom_call_target="foo"
+    ROOT async-done = f32[2,3]{1,0:S(2)} custom-call-done(async-update.2), custom_call_target="foo"
   }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
@@ -893,9 +892,9 @@ TEST_F(HloVerifierTestLayoutSensitive,
   ENTRY AsyncStartAndAsyncUpdateAndAsyncDone {
     p0 = f32[2,3]{1,0:S(1)} parameter(0)
     async-start = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-start(p0), async_execution_thread="parallel_thread", custom_call_target="foo"
-    async-update.1 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-start)
-    async-update.2 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-update.1)
-    ROOT async-done = f32[2,3]{1,0:S(2)} custom-call-done(async-update.2)
+    async-update.1 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-start), async_execution_thread="parallel_thread", custom_call_target="foo"
+    async-update.2 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-update.1), async_execution_thread="parallel_thread", custom_call_target="foo"
+    ROOT async-done = f32[2,3]{1,0:S(2)} custom-call-done(async-update.2), async_execution_thread="parallel_thread", custom_call_target="foo"
   }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
@@ -912,7 +911,7 @@ TEST_F(HloVerifierTest, AsyncStartAndAsyncDoneWrongType) {
   ENTRY AsyncStartAndAsyncDone {
     p0 = f32[2,3] parameter(0)
     async-start = ((f32[2,3]), f32[3,2], u32[]) custom-call-start(p0), custom_call_target="foo"
-    ROOT async-done = f32[2,3] custom-call-done(async-start)
+    ROOT async-done = f32[2,3] custom-call-done(async-start), custom_call_target="foo"
   }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
@@ -921,8 +920,47 @@ TEST_F(HloVerifierTest, AsyncStartAndAsyncDoneWrongType) {
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(status.message(),
-              HasSubstr("async-done expects the shape of output to match the "
-                        "async shape at index {1}"));
+              HasSubstr("async-done expects the async shape at index {1} to "
+                        "match the async computation root shape"));
+}
+
+TEST_F(HloVerifierTest, AsyncStartAndAsyncDoneWrongThreadName) {
+  const char* const hlo_string = R"(
+  HloModule Module
+
+  ENTRY AsyncStartAndAsyncDone {
+    p0 = f32[2,3] parameter(0)
+    async-start = ((f32[2,3]), f32[2,3], u32[]) custom-call-start(p0), async_execution_thread="parallel_thread", custom_call_target="foo"
+    ROOT async-done = f32[2,3] custom-call-done(async-start), async_execution_thread="main_thread", custom_call_target="bar"
+  }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
+
+  auto status = verifier().Run(module.get()).status();
+  ASSERT_FALSE(status.ok());
+  EXPECT_THAT(status.message(),
+              HasSubstr("thread name (main_thread vs parallel_thread)."));
+}
+
+TEST_F(HloVerifierTest, AsyncStartAndAsyncDoneWrongAttr) {
+  const char* const hlo_string = R"(
+  HloModule Module
+
+  ENTRY AsyncStartAndAsyncDone {
+    p0 = f32[2,3] parameter(0)
+    async-start = ((f32[2,3]), f32[2,3], u32[]) custom-call-start(p0), custom_call_target="foo"
+    ROOT async-done = f32[2,3] custom-call-done(async-start), custom_call_target="bar"
+  }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
+
+  auto status = verifier().Run(module.get()).status();
+  ASSERT_FALSE(status.ok());
+  EXPECT_THAT(status.message(),
+              HasSubstr("async-done expects its wrapped async computation to "
+                        "be identical to its operand's"));
 }
 
 TEST_F(HloVerifierTest, AsyncStartMultipleAsyncDone) {
@@ -932,8 +970,8 @@ TEST_F(HloVerifierTest, AsyncStartMultipleAsyncDone) {
   ENTRY AsyncStartAndAsyncDone {
     p0 = f32[2,3] parameter(0)
     async-start = ((f32[2,3]), f32[2,3], u32[]) custom-call-start(p0), custom_call_target="foo"
-    async-done.1 = f32[2,3] custom-call-done(async-start)
-    async-done.2 = f32[2,3] custom-call-done(async-start)
+    async-done.1 = f32[2,3] custom-call-done(async-start), custom_call_target="foo"
+    async-done.2 = f32[2,3] custom-call-done(async-start), custom_call_target="foo"
     ROOT tuple = (f32[2,3], f32[2,3]) tuple(async-done.1, async-done.2)
   }
   )";
@@ -973,7 +1011,7 @@ TEST_F(HloVerifierTest, AsyncStartAndAsyncUpdateNoAsyncDone) {
   ENTRY AsyncStartAndAsyncDone {
     p0 = f32[2,3] parameter(0)
     async-start = ((f32[2,3]), f32[2,3], u32[]) custom-call-start(p0), custom_call_target="foo"
-    ROOT async-update = ((f32[2,3]), f32[2,3], u32[]) custom-call-update(async-start)
+    ROOT async-update = ((f32[2,3]), f32[2,3], u32[]) custom-call-update(async-start), custom_call_target="foo"
   }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
@@ -990,26 +1028,15 @@ TEST_F(HloVerifierTest, AsyncDoneNoAsyncStart) {
   const char* const hlo_string = R"(
   HloModule Module
 
-  ENTRY AsyncDoneNoAsyncStart {
+  ENTRY AsyncStartAndAsyncDone {
     p0 = f32[2,3] parameter(0)
     p1 = u32[] parameter(1)
     tuple = ((f32[2,3]), f32[2,3], u32[]) tuple(p0, p0, p1)
-    async-start = ((f32[2,3]), f32[2,3], u32[]) custom-call-start(p0), custom_call_target="foo"
-    ROOT async-done = f32[2,3] custom-call-done(async-start)
+    ROOT async-done = f32[2,3] custom-call-done(tuple), custom_call_target="foo"
   }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnUnverifiedModule(hlo_string));
-
-  // The parser checks that the async-{update,done} operand is an async op,
-  // so we need to invalidate it in the C++ representation.
-  HloInstruction* tuple = FindInstruction(module.get(), "tuple");
-  HloInstruction* async_done = FindInstruction(module.get(), "async-done");
-  TF_ASSERT_OK(async_done->ReplaceOperandWith(0, tuple));
-  HloInstruction* async_start = FindInstruction(module.get(), "async-start");
-  HloComputation* computation =
-      FindComputation(module.get(), "AsyncDoneNoAsyncStart");
-  TF_ASSERT_OK(computation->RemoveInstruction(async_start));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -1022,29 +1049,16 @@ TEST_F(HloVerifierTest, AsyncUpdateAndAsyncDoneNoAsyncStart) {
   const char* const hlo_string = R"(
   HloModule Module
 
-  ENTRY AsyncUpdateAndAsyncDoneNoAsyncStart {
+  ENTRY AsyncStartAndAsyncDone {
     p0 = f32[2,3] parameter(0)
     p1 = u32[] parameter(1)
     tuple = ((f32[2,3]), f32[2,3], u32[]) tuple(p0, p0, p1)
-    async-start = ((f32[2,3]), f32[2,3], u32[]) custom-call-start(p0), custom_call_target="foo"
-    async-update = ((f32[2,3]), f32[2,3], u32[]) custom-call-update(async-start)
-    ROOT async-done = f32[2,3] custom-call-done(async-update)
+    async-update = ((f32[2,3]), f32[2,3], u32[]) custom-call-update(tuple), custom_call_target="foo"
+    ROOT async-done = f32[2,3] custom-call-done(tuple), custom_call_target="foo"
   }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnUnverifiedModule(hlo_string));
-
-  // The parser checks that the async-{update,done} operand is an async op,
-  // so we need to invalidate it in the C++ representation.
-  HloInstruction* tuple = FindInstruction(module.get(), "tuple");
-  HloInstruction* async_update = FindInstruction(module.get(), "async-update");
-  TF_ASSERT_OK(async_update->ReplaceOperandWith(0, tuple));
-  HloInstruction* async_done = FindInstruction(module.get(), "async-done");
-  TF_ASSERT_OK(async_done->ReplaceOperandWith(0, tuple));
-  HloInstruction* async_start = FindInstruction(module.get(), "async-start");
-  HloComputation* computation =
-      FindComputation(module.get(), "AsyncUpdateAndAsyncDoneNoAsyncStart");
-  TF_ASSERT_OK(computation->RemoveInstruction(async_start));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -1114,17 +1128,12 @@ TEST_F(HloVerifierTest, AsyncOpTupleWrongType) {
 
   ENTRY AsyncStartAndAsyncDone {
     p0 = f32[2,3] parameter(0)
-    async-start = ((f32[2,3]), f32[3,2], s32[]) async-start(p0), calls=async_computation
+    async-start = ((f32[2,3])) async-start(p0), calls=async_computation
     ROOT async-done = f32[3,2] async-done(async-start), calls=async_computation
   }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnUnverifiedModule(hlo_string));
-
-  // The parser checks that the async op's shape type is valid, so we need to
-  // invalidate it in the C++ representation.
-  HloInstruction* async_start = FindInstruction(module.get(), "async-start");
-  async_start->mutable_shape()->clear_tuple_shapes();
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -1235,6 +1244,50 @@ TEST_F(HloVerifierTest, AsyncOpComputationNotTrivial) {
       status.message(),
       HasSubstr(
           "expected to contain only the root and parameter instructions"));
+}
+
+TEST_F(HloVerifierTestLayoutSensitive, AsyncDoneWrongGroupId) {
+  const char* const hlo_string = R"(
+  HloModule Module
+
+  ENTRY AsyncStartAndAsyncUpdateAndAsyncDone {
+    p0 = f32[2,3]{1,0:S(1)} parameter(0)
+    async-start = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-start(p0), async_group_id=0, custom_call_target="foo"
+    async-update.1 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-start), async_group_id=0, custom_call_target="foo"
+    async-update.2 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-update.1), async_group_id=0, custom_call_target="foo"
+    ROOT async-done = f32[2,3]{1,0:S(2)} custom-call-done(async-update.2), async_group_id=1, custom_call_target="foo"
+  }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
+
+  auto status = verifier().Run(module.get()).status();
+  ASSERT_FALSE(status.ok());
+  EXPECT_THAT(status.message(),
+              HasSubstr("async-done expects its operand to have the same group "
+                        "id (1 vs 0)."));
+}
+
+TEST_F(HloVerifierTestLayoutSensitive, AsyncUpdateWrongGroupId) {
+  const char* const hlo_string = R"(
+  HloModule Module
+
+  ENTRY AsyncStartAndAsyncUpdateAndAsyncDone {
+    p0 = f32[2,3]{1,0:S(1)} parameter(0)
+    async-start = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-start(p0), async_group_id=0, custom_call_target="foo"
+    async-update.1 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-start), custom_call_target="foo"
+    async-update.2 = ((f32[2,3]{1,0:S(1)}), f32[2,3]{1,0:S(2)}, u32[]) custom-call-update(async-update.1), async_group_id=0, custom_call_target="foo"
+    ROOT async-done = f32[2,3]{1,0:S(2)} custom-call-done(async-update.2), async_group_id=0, custom_call_target="foo"
+  }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
+
+  auto status = verifier().Run(module.get()).status();
+  ASSERT_FALSE(status.ok());
+  EXPECT_THAT(status.message(),
+              HasSubstr("async-update expects its operand to have the same "
+                        "group id (none vs 0)."));
 }
 
 TEST_F(HloVerifierTest, IotaNonArrayResult) {
@@ -1370,7 +1423,7 @@ int64_t ReplicaCount(const std::vector<std::vector<int64_t>>& replica_groups) {
   return replica_count;
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>> MakeCollectiveCommOpComputation(
+StatusOr<std::unique_ptr<HloModule>> MakeCollectiveCommOpComputation(
     std::vector<std::vector<int64_t>> replica_groups,
     std::optional<int64_t> replica_count, std::optional<int64_t> num_partitions,
     absl::string_view other_attributes, absl::string_view template_str) {
@@ -1388,7 +1441,7 @@ absl::StatusOr<std::unique_ptr<HloModule>> MakeCollectiveCommOpComputation(
       config);
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>> MakeAllReduceComputation(
+StatusOr<std::unique_ptr<HloModule>> MakeAllReduceComputation(
     std::vector<std::vector<int64_t>> replica_groups,
     std::optional<int64_t> replica_count = std::nullopt,
     std::optional<int64_t> num_partitions = std::nullopt,
@@ -1567,7 +1620,7 @@ TEST_F(HloVerifierTest, AllReduceDoneWithoutStart) {
   ENTRY entry {
     p0 = f32[2,3] parameter(0)
     p1 = u32[] parameter(1)
-    tuple = (f32[2,3], f32[2,3], u32[], u32[]) tuple(p0, p0, p1, p1)
+    tuple = (f32[2,3], f32[2,3]) tuple(p0, p0, p1, p1)
     ROOT done = f32[2,3] all-reduce-done(tuple)
   }
   )";
@@ -1581,7 +1634,7 @@ TEST_F(HloVerifierTest, AllReduceDoneWithoutStart) {
                         "needs to be all-reduce-start, found tuple"));
 }
 
-absl::StatusOr<std::unique_ptr<HloModule>> MakeAllToAllComputation(
+StatusOr<std::unique_ptr<HloModule>> MakeAllToAllComputation(
     std::vector<std::vector<int64_t>> replica_groups,
     std::optional<int64_t> replica_count = std::nullopt,
     std::optional<int64_t> num_partitions = std::nullopt,
@@ -2515,7 +2568,7 @@ TEST_F(HloVerifierTest, CheckWhileContainsAsyncThread) {
       %constant.1 = s32[] constant(5)
       %prev.2 = s32[] parameter(0)
       %async-start = ((s32[]), s32[], s32[]) custom-call-start(s32[] %prev.2), async_execution_thread="parallel_thread", custom_call_target="async_add"
-      %async-done = s32[] custom-call-done(((s32[]), s32[], s32[]) %async-start)
+      %async-done = s32[] custom-call-done(((s32[]), s32[], s32[]) %async-start), async_execution_thread="parallel_thread", custom_call_target="async_add"
       ROOT %greater-than = pred[] compare(s32[] %constant.1, s32[] %async-done), direction=GT
     }
 
@@ -2657,7 +2710,7 @@ TEST_F(HloVerifierTest, InconsistentConditionSharding) {
       HasSubstr("Inconsistent conditional sharding among instructions"));
 }
 
-TEST_F(HloVerifierTest, DisableS4Veridication) {
+TEST_F(HloVerifierTest, InvalidS4Usage) {
   const char* const hlo = R"(
   HloModule Module
 
@@ -2668,9 +2721,29 @@ TEST_F(HloVerifierTest, DisableS4Veridication) {
   }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(hlo));
-  HloVerifier verifier{HloVerifierOpts{}.WithVerifyS4U4Usage(false)};
-  auto status = verifier.Run(module.get()).status();
-  ASSERT_TRUE(status.ok());
+  auto status = verifier().Run(module.get()).status();
+  ASSERT_FALSE(status.ok());
+  EXPECT_THAT(
+      status.message(),
+      HasSubstr("S4/U4 is currently only supported in matmul and convolution"));
+}
+
+TEST_F(HloVerifierTest, InvalidU4Usage) {
+  const char* const hlo = R"(
+  HloModule Module
+
+  ENTRY entry {
+    param0 = u32[] parameter(0)
+    x = u4[] convert(param0)
+    ROOT add = u4[] add(x, x)
+  }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(hlo));
+  auto status = verifier().Run(module.get()).status();
+  ASSERT_FALSE(status.ok());
+  EXPECT_THAT(
+      status.message(),
+      HasSubstr("S4/U4 is currently only supported in matmul and convolution"));
 }
 
 TEST(MetadataTrackerTest, MetadataTrackerLogsInfo) {
@@ -2702,13 +2775,65 @@ TEST(MetadataTrackerTest, MetadataTrackerLogsInfo) {
   }
 }
 
+TEST_F(HloVerifierTest, TopKWrongComparator) {
+  const char* const hlo = R"(
+HloModule module
+
+compare {
+  p.0.lhs = f32[] parameter(0)
+  p.0.rhs = f32[] parameter(1)
+  p3 = f32[] parameter(2)
+  p4 = f32[] parameter(3)
+  ROOT lt = pred[] compare(p.0.lhs, p.0.rhs), direction=LT
+}
+
+ENTRY entry {
+  x = f32[10,10]{0,1} parameter(0)
+  ROOT topk = (f32[10,2]{0,1}, s32[10,2]{0,1}) topk(x), k=2, to_apply=compare
+}
+
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(hlo));
+  auto status = verifier().Run(module.get()).status();
+  ASSERT_FALSE(status.ok());
+  EXPECT_THAT(status.message(), HasSubstr("to have 2 parameters"));
+}
+
+TEST_F(HloVerifierTest, TopKUnexpectedComparator) {
+  const char* const hlo = R"(
+HloModule module
+
+compare {
+  p.0.lhs = f32[] parameter(0)
+  p.0.rhs = f32[] parameter(1)
+  ROOT lt = pred[] compare(p.0.lhs, p.0.rhs), direction=LE
+}
+
+ENTRY entry {
+  x = f32[10,10]{0,1} parameter(0)
+  ROOT topk = (f32[10,2]{0,1}, s32[10,2]{0,1}) topk(x), k=2, to_apply=compare
+}
+
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(hlo));
+  auto status = verifier().Run(module.get()).status();
+  ASSERT_FALSE(status.ok());
+  EXPECT_THAT(status.message(), HasSubstr("expects a strict comparison"));
+}
+
 TEST_F(HloVerifierTest, TopKOK) {
   const char* const hlo = R"(
 HloModule topk, entry_computation_layout={(f32[10,10]{0,1})->(f32[10,2]{0,1}, s32[10,2]{0,1})}
 
+compare {
+  p.0.lhs = f32[] parameter(0)
+  p.0.rhs = f32[] parameter(1)
+  ROOT lt = pred[] compare(p.0.lhs, p.0.rhs), direction=LT
+}
+
 ENTRY TopK {
   x = f32[10,10]{0,1} parameter(0)
-  ROOT topk = (f32[10,2]{0,1}, s32[10,2]{0,1}) topk(x), k=2, largest=true
+  ROOT topk = (f32[10,2]{0,1}, s32[10,2]{0,1}) topk(x), k=2, to_apply=compare
 }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(hlo));
@@ -2826,52 +2951,6 @@ ENTRY entry {
   Status status = verifier().Run(module.get()).status();
 
   TF_ASSERT_OK(status);
-}
-
-TEST_F(HloVerifierTest, UnboundedDynamism) {
-  const char* const hlo = R"(
-  HloModule Module
-
-  ENTRY entry {
-    ROOT param0 = f32[?,784] parameter(0)
-  }
-  )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(hlo));
-  auto status = verifier().Run(module.get()).status();
-  ASSERT_FALSE(status.ok());
-  EXPECT_THAT(status.message(), HasSubstr("Unbounded dynamism is disabled"));
-}
-
-TEST_F(HloVerifierTest, EnableUnboundedDynamism) {
-  const char* const hlo = R"(
-  HloModule Module
-
-  ENTRY entry {
-    ROOT param0 = f32[?,784] parameter(0)
-  }
-  )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(hlo));
-  HloVerifier verifier{HloVerifierOpts{}.WithAllowUnboundedDynamism(true)};
-  auto status = verifier.Run(module.get()).status();
-  ASSERT_TRUE(status.ok());
-}
-
-TEST_F(HloVerifierTest, SparseDotMetadataShape) {
-  const char* const kHlo = R"(
-  HloModule test
-  ENTRY entry {
-    %lhs = f32[10,16] parameter(0)
-    %rhs = f32[32,20] parameter(1)
-    %meta = u16[10,4] parameter(2)
-    ROOT %dot = f32[10,20] dot(%lhs, %rhs, %meta),
-        lhs_contracting_dims={1}, rhs_contracting_dims={0}, sparsity=L.1@2:4
-  }
-  )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(kHlo));
-  HloVerifier verifier{HloVerifierOpts{}.WithAllowUnboundedDynamism(true)};
-  auto status = verifier.Run(module.get()).status();
-  ASSERT_FALSE(status.ok());
-  EXPECT_THAT(status.message(), HasSubstr("Expected sparse dot metadata"));
 }
 
 }  // namespace

@@ -87,7 +87,7 @@ Status ConvBackpropExtractAndVerifyDimension(
           << ", pad_before = " << dim->pad_before
           << ", pad_after = " << dim->pad_after
           << ", dilation = " << dim->dilation << ", strides = " << dim->stride;
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
@@ -154,7 +154,7 @@ Status ConvBackpropComputeDimensionsV2(
         strides, padding, padding_before, padding_after, image_dim, i,
         &dims->spatial_dims[i]));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status ConvBackpropComputeDimensions(StringPiece label, int num_spatial_dims,

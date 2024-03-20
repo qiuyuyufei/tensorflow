@@ -21,11 +21,13 @@ limitations under the License.
 #include <limits>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "absl/log/log.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -49,7 +51,6 @@ limitations under the License.
 #include "tensorflow/core/framework/op_requires.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_shape.h"
-#include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/kernels/data/parallel_map_dataset_op.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -60,6 +61,7 @@ limitations under the License.
 #include "tensorflow/core/platform/statusor.h"
 #include "tensorflow/core/platform/tstring.h"
 #include "tensorflow/core/platform/types.h"
+#include "tensorflow/core/profiler/lib/traceme.h"
 #include "tensorflow/core/protobuf/data_service.pb.h"
 #include "tensorflow/core/protobuf/error_codes.pb.h"
 
@@ -197,7 +199,7 @@ class DataServiceDatasetOp::Dataset : public DatasetBase {
 
   Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
     inputs->clear();
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  protected:
@@ -340,7 +342,7 @@ class DataServiceDatasetOp::Dataset : public DatasetBase {
       TF_RETURN_IF_ERROR(RegisterCancellationCallback(
           ctx->cancellation_manager(),
           [this]() { data_service_client_.Cancel(); }, &deregister_fn_));
-      return data_service_client_.Initialize(ctx->allocator(/*attrs=*/{}));
+      return data_service_client_.Initialize();
     }
 
     Status GetNextInternal(IteratorContext* ctx,
@@ -354,7 +356,7 @@ class DataServiceDatasetOp::Dataset : public DatasetBase {
                           data_service_client_.GetNext(ctx_factory));
       *out_tensors = std::move(result.tensors);
       *end_of_sequence = result.end_of_sequence;
-      return absl::OkStatus();
+      return OkStatus();
     }
 
    protected:
@@ -439,8 +441,6 @@ class DataServiceDatasetOp::Dataset : public DatasetBase {
         }
         if (element_size_cache_ == 0.0) {
           element_size_cache_ = node_->AverageBufferedElementSize();
-          VLOG(3) << "Average DataService element size is "
-                  << element_size_cache_;
           if (element_size_cache_ == 0) {
             int64_t new_outstanding_requests = std::max(
                 max_outstanding_requests, kStartingMaxOutstandingRequests);
@@ -555,7 +555,7 @@ DataServiceDatasetOp::DataServiceDatasetOp(OpKernelConstruction* ctx)
   if (ctx->HasAttr(kTargetWorkers)) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr(kTargetWorkers, &target_workers_str));
   }
-  absl::StatusOr<TargetWorkers> status_or_target_workers =
+  StatusOr<TargetWorkers> status_or_target_workers =
       ParseTargetWorkers(target_workers_str);
   OP_REQUIRES_OK(ctx, status_or_target_workers.status());
   target_workers_ = *status_or_target_workers;
@@ -613,8 +613,7 @@ void DataServiceDatasetOp::MakeDataset(OpKernelContext* ctx,
   tstring job_name;
   OP_REQUIRES_OK(ctx, ParseScalarArgument(ctx, kJobName, &job_name));
 
-  absl::StatusOr<DataServiceConfig> config =
-      GetDataServiceConfig(address, protocol);
+  StatusOr<DataServiceConfig> config = GetDataServiceConfig(address, protocol);
   OP_REQUIRES_OK(ctx, config.status());
 
   if (IsStaticShard(processing_mode) &&
@@ -670,7 +669,7 @@ void DataServiceDatasetOp::MakeDataset(OpKernelContext* ctx,
                        container, name, &iteration_counter,
                        [](IterationCounter** counter) {
                          *counter = new IterationCounter();
-                         return absl::OkStatus();
+                         return OkStatus();
                        }));
     iteration_counter_handle =
         MakeResourceHandle<IterationCounter>(ctx, container, name);
@@ -685,13 +684,13 @@ void DataServiceDatasetOp::MakeDataset(OpKernelContext* ctx,
       errors::InvalidArgument(kMaxOutstandingRequests, " must be positive or ",
                               model::kAutotune));
 
-  absl::StatusOr<DataServiceMetadata> metadata =
+  StatusOr<DataServiceMetadata> metadata =
       GetDataServiceMetadata(dataset_id, address, protocol);
   OP_REQUIRES_OK(ctx, metadata.status());
 
   bool should_uncompress = op_version_ >= 3 && uncompress_;
   if (should_uncompress) {
-    absl::StatusOr<DataServiceMetadata::Compression> compression =
+    StatusOr<DataServiceMetadata::Compression> compression =
         GetValidatedCompression(dataset_id, *metadata);
     OP_REQUIRES_OK(ctx, compression.status());
     should_uncompress =
@@ -699,11 +698,10 @@ void DataServiceDatasetOp::MakeDataset(OpKernelContext* ctx,
         (*compression == DataServiceMetadata::COMPRESSION_SNAPPY);
   }
   if (should_uncompress) {
-    absl::StatusOr<bool> disable_compression_at_runtime =
-        DisableCompressionAtRuntime(data_transfer_protocol_,
-                                    config->deployment_mode());
+    StatusOr<bool> disable_compression_at_runtime = DisableCompressionAtRuntime(
+        data_transfer_protocol_, config->deployment_mode());
     OP_REQUIRES_OK(ctx, disable_compression_at_runtime.status());
-    absl::StatusOr<bool> compression_disabled_at_runtime =
+    StatusOr<bool> compression_disabled_at_runtime =
         CompressionDisabledAtRuntime(dataset_id, address, protocol,
                                      *disable_compression_at_runtime);
     OP_REQUIRES_OK(ctx, compression_disabled_at_runtime.status());
@@ -770,22 +768,6 @@ REGISTER_KERNEL_BUILDER(Name(kDataServiceDatasetV3).Device(DEVICE_CPU),
 REGISTER_KERNEL_BUILDER(Name(kDataServiceDatasetV4).Device(DEVICE_CPU),
                         DataServiceDatasetOp);
 REGISTER_KERNEL_BUILDER(Name("DummyIterationCounter").Device(DEVICE_CPU),
-                        DummyResourceOp<IterationCounter>);
-
-REGISTER_KERNEL_BUILDER(Name(kDataServiceDatasetV4)
-                            .Device(DEVICE_GPU)
-                            .HostMemory("dataset_id")
-                            .HostMemory("processing_mode")
-                            .HostMemory("address")
-                            .HostMemory("protocol")
-                            .HostMemory("job_name")
-                            .HostMemory("consumer_index")
-                            .HostMemory("num_consumers")
-                            .HostMemory("max_outstanding_requests")
-                            .HostMemory("iteration_counter")
-                            .HostMemory("handle"),
-                        DataServiceDatasetOp);
-REGISTER_KERNEL_BUILDER(Name("DummyIterationCounter").Device(DEVICE_GPU),
                         DummyResourceOp<IterationCounter>);
 
 }  // namespace data

@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ limitations under the License.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "absl/status/status.h"
 #include "xla/client/xla_builder.h"
 #include "xla/literal_util.h"
 #include "xla/pjrt/c/pjrt_c_api_cpu_internal.h"
@@ -82,10 +81,8 @@ TEST(PjRtCApiClientTest, IsDynamicDimension) {
   auto computation = builder.Build(reshaped).value();
   std::unique_ptr<PjRtLoadedExecutable> executable =
       client->Compile(computation, CompileOptions()).value();
-  ExecuteOptions execute_options;
-  execute_options.non_donatable_input_indices = {0};
   std::vector<std::vector<std::unique_ptr<PjRtBuffer>>> results =
-      executable->Execute({{param0.get(), param1.get()}}, execute_options)
+      executable->Execute({{param0.get(), param1.get()}}, ExecuteOptions())
           .value();
   ASSERT_EQ(results[0].size(), 1);
   auto* result_buffer = results[0][0].get();
@@ -119,16 +116,10 @@ TEST(PjRtCApiClientTest, EmptyExecutableFingerprint) {
   std::unique_ptr<PjRtLoadedExecutable> executable =
       client->Compile(computation, CompileOptions()).value();
 
-  PjRtCApiClient* c_client = dynamic_cast<PjRtCApiClient*>(client.get());
-  ASSERT_NE(c_client, nullptr);
-  if (c_client->pjrt_c_api()->pjrt_api_version.minor_version >= 35) {
-    // Empty executable should return an error status.
-    EXPECT_FALSE(executable->FingerprintExecutable().ok());
-  } else {
-    // TODO(yeounoh): To be removed after 01/20/2024.
-    EXPECT_EQ(executable->FingerprintExecutable().status().code(),
-              absl::StatusCode::kUnimplemented);
-  }
+  TF_ASSERT_OK_AND_ASSIGN(std::optional<std::string> fingerprint,
+                          client->ExecutableFingerprint(*executable));
+
+  EXPECT_FALSE(fingerprint.has_value());
 }
 
 TEST(PjRtClientTest, CreateViewAndCopyToDeviceAsyncExternalCpuOnly) {

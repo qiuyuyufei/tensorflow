@@ -57,7 +57,7 @@ Status AppendToListAttr(Node* n, const string& attr_name, const string& value) {
   n->ClearAttr(attr_name);
   attr_value.push_back(value);
   n->AddAttr(attr_name, attr_value);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Replaces attribute value.
@@ -104,7 +104,7 @@ Status PreprocessControlEdgesBetweenOutsideCompilations(
   for (auto e : edges_to_remove) {
     g->RemoveEdge(e);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Step 2 for `PreprocessEdgesBetweenOutsideCompilations`. See comments of
@@ -188,7 +188,7 @@ Status PreprocessDataEdgesBetweenOutsideCompilations(
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Step 1 for `PostprocessEdgesBetweenOutsideCompilations`. See comments of
@@ -264,7 +264,7 @@ Status PostprocessDataEdgesBetweenOutsideCompilations(
     // Remove placeholder node.
     g->RemoveNode(n);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Step 2 for `PostprocessEdgesBetweenOutsideCompilations`. See comments of
@@ -297,7 +297,7 @@ Status PostprocessControlEdgesBetweenOutsideCompilations(
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 }  // namespace
 
@@ -337,11 +337,10 @@ Status PerformStaticShapeInferenceBeforeEncapsulation(Graph* g) {
     n->AddAttr(kXlaInferredShapesAttrName, output_shapes);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::StatusOr<
-    std::unique_ptr<absl::flat_hash_map<string, std::vector<string>>>>
+StatusOr<std::unique_ptr<absl::flat_hash_map<string, std::vector<string>>>>
 OutsideCompilationClusterDependencies(
     const Graph* g, const string& outside_compilation_attr_name) {
   auto cluster_deps = std::make_unique<
@@ -401,7 +400,7 @@ Status PreprocessEdgesBetweenOutsideCompilations(
       g, outside_compilation_attr_name));
   TF_RETURN_IF_ERROR(PreprocessDataEdgesBetweenOutsideCompilations(
       g, outside_compilation_attr_name));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status PostprocessEdgesBetweenOutsideCompilations(
@@ -410,7 +409,7 @@ Status PostprocessEdgesBetweenOutsideCompilations(
       g, outside_compilation_attr_name));
   TF_RETURN_IF_ERROR(PostprocessControlEdgesBetweenOutsideCompilations(
       g, outside_compilation_attr_name));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

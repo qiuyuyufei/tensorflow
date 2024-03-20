@@ -43,8 +43,8 @@ class GrpcChannelSpec {
     const std::map<int, string> host_ports;
   };
 
-  absl::Status AddHostPortsJob(const string& job_id,
-                               const std::map<int, string>& host_ports);
+  Status AddHostPortsJob(const string& job_id,
+                         const std::map<int, string>& host_ports);
 
   const std::vector<HostPortsJob>& host_ports_jobs() const {
     return host_ports_jobs_;
@@ -88,13 +88,12 @@ GrpcChannelCache* NewGrpcChannelCache(
 ::grpc::ChannelArguments GetChannelArguments(const RPCOptions* rpc_options);
 
 ChannelCreationFunction ConvertToChannelCreationFunction(
-    const std::function<absl::Status(string, const RPCOptions*,
-                                     SharedGrpcChannelPtr*)>&
-        new_channel_func_ptr);
+    const std::function<Status(string, const RPCOptions*,
+                               SharedGrpcChannelPtr*)>& new_channel_func_ptr);
 
-absl::Status NewHostPortGrpcChannel(const string& target,
-                                    const RPCOptions* rpc_options,
-                                    SharedGrpcChannelPtr* channel_pointer);
+Status NewHostPortGrpcChannel(const string& target,
+                              const RPCOptions* rpc_options,
+                              SharedGrpcChannelPtr* channel_pointer);
 
 }  // namespace tsl
 

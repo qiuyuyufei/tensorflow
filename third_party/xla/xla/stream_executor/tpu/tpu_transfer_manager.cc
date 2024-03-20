@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@ limitations under the License.
 #include <vector>
 
 #include "absl/cleanup/cleanup.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "xla/literal.h"
 #include "xla/service/shaped_buffer.h"
@@ -46,12 +44,14 @@ limitations under the License.
 #include "xla/stream_executor/tpu/tpu_platform_id.h"
 #include "tsl/platform/casts.h"
 #include "tsl/platform/logging.h"  // IWYU pragma: keep
+#include "tsl/platform/status.h"
+#include "tsl/platform/statusor.h"
 
 namespace tensorflow {
 namespace tpu {
 
 template <typename T>
-using StatusOr = absl::StatusOr<T>;
+using StatusOr = tsl::StatusOr<T>;
 
 TpuTransferManager::TpuTransferManager() {
   manager_ = stream_executor::tpu::ExecutorApiFn()->TpuTransferManager_NewFn();
@@ -81,7 +81,7 @@ xla::Shape TpuTransferManager::HostShapeToDeviceShape(
   return device_shape;
 }
 
-absl::Status TpuTransferManager::TransferLiteralToDeviceAsync(
+tsl::Status TpuTransferManager::TransferLiteralToDeviceAsync(
     stream_executor::Stream* stream, const xla::LiteralSlice& literal,
     const xla::ShapedBuffer& device_buffer,
     const TransferMetadata* transfer_metadata) {
@@ -104,7 +104,7 @@ absl::Status TpuTransferManager::TransferLiteralToDeviceAsync(
   return status.status();
 }
 
-absl::Status TpuTransferManager::TransferLiteralToInfeed(
+tsl::Status TpuTransferManager::TransferLiteralToInfeed(
     stream_executor::StreamExecutor* executor,
     const xla::LiteralSlice& literal) {
   StatusHelper status;
@@ -122,7 +122,7 @@ absl::Status TpuTransferManager::TransferLiteralToInfeed(
   return status.status();
 }
 
-absl::Status TpuTransferManager::TransferBuffersToInfeed(
+tsl::Status TpuTransferManager::TransferBuffersToInfeed(
     se::StreamExecutor* executor,
     const std::deque<tensorflow::tpu::NoncopyableBuffer>& buffers) {
   StatusHelper status;
@@ -148,7 +148,7 @@ absl::Status TpuTransferManager::TransferBuffersToInfeed(
   return status.status();
 }
 
-absl::Status TpuTransferManager::TransferLiteralFromOutfeed(
+tsl::Status TpuTransferManager::TransferLiteralFromOutfeed(
     stream_executor::StreamExecutor* executor,
     xla::MutableBorrowingLiteral literal) {
   StatusHelper status;
@@ -171,7 +171,7 @@ absl::Status TpuTransferManager::TransferLiteralFromOutfeed(
   return status.status();
 }
 
-absl::Status TpuTransferManager::ResetDevices(
+tsl::Status TpuTransferManager::ResetDevices(
     absl::Span<stream_executor::StreamExecutor* const> executor) {
   StatusHelper status;
   std::vector<SE_StreamExecutor*> se;
@@ -191,7 +191,7 @@ struct TransferFromDeviceState {
   std::atomic<int64_t> remaining_transfers;
   TF_Status* overall_status = stream_executor::tpu::ExecutorApiFn()
                                   ->TpuStatus_NewFn();  // OK or the first error
-  std::function<void(absl::Status)> done;
+  std::function<void(tsl::Status)> done;
 
   void TransferFinished(TF_Status* status) {
     if (!stream_executor::tpu::ExecutorApiFn()->TpuStatus_OkFn(status) &&
@@ -214,8 +214,7 @@ void TransferLiteralFromDeviceTrampoline(void* ctx, TF_Status* status) {
 
 void TpuTransferManager::TransferLiteralFromDevice(
     stream_executor::Stream* stream, const xla::ShapedBuffer& device_buffer,
-    xla::MutableBorrowingLiteral literal,
-    std::function<void(absl::Status)> done,
+    xla::MutableBorrowingLiteral literal, std::function<void(tsl::Status)> done,
     const TransferMetadata* transfer_metadata) {
   TransferFromDeviceState* state = new TransferFromDeviceState;
   state->remaining_transfers = 1;
@@ -297,7 +296,7 @@ bool TpuTransferManager::CanBufferBeAccessedNow(
           manager_, tpu_executor->se_executor(), &c_device_buffer);
 }
 
-absl::Status TpuTransferManager::WriteSingleTupleIndexTable(
+tsl::Status TpuTransferManager::WriteSingleTupleIndexTable(
     stream_executor::Stream* stream,
     absl::Span<const stream_executor::DeviceMemoryBase> elements,
     const xla::Shape& shape, stream_executor::DeviceMemoryBase* region) {
@@ -328,7 +327,7 @@ absl::Status TpuTransferManager::WriteSingleTupleIndexTable(
   return status.status();
 }
 
-absl::Status TpuTransferManager::LinearizeToBuffers(
+tsl::Status TpuTransferManager::LinearizeToBuffers(
     const xla::LiteralSlice& literal, const xla::Shape& device_shape,
     std::deque<tensorflow::tpu::NoncopyableBuffer>* buffers) {
   XLA_Literal c_literal;
@@ -361,7 +360,7 @@ absl::Status TpuTransferManager::LinearizeToBuffers(
   return status.status();
 }
 
-absl::Status TpuTransferManager::ReadDynamicShapes(
+tsl::Status TpuTransferManager::ReadDynamicShapes(
     se::Stream* stream, const xla::ShapedBuffer* device_buffer,
     xla::Shape* device_shape) {
   XLA_ShapedBuffer c_device_buffer;
@@ -381,7 +380,7 @@ absl::Status TpuTransferManager::ReadDynamicShapes(
   }
   *device_shape = ApiConverter::FromC(&c_updated_shape);
   ApiConverter::Destroy(&c_updated_shape);
-  return absl::OkStatus();
+  return tsl::OkStatus();
 }
 
 }  // namespace tpu

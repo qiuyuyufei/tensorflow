@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,9 +21,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "absl/status/statusor.h"
 #include "xla/layout_util.h"
-#include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "xla/shape_util.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
@@ -129,19 +127,7 @@ mlir::ArrayAttr ConvertOutputOperandAliasing(
   return builder->getArrayAttr(attrs);
 }
 
-absl::StatusOr<mlir::mhlo::SparsityDescriptorAttr> ConvertSparsityDescriptor(
-    xla::SparsityDescriptor sparsity_descriptor, mlir::Builder* builder) {
-  switch (sparsity_descriptor.type()) {
-    case SPARSITY_STRUCTURED_N_M:
-      return mlir::mhlo::SparsityDescriptorAttr::get(
-          builder->getContext(), sparsity_descriptor.dimension(),
-          sparsity_descriptor.n(), sparsity_descriptor.m());
-    default:
-      return InvalidArgument("Unknown sparsity descriptor type");
-  }
-}
-
-absl::StatusOr<mlir::mhlo::FftType> ConvertFftType(FftType type) {
+StatusOr<mlir::mhlo::FftType> ConvertFftType(FftType type) {
   switch (type) {
     case FftType::FFT:
       return mlir::mhlo::FftType::FFT;
@@ -156,7 +142,7 @@ absl::StatusOr<mlir::mhlo::FftType> ConvertFftType(FftType type) {
   }
 }
 
-absl::StatusOr<mlir::mhlo::Transpose> ConvertTranspose(
+StatusOr<mlir::mhlo::Transpose> ConvertTranspose(
     xla::TriangularSolveOptions_Transpose transpose) {
   switch (transpose) {
     case TriangularSolveOptions::NO_TRANSPOSE:
@@ -172,7 +158,7 @@ absl::StatusOr<mlir::mhlo::Transpose> ConvertTranspose(
   }
 }
 
-absl::StatusOr<mlir::mhlo::CustomCallApiVersion> ConvertCustomCallApiVersion(
+StatusOr<mlir::mhlo::CustomCallApiVersion> ConvertCustomCallApiVersion(
     xla::CustomCallApiVersion api_version) {
   switch (api_version) {
     case xla::CustomCallApiVersion::API_VERSION_UNSPECIFIED:
@@ -193,7 +179,7 @@ absl::StatusOr<mlir::mhlo::CustomCallApiVersion> ConvertCustomCallApiVersion(
   }
 }
 
-absl::StatusOr<mlir::ArrayAttr> ExtractLayoutsFromShapes(
+StatusOr<mlir::ArrayAttr> ExtractLayoutsFromShapes(
     const absl::Span<const Shape> shapes_with_layouts, mlir::Builder* builder) {
   std::vector<mlir::Attribute> layouts;
   for (auto& shape_and_layout : shapes_with_layouts) {
@@ -230,8 +216,8 @@ absl::StatusOr<mlir::ArrayAttr> ExtractLayoutsFromShapes(
   return builder->getArrayAttr(layouts);
 }
 
-absl::StatusOr<mlir::ArrayAttr> ExtractLayoutsFromTuple(
-    const Shape shape, mlir::Builder* builder) {
+StatusOr<mlir::ArrayAttr> ExtractLayoutsFromTuple(const Shape shape,
+                                                  mlir::Builder* builder) {
   if (!shape.IsTuple()) return InvalidArgument("Expected shape to be Tuple");
   return ExtractLayoutsFromShapes(shape.tuple_shapes(), builder);
 }

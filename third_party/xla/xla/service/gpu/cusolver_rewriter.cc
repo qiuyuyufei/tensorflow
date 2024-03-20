@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,31 +15,25 @@ limitations under the License.
 
 #include "xla/service/gpu/cusolver_rewriter.h"
 
-#include <cstdint>
+#include <cstdlib>
 #include <functional>
-#include <utility>
+#include <numeric>
+#include <optional>
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/strings/string_view.h"
-#include "xla/comparison_util.h"
+#include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
-#include "xla/layout_util.h"
 #include "xla/literal.h"
 #include "xla/literal_util.h"
-#include "xla/service/gpu/cusolver_context.h"
 #include "xla/service/gpu/ir_emission_utils.h"
-#include "xla/shape.h"
-#include "xla/shape_util.h"
 #include "xla/stream_executor/blas.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
-#include "tsl/platform/statusor.h"
+#include "tsl/platform/status.h"
 
 namespace xla {
 namespace gpu {
@@ -54,10 +48,10 @@ void SetFortranLayout(Shape* shape) {
             shape->mutable_layout()->mutable_minor_to_major()->at(1));
 }
 
-absl::StatusOr<HloInstruction*> CreateCholesky(GpuSolverContext* context,
-                                               HloInstruction* operand,
-                                               const CholeskyOptions& options,
-                                               const OpMetadata& metadata) {
+StatusOr<HloInstruction*> CreateCholesky(GpuSolverContext* context,
+                                         HloInstruction* operand,
+                                         const CholeskyOptions& options,
+                                         const OpMetadata& metadata) {
   HloComputation* computation = operand->parent();
 
   Shape a_shape = operand->shape();
@@ -137,8 +131,8 @@ absl::StatusOr<HloInstruction*> CreateCholesky(GpuSolverContext* context,
 }
 
 // Tries to rewrite a single convolution into a call to cudnn.
-absl::StatusOr<bool> RunOnInstruction(GpuSolverContext* context,
-                                      HloInstruction* instruction) {
+StatusOr<bool> RunOnInstruction(GpuSolverContext* context,
+                                HloInstruction* instruction) {
   if (instruction->opcode() != HloOpcode::kCholesky) {
     return false;
   }
@@ -160,7 +154,7 @@ absl::StatusOr<bool> RunOnInstruction(GpuSolverContext* context,
 
 // Rewrites the convolutions in the given computation into calls to cudnn.
 // Returns true if it made any changes.
-absl::StatusOr<bool> GpusolverRewriter::RunOnComputation(
+StatusOr<bool> GpusolverRewriter::RunOnComputation(
     HloComputation* computation) {
   std::vector<HloInstruction*> cusolver_calls;
   for (auto* hlo : computation->instructions()) {
@@ -185,7 +179,7 @@ absl::StatusOr<bool> GpusolverRewriter::RunOnComputation(
 
 GpusolverRewriter::GpusolverRewriter() = default;
 
-absl::StatusOr<bool> GpusolverRewriter::Run(
+StatusOr<bool> GpusolverRewriter::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

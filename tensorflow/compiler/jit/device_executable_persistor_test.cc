@@ -71,19 +71,18 @@ class DeviceExecutionPersistorTest : public ::testing::Test {
                             BuildSampleCompilationResult());
   }
 
-  absl::StatusOr<std::unique_ptr<xla::LocalExecutable>>
-  BuildSampleExecutable() {
+  StatusOr<std::unique_ptr<xla::LocalExecutable>> BuildSampleExecutable() {
     return xla_compiler_client_->BuildExecutable(DefaultXlaOptions(),
                                                  compilation_result_add_);
   }
 
-  absl::StatusOr<std::unique_ptr<xla::PjRtLoadedExecutable>>
+  StatusOr<std::unique_ptr<xla::PjRtLoadedExecutable>>
   BuildSamplePjRtExecutable() {
     return pjrt_compiler_client_->BuildExecutable(DefaultPjRtOptions(),
                                                   compilation_result_add_);
   }
 
-  absl::StatusOr<XlaCompiler::CompilationResult> BuildSampleCompilationResult(
+  StatusOr<XlaCompiler::CompilationResult> BuildSampleCompilationResult(
       bool mul = false) {
     std::unique_ptr<Graph> graph(new Graph(OpRegistry::Global()));
     Scope scope = Scope::NewRootScope().ExitOnError();
@@ -144,7 +143,7 @@ class DeviceExecutionPersistorTest : public ::testing::Test {
                         GetOrCreatePjRtClient(DeviceType(DEVICE_CPU_XLA_JIT)));
     pjrt_compiler_client_ =
         std::make_unique<PjRtDeviceCompilerClient>(pjrt_client);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   std::unique_ptr<FunctionLibraryDefinition> flib_def_;
@@ -163,14 +162,13 @@ class DeviceExecutionPersistorTest : public ::testing::Test {
 class MockXlaCompilerClient : public XlaDeviceCompilerClient {
  public:
   MockXlaCompilerClient() : XlaDeviceCompilerClient(nullptr) {}
-  MOCK_METHOD(absl::StatusOr<std::string>, SerializeExecutable,
+  MOCK_METHOD(StatusOr<std::string>, SerializeExecutable,
               (const xla::LocalExecutable& executable), (override));
-  MOCK_METHOD(absl::StatusOr<std::string>, BuildSerializedExecutable,
+  MOCK_METHOD(StatusOr<std::string>, BuildSerializedExecutable,
               (const XlaCompiler::Options& options,
                const XlaCompiler::CompilationResult& result),
               (override));
-  MOCK_METHOD(absl::StatusOr<std::unique_ptr<xla::LocalExecutable>>,
-              LoadExecutable,
+  MOCK_METHOD(StatusOr<std::unique_ptr<xla::LocalExecutable>>, LoadExecutable,
               (const XlaCompiler::Options& options,
                const XlaCompiler::CompilationResult& result,
                const std::string& serialized_executable),
@@ -180,13 +178,13 @@ class MockXlaCompilerClient : public XlaDeviceCompilerClient {
 class MockPjRtCompilerClient : public PjRtDeviceCompilerClient {
  public:
   MockPjRtCompilerClient() : PjRtDeviceCompilerClient(nullptr) {}
-  MOCK_METHOD(absl::StatusOr<std::string>, SerializeExecutable,
+  MOCK_METHOD(StatusOr<std::string>, SerializeExecutable,
               (const xla::PjRtLoadedExecutable& executable), (override));
-  MOCK_METHOD(absl::StatusOr<std::string>, BuildSerializedExecutable,
+  MOCK_METHOD(StatusOr<std::string>, BuildSerializedExecutable,
               (const XlaCompiler::Options& options,
                const XlaCompiler::CompilationResult& result),
               (override));
-  MOCK_METHOD(absl::StatusOr<std::unique_ptr<xla::PjRtLoadedExecutable>>,
+  MOCK_METHOD(StatusOr<std::unique_ptr<xla::PjRtLoadedExecutable>>,
               LoadExecutable,
               (const XlaCompiler::Options& options,
                const XlaCompiler::CompilationResult& result,
@@ -211,7 +209,7 @@ std::string GetFilePath(XlaSerializedCacheKey key,
   return io::JoinPath(persistent_cache_dir, file_name);
 }
 
-absl::StatusOr<XlaSerializedCacheEntry> ReadCacheEntryFromFile(
+StatusOr<XlaSerializedCacheEntry> ReadCacheEntryFromFile(
     XlaSerializedCacheKey key, const std::string& persistent_cache_dir) {
   std::string file_path = GetFilePath(key, persistent_cache_dir);
   XlaSerializedCacheEntry entry;
@@ -287,8 +285,7 @@ TEST_F(DeviceExecutionPersistorTest, PersistSerializeAlreadyBuiltExecutable) {
 
   MockXlaCompilerClient mock_client;
   EXPECT_CALL(mock_client, SerializeExecutable(_))
-      .WillOnce(
-          Return(absl::StatusOr<std::string>(serialized_xla_executable_)));
+      .WillOnce(Return(StatusOr<std::string>(serialized_xla_executable_)));
 
   TF_ASSERT_OK_AND_ASSIGN(auto executable, BuildSampleExecutable());
   TF_EXPECT_OK(persistor.TryToPersistExecutable(

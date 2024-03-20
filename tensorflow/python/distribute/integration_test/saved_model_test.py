@@ -40,6 +40,7 @@ from tensorflow.python.distribute import test_util
 from tensorflow.python.distribute import values
 from tensorflow.python.eager import context
 from tensorflow.python.eager import test
+from tensorflow.python.framework import errors_impl
 from tensorflow.python.ops import lookup_ops
 
 _sixteen_worker_pool = strategy_combinations._deferred_pool_runner(
@@ -683,15 +684,16 @@ class PSStrategySaveAndLoadTest(test.TestCase):
 
     self.assertAllEqual(self.load_and_run_v1(model_dir, {"x": 1}), [6, 6, 6, 6])
 
-  def test_load_with_partitioner_works(self):
+  def test_load_with_partitioner_raises_error(self):
     model = self.Model()
     model_dir = self.get_temp_dir()
     tf.saved_model.save(model, model_dir)
 
     strategy = parameter_server_strategy_v2.ParameterServerStrategyV2(
         self.cluster_resolver, tf1.fixed_size_partitioner(2))
-    with strategy.scope():
-      tf.saved_model.load(model_dir)
+    with self.assertRaises(errors_impl.InvalidArgumentError):
+      with strategy.scope():
+        tf.saved_model.load(model_dir)
 
 
 if __name__ == "__main__":

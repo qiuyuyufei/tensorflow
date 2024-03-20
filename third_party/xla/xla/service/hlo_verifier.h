@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -87,15 +87,6 @@ struct HloVerifierOpts {
     return std::move(*this);
   }
 
-  HloVerifierOpts&& WithVerifyS4U4Usage(bool verify) {
-    return std::move(*this);
-  }
-
-  HloVerifierOpts&& WithAllowUnboundedDynamism(bool allow) {
-    allow_unbounded_dynamism = allow;
-    return std::move(*this);
-  }
-
   bool IsLayoutSensitive() const { return layout_sensitive; }
 
   bool AllowMixedPrecision() const { return allow_mixed_precision; }
@@ -135,9 +126,6 @@ struct HloVerifierOpts {
 
   // Whether bitcast should have the same size, including all paddings.
   bool allow_bitcast_to_have_different_size = false;
-
-  // Whether unbounded dynamic sizes should be allowed for shapes.
-  bool allow_unbounded_dynamism = false;
 
   HloPredicate instruction_can_change_layout;
 
@@ -181,7 +169,6 @@ class ShapeVerifier : public DfsHloVisitor {
   Status HandleAllReduceStart(HloInstruction* hlo) override;
   Status HandleAllReduceDone(HloInstruction* hlo) override;
   Status HandleAllToAll(HloInstruction* hlo) override;
-  Status HandleCollectiveBroadcast(HloInstruction* hlo) override;
   Status HandleCollectivePermute(HloInstruction* hlo) override;
   Status HandleCollectivePermuteStart(HloInstruction* hlo) override;
   Status HandleCollectivePermuteDone(HloInstruction* hlo) override;
@@ -245,7 +232,9 @@ class ShapeVerifier : public DfsHloVisitor {
 
  protected:
   // Helpers that switch on layout_sensitive_.
-  bool ShapesSame(const Shape& a, const Shape& b, Shape::Equal equal = {});
+  bool ShapesSame(const Shape& a, const Shape& b,
+                  bool minor_to_major_only = false,
+                  bool ignore_memory_space = false, bool ignore_tiles = false);
 
   // Check the instruction's shape against the shape given by ShapeInference
   // and return an appropriate error if there is a mismatch.
@@ -255,7 +244,7 @@ class ShapeVerifier : public DfsHloVisitor {
 
   // Overload which takes a StatusOr to reduce boilerplate in the caller.
   Status CheckShape(const HloInstruction* instruction,
-                    const absl::StatusOr<Shape>& inferred_shape_status);
+                    const StatusOr<Shape>& inferred_shape_status);
 
   static Status CheckParameterCount(const HloInstruction* calling_instruction,
                                     const HloComputation* computation,
@@ -268,6 +257,19 @@ class ShapeVerifier : public DfsHloVisitor {
   Status CheckVariadicShape(const HloInstruction* instruction);
 
  private:
+  bool ShapesSameIgnoringFpPrecision(const Shape& a, const Shape& b,
+                                     bool minor_to_major_only = false) {
+    if (!opts_.layout_sensitive) {
+      return ShapeUtil::CompatibleIgnoringFpPrecision(a, b);
+    }
+    Shape::Equal equal;
+    if (minor_to_major_only) {
+      equal.MinorToMajorOnlyInLayout();
+    }
+    equal.IgnoreFpPrecision();
+    return equal(a, b);
+  }
+
   std::string StringifyShape(const Shape& s) {
     return opts_.layout_sensitive ? ShapeUtil::HumanStringWithLayout(s)
                                   : ShapeUtil::HumanString(s);
@@ -376,7 +378,7 @@ class HloVerifier : public HloModulePass {
   // Never returns true; no instructions are ever modified by this pass.
   using HloPassInterface::Run;
   using HloPassInterface::RunOnModuleGroup;
-  absl::StatusOr<bool> Run(
+  StatusOr<bool> Run(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads) override;
 

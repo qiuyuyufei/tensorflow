@@ -50,7 +50,7 @@ Status GetSliceOpArguments(mlir::TF::SliceOp slice_op,
       ExtractConstVectorFromValue(slice_op.getSize(), &sizes),
       "expected constant argument for SliceOp::size()");
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 StatusOr<Layout> VerifySliceLayout(

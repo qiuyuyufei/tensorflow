@@ -117,9 +117,9 @@ Attribute DTensorDialect::parseAttribute(DialectAsmParser &parser,
   StringRef spec = parser.getFullSymbolSpec();
   Location loc = parser.getEncodedSourceLoc(parser.getNameLoc());
 
-  if (spec.starts_with("mesh")) return ParseMeshAttr(getContext(), spec, loc);
+  if (spec.startswith("mesh")) return ParseMeshAttr(getContext(), spec, loc);
 
-  if (spec.starts_with("layout"))
+  if (spec.startswith("layout"))
     return ParseLayoutAttr(getContext(), spec, loc);
 
   return (emitError(loc, "unknown DTensor attribute: " + spec), nullptr);

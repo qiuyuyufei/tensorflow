@@ -870,7 +870,7 @@ Status MasterSession::ReffedClientGraph::RunPartitions(
     }
     fetch_proto->Swap(&iter->second);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 namespace {
@@ -967,7 +967,7 @@ void MasterSession::ReffedClientGraph::ProcessStats(int64_t step_id,
     }
     ph->StepDone(pss->start_micros, pss->end_micros,
                  Microseconds(0) /*cleanup_time*/, 0 /*total_runops*/,
-                 absl::OkStatus());
+                 OkStatus());
   }
   // Assemble all stats for this timeline into a merged StepStats.
   if (pss->collect_timeline) {
@@ -1091,7 +1091,7 @@ Status MasterSession::ReffedClientGraph::CheckFetches(
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Asynchronously deregisters subgraphs on the workers, without waiting for the
@@ -1304,7 +1304,7 @@ Status MasterSession::CreateWorkerSessions(const ClusterDef& cluster_def) {
     // Request and responses used for a given worker.
     CreateWorkerSessionRequest request;
     CreateWorkerSessionResponse response;
-    Status status = absl::OkStatus();
+    Status status = OkStatus();
   };
   BlockingCounter done(worker_names.size());
   std::vector<WorkerGroup> workers(worker_names.size());
@@ -1325,7 +1325,7 @@ Status MasterSession::CreateWorkerSessions(const ClusterDef& cluster_def) {
   const int64_t client_device_incarnation =
       devices_->client_device()->attributes().incarnation();
 
-  Status status = absl::OkStatus();
+  Status status = OkStatus();
   // Create all the workers & kick off the computations.
   for (size_t i = 0; i < worker_names.size(); ++i) {
     workers[i].name = &worker_names[i];
@@ -1439,7 +1439,7 @@ Status MasterSession::DeleteWorkerSessions() {
     // Request and responses used for a given worker.
     DeleteWorkerSessionRequest request;
     DeleteWorkerSessionResponse response;
-    Status status = absl::OkStatus();
+    Status status = OkStatus();
   };
   BlockingCounter done(worker_names.size());
   std::vector<WorkerGroup> workers(worker_names.size());
@@ -1453,7 +1453,7 @@ Status MasterSession::DeleteWorkerSessions() {
     }
   });
 
-  Status status = absl::OkStatus();
+  Status status = OkStatus();
   // Create all the workers & kick off the computations.
   for (size_t i = 0; i < worker_names.size(); ++i) {
     workers[i].name = &worker_names[i];
@@ -1501,7 +1501,7 @@ Status MasterSession::ListDevices(ListDevicesResponse* resp) const {
       *(resp->add_local_device()) = dev->attributes();
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status MasterSession::Extend(const ExtendSessionRequest* req,
@@ -1530,7 +1530,7 @@ Status MasterSession::Extend(const ExtendSessionRequest* req,
     ++graph_version_;
     resp->set_new_graph_version(graph_version_);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 WorkerCacheInterface* MasterSession::get_worker_cache() const {
@@ -1571,7 +1571,7 @@ Status MasterSession::StartStep(const BuildGraphOptions& opts, bool is_partial,
     (*out_rcg)->Ref();
     *out_count = (*out_rcg)->get_and_increment_execution_count();
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void MasterSession::ClearRunsTable(std::vector<ReffedClientGraph*>* to_unref,
@@ -1654,7 +1654,7 @@ Status MasterSession::PartialRunSetup(const PartialRunSetupRequest* req,
   TF_RETURN_IF_ERROR(BuildAndRegisterPartitions(rcg));
 
   resp->set_partial_run_handle(handle);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status MasterSession::Run(CallOptions* opts, const RunStepRequestWrapper& req,
@@ -1727,7 +1727,7 @@ Status MasterSession::BuildAndRegisterPartitions(ReffedClientGraph* rcg) {
 
   TF_RETURN_IF_ERROR(rcg->RegisterPartitions(std::move(popts)));
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status MasterSession::DoPartialRun(CallOptions* opts,
@@ -1888,7 +1888,7 @@ Status MasterSession::CreateDebuggerState(
       debug_options.global_step(), rcg_execution_count, rcg_execution_count,
       input_names, output_names, target_names));
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void MasterSession::FillPerStepState(MasterSession::ReffedClientGraph* rcg,
@@ -2049,7 +2049,7 @@ Status MasterSession::MakeCallable(const MakeCallableRequest& req,
   }
 
   resp->set_handle(handle);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status MasterSession::DoRunCallable(CallOptions* opts, ReffedClientGraph* rcg,
@@ -2123,7 +2123,7 @@ Status MasterSession::ReleaseCallable(const ReleaseCallableRequest& req,
   if (to_unref != nullptr) {
     to_unref->Unref();
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status MasterSession::Close() {
@@ -2149,7 +2149,7 @@ Status MasterSession::Close() {
       LOG(WARNING) << s;
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void MasterSession::GarbageCollect() {

@@ -226,13 +226,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
              {"cycle_length",
               strings::Printf("%lld", static_cast<long long>(cycle_length))},
              {"deterministic",
-              deterministic.IsNondeterministic() ? "false" : "true"},
-             {"buffer_output_elements",
-              strings::Printf("%lld",
-                              static_cast<long long>(buffer_output_elements_))},
-             {"prefetch_input_elements",
-              strings::Printf(
-                  "%lld", static_cast<long long>(prefetch_input_elements_))}}) {
+              deterministic.IsNondeterministic() ? "false" : "true"}}) {
     input_->Ref();
   }
 
@@ -275,7 +269,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
 
   Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
     inputs->push_back(input_);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status CheckExternalState() const override {
@@ -351,7 +345,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
     }
 
     TF_RETURN_IF_ERROR(b->AddDataset(this, inputs, list_inputs, attrs, output));
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -415,7 +409,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
         EnsureInitialElementsCreated(ctx);
         EnsureThreadsStarted(ctx);
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status GetNextInternal(IteratorContext* ctx,
@@ -446,7 +440,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
       }
       if (!result) {
         *end_of_sequence = true;
-        return absl::OkStatus();
+        return OkStatus();
       }
       profiler::TraceMe traceme([&] {
         return profiler::TraceMeEncode("ParallelInterleaveConsume",
@@ -495,9 +489,6 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
       TF_RETURN_IF_ERROR(ctx->HandleCheckExternalStateStatus(
           dataset()->captured_func_->CheckExternalState()));
       mutex_lock l(*mu_);
-      if (ctx->symbolic_checkpoint()) {
-        TF_RETURN_IF_ERROR(checkpoint_->GetStatus());
-      }
       TF_RETURN_IF_ERROR(checkpoint_->Save(writer));
       wait_for_checkpoint_ = true;
       // Wait for all in-flight calls to complete.
@@ -530,7 +521,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
       // Wake workers back up.
       current_workers_cond_var_.notify_all();
       future_workers_cond_var_.notify_all();
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status RestoreInternal(IteratorContext* ctx,
@@ -579,7 +570,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
       }
       VLOG(2) << "Parallel interleave iterator restored";
       VLOG(4) << "State after restore:\n" << DebugString();
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     TraceMeMetadata GetTraceMeMetadata() const override {
@@ -1286,7 +1277,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
                                                ErrorMessageKey(idx),
                                                std::string(status.message())));
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status ReadStatusLocked(IteratorStateReader* reader,
@@ -1303,9 +1294,9 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
             iterator_name, ErrorMessageKey(idx), &error_message));
         *status = Status(code, error_message);
       } else {
-        *status = absl::OkStatus();
+        *status = OkStatus();
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     string CodeKey(size_t idx) {
@@ -1362,7 +1353,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
             key_prefix,
             absl::StrCat(kResultsSuffix, "[", i, "]", kIsReadySuffix), ""));
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status WriteCurrentElements(SerializationContext* ctx,
@@ -1381,7 +1372,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
               WriteElement(ctx, current_elements_[idx], key_prefix, writer));
         }
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status WriteFutureElements(SerializationContext* ctx,
@@ -1400,7 +1391,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
               WriteElement(ctx, future_elements_[idx], key_prefix, writer));
         }
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status ReadElement(IteratorContext* ctx, IteratorStateReader* reader,
@@ -1410,7 +1401,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
       TF_RETURN_IF_ERROR(reader->ReadScalar(key_prefix, kElementUninitialized,
                                             &element_uninitialized));
       if (static_cast<bool>(element_uninitialized)) {
-        return absl::OkStatus();
+        return OkStatus();
       }
       std::unique_ptr<IteratorBase> iterator;
       auto element = std::make_shared<Element>();
@@ -1447,7 +1438,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
         if (static_cast<bool>(!restore_iterator)) {
           element->iterator.reset();
           *out = std::move(element);
-          return absl::OkStatus();
+          return OkStatus();
         }
         int64_t inputs_size;
         TF_RETURN_IF_ERROR(reader->ReadScalar(
@@ -1475,7 +1466,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
       mutex_lock l(*mu_);
       element->iterator = std::move(iterator);
       *out = std::move(element);
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status ReadCurrentElements(IteratorContext* ctx,
@@ -1501,7 +1492,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
         }
       }
       if (size == 0) {
-        return absl::OkStatus();
+        return OkStatus();
       }
       std::vector<std::shared_ptr<Element>> elements;
       TF_RETURN_IF_ERROR(
@@ -1513,7 +1504,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
       for (int idx = 0; idx < size; ++idx) {
         current_elements_[idx] = std::move(elements[idx]);
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status ReadFutureElements(IteratorContext* ctx,
@@ -1526,7 +1517,7 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
         future_elements_.resize(size);
       }
       if (size == 0) {
-        return absl::OkStatus();
+        return OkStatus();
       }
       std::vector<std::shared_ptr<Element>> elements;
       TF_RETURN_IF_ERROR(
@@ -1538,14 +1529,14 @@ class ParallelInterleaveDatasetOp::Dataset : public DatasetBase {
       for (int idx = 0; idx < size; ++idx) {
         future_elements_[idx] = std::move(elements[idx]);
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status ReadElementsParallel(
         IteratorContext* ctx, IteratorStateReader* reader, int64_t size,
         const string& name, std::vector<std::shared_ptr<Element>>* elements) {
       elements->resize(size);
-      Status s = absl::OkStatus();
+      Status s = OkStatus();
       BlockingCounter counter(size);
       for (int idx = 0; idx < size; ++idx) {
         thread_pool_->Schedule([this, ctx, reader, idx, name, &s, &counter,

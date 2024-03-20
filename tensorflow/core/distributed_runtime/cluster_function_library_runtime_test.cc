@@ -120,7 +120,7 @@ class ClusterFunctionLibraryRuntimeTest : public ::testing::Test {
       *rets[i] = out[i];
     }
 
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  protected:

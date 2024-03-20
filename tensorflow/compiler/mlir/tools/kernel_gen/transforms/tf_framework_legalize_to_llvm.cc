@@ -271,6 +271,8 @@ class JITCompileFromStrOpConverter
         ConvertIntegerArrayAttrToStackAllocatedArray(
             loc, rewriter.getI64Type(), rewriter.getI64Type(),
             op.getUnrollFactors(), &rewriter);
+    Value max_supported_rank = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getI64Type(), op.getMaxSupportedRankAttr());
     Value enable_ftz = rewriter.create<LLVM::ConstantOp>(
         loc, rewriter.getI1Type(), op.getEnableFtzAttr());
     Value index_64bit = rewriter.create<LLVM::ConstantOp>(
@@ -283,8 +285,8 @@ class JITCompileFromStrOpConverter
         op, getVoidPtrType(), tf_func_ref,
         llvm::ArrayRef({adaptor.getCtx(), jit_module_code, tile_sizes.first,
                         tile_sizes.second, unroll_factors.first,
-                        unroll_factors.second, enable_ftz, index_64bit,
-                        cpu_codegen}));
+                        unroll_factors.second, max_supported_rank, enable_ftz,
+                        index_64bit, cpu_codegen}));
     return success();
   }
 
@@ -302,6 +304,7 @@ class JITCompileFromStrOpConverter
                            /*int64_t* tile_sizes_ptr*/ ptr_ty,
                            /*int64_t num_unroll_factors*/ i64_ty,
                            /*int64_t* unroll_factors_ptr*/ ptr_ty,
+                           /*int64_t max_supported_rank*/ i64_ty,
                            /*bool enable_ftz*/ i1_ty,
                            /*bool index_64bit*/ i1_ty,
                            /*bool cpu_codegen*/ i1_ty});

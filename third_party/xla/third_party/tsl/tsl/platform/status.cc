@@ -166,6 +166,12 @@ const char* NullTerminatedMessage(const Status& status) {
 }
 
 
+Status OkStatus() { return Status(); }
+
+Status FromAbslStatus(const absl::Status& s) { return s; }
+
+absl::Status ToAbslStatus(const ::absl::Status& s) { return s; }
+
 std::string* TfCheckOpHelperOutOfLine(const ::tsl::Status& v, const char* msg) {
   std::string r("Non-OK-status: ");
   r += msg;

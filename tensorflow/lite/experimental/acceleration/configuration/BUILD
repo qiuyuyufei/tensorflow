@@ -155,10 +155,10 @@ cc_library(
         "//tensorflow/lite/core/experimental/acceleration/configuration:delegate_registry",
         "@com_google_absl//absl/memory",
     ] + select({
-        "@platforms//cpu:aarch64": [
+        "//third_party/bazel_platforms/cpu:aarch64": [
             "//tensorflow/lite/delegates/hexagon:hexagon_delegate",
         ],
-        "@platforms//cpu:armv7": [
+        "//third_party/bazel_platforms/cpu:armv7": [
             "//tensorflow/lite/delegates/hexagon:hexagon_delegate",
         ],
         "//conditions:default": [],

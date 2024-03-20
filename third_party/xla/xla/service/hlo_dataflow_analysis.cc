@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ limitations under the License.
 #include <optional>
 #include <queue>
 #include <string>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -30,7 +29,6 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/functional/function_ref.h"
-#include "absl/log/check.h"
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -333,7 +331,7 @@ HloValue* HloDataflowAnalysis::NewHloValue(HloInstruction* instruction,
 }
 
 void HloDataflowAnalysis::MarkValueForDeletion(HloValue::Id value_id) {
-  const HloValue& value = GetValue(value_id);
+  const HloValue& value = *values_.at(value_id);
   VLOG(4) << "MarkValueForDeletion(" << value.ToShortString() << ")";
 
   value_ids_to_delete_.push_back(value_id);
@@ -527,13 +525,11 @@ bool HloDataflowAnalysis::Phi(
 }
 
 const HloValue& HloDataflowAnalysis::GetValue(HloValue::Id value_id) const {
-  DCHECK(values_.contains(value_id)) << "Value not found: " << value_id;
-  return *values_.find(value_id)->second;
+  return *values_.at(value_id);
 }
 
 HloValue& HloDataflowAnalysis::GetValue(HloValue::Id value_id) {
-  DCHECK(values_.contains(value_id)) << "Value not found: " << value_id;
-  return *values_.find(value_id)->second;
+  return *values_.at(value_id);
 }
 
 HloValueSet HloDataflowAnalysis::GetFlattenedValueSet(
@@ -1406,16 +1402,12 @@ void HloDataflowAnalysis::Propagate() {
 
 const InstructionValueSet& HloDataflowAnalysis::GetInstructionValueSet(
     const HloInstruction* instruction) const {
-  DCHECK(value_sets_.contains(instruction))
-      << "Instruction " << instruction->ToString() << " not found.";
-  return *value_sets_.find(instruction)->second;
+  return *value_sets_.at(instruction);
 }
 
 InstructionValueSet& HloDataflowAnalysis::GetInstructionValueSet(
     const HloInstruction* instruction) {
-  DCHECK(value_sets_.contains(instruction))
-      << "Instruction " << instruction->ToString() << " not found.";
-  return *value_sets_.find(instruction)->second;
+  return *value_sets_.at(instruction);
 }
 
 Status HloDataflowAnalysis::InitializeInstructionValueSets() {
@@ -1655,8 +1647,8 @@ void HloDataflowAnalysis::OptimizePhiValues() {
             HloValue::Id phi_id = values[0]->id();
             HloValue::Id new_id = phi_graph_.FindOptimizedValue(phi_id);
             if (new_id != phi_id) {
-              VLOG(1) << "Replacing " << values[0]->ToShortString() << " with "
-                      << GetValue(new_id).ToShortString();
+              VLOG(1) << "Replacing " << values[0]->ToString() << " with "
+                      << GetValue(new_id).ToString();
               value_set->Clear();
               const HloValue& new_value = GetValue(new_id);
               value_set->AddValue(&new_value);
@@ -1854,63 +1846,59 @@ std::vector<std::pair<HloOperandIndex, ShapeIndex>>
 GetFusionInstructionInPlaceInputOutputPairs(const HloInstruction* instruction) {
   std::vector<std::pair<HloOperandIndex, ShapeIndex>>
       in_place_input_output_pairs;
-
   // Each of these leaves represents one array output of the fusion that might
   // be aliased with one of the fusion computation's array inputs (both could be
   // nested arbitrarily deep inside tuples).
-  ShapeUtil::ForEachLeafShape(
-      instruction->shape(),
-      [&](const Shape& sub_shape, const ShapeIndex& index) {
-        // Start from the root instruction of the fusion computation and follow
-        // tuple indirection backwards to find the "output source", i.e. the
-        // instruction that is the original source of the array output in
-        // question. If there is no such indirection the "output source" will
-        // just be the fusion root instruction itself.
-        const HloInstruction* output_source_instruction =
-            instruction->fused_expression_root();
-        ShapeIndex output_source_index = index;
-        std::tie(output_source_instruction, output_source_index) =
-            FollowTupleIndirection(output_source_instruction,
-                                   output_source_index);
+  for (const auto& fusion_output_array_shape :
+       ShapeUtil::GetLeafShapes(instruction->shape())) {
+    // Start from the root instruction of the fusion computation and follow
+    // tuple indirection backwards to find the "output source", i.e. the
+    // instruction that is the original source of the array output in question.
+    // If there is no such indirection the "output source" will just be the
+    // fusion root instruction itself.
+    const HloInstruction* output_source_instruction =
+        instruction->fused_expression_root();
+    ShapeIndex output_source_index = fusion_output_array_shape.index;
+    std::tie(output_source_instruction, output_source_index) =
+        FollowTupleIndirection(output_source_instruction, output_source_index);
 
-        // The aliasing rules of the "output source" instruction determine the
-        // aliasing rules for the entire fusion. If we can connect (following
-        // tuple indirection) the input of an "in-place" pair to one of the
-        // fusion's inputs, and the output of this "in-place" pair to the fusion
-        // output in question, then this fusion input and output must alias.
-        auto in_place_pairs = HloDataflowAnalysis::GetInPlaceInputOutputPairs(
-            output_source_instruction);
-        ShapeIndex in_place_input_index;
-        const HloInstruction* in_place_input_source = nullptr;
+    // The aliasing rules of the "output source" instruction determine the
+    // aliasing rules for the entire fusion. If we can connect (following tuple
+    // indirection) the input of an "in-place" pair to one of the fusion's
+    // inputs, and the output of this "in-place" pair to the fusion output
+    // in question, then this fusion input and output must alias.
+    auto in_place_pairs = HloDataflowAnalysis::GetInPlaceInputOutputPairs(
+        output_source_instruction);
+    ShapeIndex in_place_input_index;
+    const HloInstruction* in_place_input_source = nullptr;
 
-        for (const auto& output_source_in_place_pair : in_place_pairs) {
-          const HloOperandIndex& input = output_source_in_place_pair.first;
-          const ShapeIndex& output_index = output_source_in_place_pair.second;
-          if (output_index == output_source_index) {
-            // It is not possible for the same output to alias multiple inputs.
-            CHECK(in_place_input_source == nullptr);
-            in_place_input_source =
-                output_source_instruction->operand(input.operand_number);
-            in_place_input_index = input.operand_index;
-          }
-        }
+    for (const auto& output_source_in_place_pair : in_place_pairs) {
+      const HloOperandIndex& input = output_source_in_place_pair.first;
+      const ShapeIndex& output_index = output_source_in_place_pair.second;
+      if (output_index == output_source_index) {
+        // It is not possible for the same output to alias multiple inputs.
+        CHECK(in_place_input_source == nullptr);
+        in_place_input_source =
+            output_source_instruction->operand(input.operand_number);
+        in_place_input_index = input.operand_index;
+      }
+    }
 
-        if (in_place_input_source) {
-          // Follow tuple indirection backwards from the instruction input to
-          // try to find a fusion parameter. If found, that parameter aliases
-          // the current output. If not, the current output aliases no input.
-          std::tie(in_place_input_source, in_place_input_index) =
-              FollowTupleIndirection(in_place_input_source,
-                                     in_place_input_index);
+    if (in_place_input_source) {
+      // Follow tuple indirection backwards from the instruction input to try to
+      // find a fusion parameter. If found, that parameter aliases the current
+      // output. If not, the current output aliases no input.
+      std::tie(in_place_input_source, in_place_input_index) =
+          FollowTupleIndirection(in_place_input_source, in_place_input_index);
 
-          if (in_place_input_source->opcode() == HloOpcode::kParameter) {
-            in_place_input_output_pairs.emplace_back(
-                HloOperandIndex{in_place_input_source->parameter_number(),
-                                in_place_input_index},
-                index);
-          }
-        }
-      });
+      if (in_place_input_source->opcode() == HloOpcode::kParameter) {
+        in_place_input_output_pairs.emplace_back(
+            HloOperandIndex{in_place_input_source->parameter_number(),
+                            in_place_input_index},
+            fusion_output_array_shape.index);
+      }
+    }
+  }
   return in_place_input_output_pairs;
 }
 

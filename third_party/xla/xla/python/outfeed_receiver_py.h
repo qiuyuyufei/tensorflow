@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,11 +17,11 @@ limitations under the License.
 #define XLA_PYTHON_OUTFEED_RECEIVER_PY_H_
 
 // placeholder for index annotation headers
-#include "third_party/nanobind/include/nanobind/nanobind.h"
+#include "pybind11/pybind11.h"  // from @pybind11
 
 namespace xla {
 
-void BuildOutfeedReceiverSubmodule(nanobind::module_& m);
+void BuildOutfeedReceiverSubmodule(pybind11::module* m);
 
 }  // namespace xla
 

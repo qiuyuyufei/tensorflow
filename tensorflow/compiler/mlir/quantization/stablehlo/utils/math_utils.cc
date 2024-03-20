@@ -16,9 +16,6 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/quantization/stablehlo/utils/math_utils.h"
 
 #include <cmath>
-#include <cstdint>
-
-#include "mlir/Support/LogicalResult.h"  // from @llvm-project
 
 namespace mlir::quant::stablehlo {
 
@@ -34,7 +31,7 @@ LogicalResult QuantizeMultiplier(double double_multiplier,
   const double fraction = std::frexp(double_multiplier, &shift);
   quantized_fraction = static_cast<int32_t>(std::round(fraction * (1L << 15)));
   // Clip extreme values.  These are more than enough to overflow int8, the
-  // storage type for quantized values, and the final values will be clamped
+  // stroage type for quantized values, and the final values will be clamped
   // no matter what.
   if (quantized_fraction == (1L << 15)) {
     quantized_fraction /= 2;

@@ -1,3 +1,5 @@
+load("//tensorflow:tensorflow.default.bzl", "filegroup")
+load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 load(
     "//tensorflow:tensorflow.bzl",
     "if_zendnn",
@@ -7,13 +9,11 @@ load(
     "tf_cuda_library",
     "tf_mkl_kernel_library",
 )
-load("//tensorflow:tensorflow.default.bzl", "filegroup")
 load(
-    "@local_xla//xla/tsl/mkl:build_defs.bzl",
+    "//third_party/mkl:build_defs.bzl",
     "if_mkl",
     "mkl_deps",
 )
-load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
@@ -119,9 +119,6 @@ tf_cuda_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
-        "@local_tsl//tsl/util:env_var",
     ] + select({
         "//tensorflow:android": [
             "//tensorflow/core:portable_tensorflow_lib_lite",
@@ -304,8 +301,6 @@ tf_cuda_library(
         "//tensorflow/core/platform:platform_port",
         "//tensorflow/core/util:managed_stack_trace",
         "@com_google_absl//absl/container:inlined_vector",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
         "@com_google_absl//absl/types:variant",
@@ -416,7 +411,6 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core/platform:status_matchers",
-        "@com_google_absl//absl/cleanup",
     ],
 )
 

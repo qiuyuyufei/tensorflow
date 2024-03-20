@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -148,8 +148,6 @@ class Executable {
   }
 
   std::string_view name() const { return name_; }
-
-  std::string&& take_ir_module_string() { return std::move(ir_module_string_); }
 
   std::optional<size_t> specialization() const { return specialization_; }
 
@@ -377,15 +375,13 @@ class Executable {
              std::unique_ptr<ExecutionEngine> engine,
              std::vector<Function> functions,
              std::optional<size_t> specialization,
-             std::chrono::milliseconds time_to_compile,
-             std::string&& ir_module_string = "")
+             std::chrono::milliseconds time_to_compile)
       : name_(name),
         memory_mapper_(std::move(memory_mapper)),
         engine_(std::move(engine)),
         functions_(std::move(functions)),
         specialization_(specialization),
-        time_to_compile_(time_to_compile),
-        ir_module_string_(ir_module_string) {
+        time_to_compile_(time_to_compile) {
     // All exported functions must have a non-null function pointer.
     assert(llvm::all_of(functions_, [](const Function& f) { return f.fptr; }));
   }
@@ -407,10 +403,6 @@ class Executable {
 
   // The time it took to compile this binary.
   std::chrono::milliseconds time_to_compile_;
-
-  // The (optional) string containing the LLVM module, if requested by
-  // compilation or set explicitly.
-  std::string ir_module_string_;
 };
 
 // Function reference provides a function-like API for a function exported from

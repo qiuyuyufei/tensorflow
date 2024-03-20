@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ namespace xla {
 namespace {
 
 // Concat(Concat(A, B), C) => Concat(A, B, C)
-absl::StatusOr<bool> ConcatForwarding(HloInstruction* concat) {
+StatusOr<bool> ConcatForwarding(HloInstruction* concat) {
   if (concat->opcode() != HloOpcode::kConcatenate) {
     return false;
   }
@@ -51,7 +51,7 @@ absl::StatusOr<bool> ConcatForwarding(HloInstruction* concat) {
 }
 
 // Slice(Concat(A1, A2, ..., An, ...), [n:n+1]) => An
-absl::StatusOr<bool> SliceConcatForwarding(HloInstruction* slice) {
+StatusOr<bool> SliceConcatForwarding(HloInstruction* slice) {
   if (slice->opcode() != HloOpcode::kSlice) {
     return false;
   }
@@ -90,7 +90,7 @@ absl::StatusOr<bool> SliceConcatForwarding(HloInstruction* slice) {
 }
 
 // Reshape(Broadcast(A, []->[1]), [1]->[]) ==> A
-absl::StatusOr<bool> ReshapeBroadcastForwarding(HloInstruction* reshape) {
+StatusOr<bool> ReshapeBroadcastForwarding(HloInstruction* reshape) {
   if (reshape->opcode() != HloOpcode::kReshape) {
     return false;
   }
@@ -118,7 +118,7 @@ absl::StatusOr<bool> ReshapeBroadcastForwarding(HloInstruction* reshape) {
 }
 
 // Reshape(Reshape(A, []->[1]), [1]->[]) ==> A
-absl::StatusOr<bool> ReshapeReshapeForwarding(HloInstruction* reshape) {
+StatusOr<bool> ReshapeReshapeForwarding(HloInstruction* reshape) {
   if (reshape->opcode() != HloOpcode::kReshape) {
     return false;
   }
@@ -137,7 +137,7 @@ absl::StatusOr<bool> ReshapeReshapeForwarding(HloInstruction* reshape) {
 }
 
 // Convert(A, T->T) ==> A
-absl::StatusOr<bool> IdentityConvertRemoving(HloInstruction* convert) {
+StatusOr<bool> IdentityConvertRemoving(HloInstruction* convert) {
   if (convert->opcode() != HloOpcode::kConvert) {
     return false;
   }
@@ -150,7 +150,7 @@ absl::StatusOr<bool> IdentityConvertRemoving(HloInstruction* convert) {
 }
 
 // Reshape(A, S->S) ==> A
-absl::StatusOr<bool> IdentityReshapeRemoving(HloInstruction* reshape) {
+StatusOr<bool> IdentityReshapeRemoving(HloInstruction* reshape) {
   if (reshape->opcode() != HloOpcode::kReshape) {
     return false;
   }
@@ -164,7 +164,7 @@ absl::StatusOr<bool> IdentityReshapeRemoving(HloInstruction* reshape) {
 
 }  // namespace
 
-absl::StatusOr<bool> DynamicDimensionSimplifier::Run(
+StatusOr<bool> DynamicDimensionSimplifier::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   XLA_VLOG_LINES(

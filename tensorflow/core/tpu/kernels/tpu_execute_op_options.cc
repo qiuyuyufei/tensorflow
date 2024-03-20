@@ -33,7 +33,7 @@ Status SetTpuCancellationClosesChips(int val) {
   }
   tpu_cancellation_closes_chips =
       static_cast<TpuCancellationClosesChipsMode>(val);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 bool TpuCancellationClosesChipsGetOrDefault(bool default_value) {

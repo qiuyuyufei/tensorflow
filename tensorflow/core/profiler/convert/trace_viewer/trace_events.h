@@ -37,8 +37,6 @@ limitations under the License.
 #include "tensorflow/core/profiler/lib/context_types.h"
 #include "tensorflow/core/profiler/protobuf/task.pb.h"
 #include "tensorflow/core/profiler/protobuf/trace_events.pb.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/file_system.h"
 #include "tsl/platform/status.h"
 #include "tsl/profiler/utils/timespan.h"
 
@@ -53,7 +51,7 @@ std::vector<TraceEvent*> MergeEventTracks(
     const std::vector<const TraceEventTrack*>& event_tracks);
 
 tsl::Status DoStoreAsLevelDbTable(
-    std::unique_ptr<tsl::WritableFile>& file, const Trace& trace,
+    const std::string& filename, const Trace& trace,
     const std::vector<std::vector<const TraceEvent*>>& events_by_level);
 
 tsl::Status DoLoadFromLevelDbTable(
@@ -239,12 +237,11 @@ class TraceEventsContainerBase {
   }
 
   // Stores the contents of this container in a level-db sstable file.
-  absl::Status StoreAsLevelDbTable(
-      std::unique_ptr<tsl::WritableFile> file) const {
+  tsl::Status StoreAsLevelDbTable(const std::string& filename) const {
     Trace trace = trace_;
     trace.set_num_events(NumEvents());
     auto events_by_level = EventsByLevel();
-    return DoStoreAsLevelDbTable(file, trace, events_by_level);
+    return DoStoreAsLevelDbTable(filename, trace, events_by_level);
   }
 
   // Loads the contents of this container from a level-db sstable file.

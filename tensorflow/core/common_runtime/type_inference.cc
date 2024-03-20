@@ -99,14 +99,14 @@ std::vector<std::reference_wrapper<const FullTypeDef>> input_types(
 Status update_inferred_type(Node* target, const FullTypeDef& t, bool& updated) {
   if (t.type_id() == TFT_UNSET) {
     VLOG(3) << "  " << target->name() << " no inferred type";
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   if (target->def().has_experimental_type()) {
     const auto existing = target->def().experimental_type();
     if (full_type::IsSubtype(existing, t)) {
       VLOG(3) << "  " << target->name() << " no new type info";
-      return absl::OkStatus();
+      return OkStatus();
     } else if (!full_type::IsSubtype(t, existing)) {
       // The only allowable type mismatches are those which would further
       // specialize the existing type.
@@ -121,7 +121,7 @@ Status update_inferred_type(Node* target, const FullTypeDef& t, bool& updated) {
   *(target->mutable_def()->mutable_experimental_type()) = t;
   updated = true;
   VLOG(3) << "  " << target->name() << " updated";
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 StatusOr<FullTypeDef> run_inference(const string& fn_name,
@@ -131,7 +131,7 @@ StatusOr<FullTypeDef> run_inference(const string& fn_name,
   //  * execute pass on its graph
   //  * get retnode types
   //  * return them here
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
@@ -174,7 +174,7 @@ Status TypeInferencePass::Run(
 
   auto infer_forward = [&forward](Node* n, bool& updated) {
     if (!forward.contains(n->id())) {
-      return absl::OkStatus();
+      return OkStatus();
     }
     VLOG(4) << "  " << n->name() << " has forward function";
 
@@ -189,12 +189,12 @@ Status TypeInferencePass::Run(
         update_inferred_type(n, *infer_ret, updated),
         "while updating its output type.");
 
-    return absl::OkStatus();
+    return OkStatus();
   };
 
   auto infer_reverse = [&reverse](Node* n, bool& updated) {
     if (!reverse.contains(n->id())) {
-      return absl::OkStatus();
+      return OkStatus();
     }
     VLOG(4) << "  " << n->name() << " has reverse function";
 
@@ -218,7 +218,7 @@ Status TypeInferencePass::Run(
         absl::StrCat("while updating its output type inferred from '",
                      n->name(), ","));
 
-    return absl::OkStatus();
+    return OkStatus();
   };
 
   std::list<int> queue;
@@ -328,7 +328,7 @@ Status TypeInferencePass::Run(
     DumpGraphToFile("forward_type_inference_after", *g, flib_def);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status WeakTypeInferencePass::Run(
@@ -341,7 +341,7 @@ Status WeakTypeInferencePass::Run(
            "invalid graph that escaped type checking. Error message: "
         << pass_status.ToString();
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Note: This needs to run last because Placer needs it.

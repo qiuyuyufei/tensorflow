@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,28 +15,6 @@ limitations under the License.
 
 #include "xla/service/hlo_graph_dumper.h"
 
-#include <cstdint>
-#include <unordered_map>
-
-#include "absl/base/const_init.h"
-#include "absl/base/thread_annotations.h"
-#include "absl/hash/hash.h"
-#include "absl/log/check.h"
-#include "absl/log/log.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
-#include "absl/synchronization/mutex.h"
-#include "xla/comparison_util.h"
-#include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_sharding.h"
-#include "xla/shape.h"
-#include "xla/status.h"
-#include "xla/statusor.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/file_system.h"
-#include "tsl/platform/statusor.h"
-#include "tsl/platform/thread_annotations.h"
-
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -44,17 +22,14 @@ limitations under the License.
 #include <algorithm>
 #include <atomic>
 #include <deque>
-#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <queue>
 #include <string>
 #include <tuple>
-#include <utility>
 #include <vector>
 
-#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/match.h"
@@ -123,9 +98,8 @@ class NodeFilter {
   NodeFilter() : filter_([](const HloInstruction*) { return kNormalNode; }) {}
 
   explicit NodeFilter(
-      std::function<NodeFilterResult(const HloInstruction* instr)> filter,
-      std::optional<int> num_rendered = std::nullopt)
-      : filter_(std::move(filter)), num_rendered_(num_rendered) {}
+      std::function<NodeFilterResult(const HloInstruction* instr)> filter)
+      : filter_(std::move(filter)) {}
 
   bool Show(const HloInstruction* instr) const {
     return filter_(instr) != kHideNode;
@@ -146,12 +120,8 @@ class NodeFilter {
            result == kSomeUsersOmitted;
   }
 
-  // Returns an optionally recorded number of nodes which will be rendered.
-  std::optional<int> GetNumRendered() const { return num_rendered_; }
-
  private:
   std::function<NodeFilterResult(const HloInstruction* instr)> filter_;
-  std::optional<int> num_rendered_;
 };
 
 // We arbitrarily set this as the boundary between "large" and "small"
@@ -187,10 +157,10 @@ enum ColorScheme {
 
 // Graphviz attributes/colors that make up a color scheme.
 struct NodeColors {
-  std::string style;
-  std::string fill_color;
-  std::string stroke_color;
-  std::string font_color;
+  const char* style;
+  const char* fill_color;
+  const char* stroke_color;
+  const char* font_color;
 };
 
 NodeColors NodeColorsForScheme(ColorScheme color) {
@@ -234,7 +204,7 @@ NodeColors NodeColorsForScheme(ColorScheme color) {
 
 // Given a Statistic object, returns a hex string for the fill color of the node
 // with that statistic.
-std::string NodeFillColorForStatistic(const Statistic& statistic) {
+const char* NodeFillColorForStatistic(const Statistic& statistic) {
   auto stat_val = statistic.stat_val();
   if (stat_val == 0) {
     return "#f5f5f5";
@@ -263,7 +233,7 @@ std::string NodeFillColorForStatistic(const Statistic& statistic) {
 
 // Given a Statistic object, returns a hex string for the font color of the node
 // with that statistic.
-std::string NodeFontColorForStatistic(const Statistic& statistic) {
+const char* NodeFontColorForStatistic(const Statistic& statistic) {
   if (statistic.stat_val() < 60) {
     return "black";
   } else {
@@ -398,18 +368,14 @@ optional<std::string> MatchTrivialComputation(
 // Encapsulates logic for dumping an HLO module to DOT (i.e. graphviz syntax).
 class HloDotDumper {
  public:
-  HloDotDumper(
-      const HloComputation* computation, absl::string_view label,
-      const DebugOptions& debug_options, HloRenderOptions hlo_render_options,
-      NodeFilter filter,
-      std::optional<absl::flat_hash_map<const HloInstruction*, ColorStats>>
-          color_map = std::nullopt)
+  HloDotDumper(const HloComputation* computation, absl::string_view label,
+               const DebugOptions& debug_options,
+               HloRenderOptions hlo_render_options, NodeFilter filter)
       : computation_(computation),
         label_(label),
         debug_options_(debug_options),
         hlo_render_options_(hlo_render_options),
-        filter_(std::move(filter)),
-        color_map_(color_map) {}
+        filter_(std::move(filter)) {}
 
   std::string Dump();
 
@@ -493,8 +459,7 @@ class HloDotDumper {
   const DebugOptions& debug_options_;
   const HloRenderOptions hlo_render_options_;
   const NodeFilter filter_;
-  const std::optional<absl::flat_hash_map<const HloInstruction*, ColorStats>>
-      color_map_;
+
   // Each HloInstruction dumped gets a monotonically-increasing node ID.  This
   // must start at 1, because that's where graphviz's accounting starts.
   int64_t next_node_id_ = 1;
@@ -586,15 +551,15 @@ stylesheet=<
   //    because the "X ~ Y" CSS selector finds a sibling of X that *comes
   //    after X in the DOM* and matches Y.
   std::vector<std::string> edge_css_rules;
-  std::string kBlue = "#1976d2";
-  std::string kRed = "#d32f2f";
+  const char* kBlue = "#1976d2";
+  const char* kRed = "#d32f2f";
   for (const auto& kv : edge_ids_) {
     const HloInstruction* from_node = kv.first.first;
     const HloInstruction* to_node = kv.first.second;
     int64_t edge_id = kv.second;
 
     auto add_hover_css_rule = [&](std::string elem_type, int64_t elem_id,
-                                  std::string color) {
+                                  const char* color) {
       // One could imagine other ways of writing this CSS rule that involve
       // less duplication, but this way seems to be relatively performant.
       edge_css_rules.push_back(
@@ -679,11 +644,6 @@ bool HloDotDumper::ShouldShowSubcomputation(const HloComputation* subcomp) {
     return false;
   }
 
-  if (subcomp->WhileCallInstruction() != nullptr &&
-      !hlo_render_options_.show_while_subcomputations) {
-    return false;
-  }
-
   // Show the subcomputation if we're showing any of its members.
   return absl::c_any_of(
       subcomp->instructions(),
@@ -735,8 +695,8 @@ std::string HloDotDumper::DumpSubcomputation(
     }
 
     bool highlight = filter_.Highlight(parent_instr);
-    std::string fillcolor;
-    std::string strokecolor;
+    const char* fillcolor;
+    const char* strokecolor;
 
     if (!highlight && (parent_instr->module_has_statistics() ||
                        parent_instr->has_statistics())) {
@@ -904,6 +864,8 @@ std::string HloDotDumper::DumpInstruction(const HloInstruction* instr) {
 
   VLOG(2) << "Adding node " << instr->name() << " as " << next_node_id_;
   node_ids_[instr] = next_node_id_++;
+
+  ColorScheme color = GetInstructionColor(instr);
   std::string node_shape = GetInstructionNodeShape(instr);
   std::string node_label = GetInstructionNodeLabel(instr);
   std::string node_metadata = GetInstructionNodeMetadata(instr);
@@ -913,66 +875,42 @@ std::string HloDotDumper::DumpInstruction(const HloInstruction* instr) {
   std::string trivial_subcomputation =
       GetInstructionTrivialComputationStr(instr);
   AddInstructionIncomingEdges(instr);
-  NodeColors node_colors;
-  std::string node_style;
-  std::string node_attributes;
-  if (hlo_render_options_.override_node_colors && color_map_.has_value()) {
-    if (color_map_->contains(instr)) {
-      // look up color stats in the color_map_
-      node_colors.fill_color = color_map_->at(instr).color;
-      node_attributes = color_map_->at(instr).stats;
-    } else {
-      VLOG(2) << "color_map_ for instruction:" << instr->name() << "is empty"
-              << "\n";
-      node_colors.fill_color = "#808080";
-    }
-    node_colors.style = "filled";
-    node_colors.font_color = "black";
-    node_colors.stroke_color = "#c2c2c2";
-    node_style =
-        StrFormat(R"(style="%s", fontcolor="%s", color="%s", fillcolor="%s")",
-                  node_colors.style, node_colors.font_color,
-                  node_colors.stroke_color, node_colors.fill_color);
-  } else {
-    ColorScheme color = GetInstructionColor(instr);
-    if (!debug_options_.xla_hlo_graph_sharding_color()) {
-      // Override the node's styling if it should be (de-)emphasized.
-      if (filter_.Deemphasized(instr)) {
-        color = kDashedBorder;
-      }
-      if (filter_.Highlight(instr)) {
-        node_shape = "diamond";
-        color = kDarkRed;
-      }
-    }
 
-    node_colors = NodeColorsForScheme(color);
-    if (instr->has_statistics()) {
-      // override node's color to show statistics
-      const auto& statistic_to_visualize = instr->statistic_to_visualize();
-      node_colors.fill_color =
-          NodeFillColorForStatistic(statistic_to_visualize);
-      node_colors.stroke_color = "#c2c2c2";
-      node_colors.font_color =
-          NodeFontColorForStatistic(statistic_to_visualize);
-    } else if (instr->module_has_statistics()) {
-      // all other nodes without statistics must be gray
-      node_colors.fill_color = "#f5f5f5";
-      node_colors.stroke_color = "#c2c2c2";
-      node_colors.font_color = "black";
+  if (!debug_options_.xla_hlo_graph_sharding_color()) {
+    // Override the node's styling if it should be (de-)emphasized.
+    if (filter_.Deemphasized(instr)) {
+      color = kDashedBorder;
     }
-
-    // Build the node style
-    node_style =
-        StrFormat(R"(style="%s", fontcolor="%s", color="%s", fillcolor="%s")",
-                  node_colors.style, node_colors.font_color,
-                  node_colors.stroke_color, node_colors.fill_color);
+    if (filter_.Highlight(instr)) {
+      node_shape = "diamond";
+      color = kDarkRed;
+    }
   }
+
+  NodeColors node_colors = NodeColorsForScheme(color);
+  if (instr->has_statistics()) {
+    // override node's color to show statistics
+    const auto& statistic_to_visualize = instr->statistic_to_visualize();
+    node_colors.fill_color = NodeFillColorForStatistic(statistic_to_visualize);
+    node_colors.stroke_color = "#c2c2c2";
+    node_colors.font_color = NodeFontColorForStatistic(statistic_to_visualize);
+  } else if (instr->module_has_statistics()) {
+    // all other nodes without statistics must be gray
+    node_colors.fill_color = "#f5f5f5";
+    node_colors.stroke_color = "#c2c2c2";
+    node_colors.font_color = "black";
+  }
+
+  // Build the node style
+  std::string node_style =
+      StrFormat(R"(style="%s", fontcolor="%s", color="%s", fillcolor="%s")",
+                node_colors.style, node_colors.font_color,
+                node_colors.stroke_color, node_colors.fill_color);
+
   // Build the text that will be displayed inside the node.
   std::string node_body = node_label;
-  for (const std::string& s :
-       {trivial_subcomputation, extra_info, inlined_constants,
-        node_backend_config, node_attributes}) {
+  for (const std::string& s : {trivial_subcomputation, extra_info,
+                               inlined_constants, node_backend_config}) {
     if (!s.empty()) {
       StrAppend(&node_body, "<br/>", s);
     }
@@ -1143,7 +1081,6 @@ ColorScheme HloDotDumper::GetInstructionColor(const HloInstruction* instr) {
     case HloOpcode::kConvert:
     case HloOpcode::kCos:
     case HloOpcode::kDivide:
-    case HloOpcode::kErf:
     case HloOpcode::kExp:
     case HloOpcode::kExpm1:
     case HloOpcode::kFloor:
@@ -1259,7 +1196,6 @@ ColorScheme HloDotDumper::GetInstructionColor(const HloInstruction* instr) {
     case HloOpcode::kAllReduceStart:
     case HloOpcode::kAllReduceDone:
     case HloOpcode::kAllToAll:
-    case HloOpcode::kCollectiveBroadcast:
     case HloOpcode::kCollectivePermute:
     case HloOpcode::kCollectivePermuteStart:
     case HloOpcode::kCollectivePermuteDone:
@@ -1410,20 +1346,18 @@ std::string HloDotDumper::GetInstructionNodeBackendConfig(
   // !show_backend_config, but this is simpler, and it's not too noisy.)
   std::vector<std::pair<std::string, std::string>> props;
   if (gpu::IsCustomCallToDnnConvolution(*instr)) {
-    StatusOr<gpu::GpuBackendConfig> config =
-        instr->backend_config<gpu::GpuBackendConfig>();
+    StatusOr<gpu::CudnnConvBackendConfig> config =
+        instr->backend_config<gpu::CudnnConvBackendConfig>();
     if (config.ok()) {
-      props = ExtractCudnnConvBackendConfigProps(
-          config->cudnn_conv_backend_config());
+      props = ExtractCudnnConvBackendConfigProps(*config);
     }
   } else if (gpu::IsCublasGemm(*instr)) {
-    StatusOr<gpu::GpuBackendConfig> config =
-        instr->backend_config<gpu::GpuBackendConfig>();
+    StatusOr<gpu::GemmBackendConfig> config =
+        instr->backend_config<gpu::GemmBackendConfig>();
     if (config.ok()) {
       // gemm strides are generally uninteresting (derived from the instruction
       // shape), so we hide them by default.
-      props =
-          ExtractGemmBackendConfigProps(config->gemm_backend_config(), instr);
+      props = ExtractGemmBackendConfigProps(*config, instr);
     }
   }
 
@@ -1458,12 +1392,11 @@ std::string HloDotDumper::GetInstructionNodeExtraInfo(
   for (const auto& line : instr->ExtraAttributesToString(
            HloPrintOptions().set_print_subcomputation_mode(
                HloPrintOptions::PrintSubcomputationMode::kOff))) {
-    // Some instructions have giant device identifier or control-predecessor
-    // fields, so truncate their length to 128.
+    // Some instructions have giant device identifier fields, so truncate their
+    // length to 128.
     constexpr int kMaxDeviceIdFieldLen = 128;
     if ((absl::StartsWith(line, "replica_groups=") ||
-         absl::StartsWith(line, "source_target_pairs=") ||
-         absl::StartsWith(line, "control-predecessors=")) &&
+         absl::StartsWith(line, "source_target_pairs=")) &&
         line.length() > kMaxDeviceIdFieldLen) {
       lines.push_back(HtmlLikeStringSanitize(
           StrCat(line.substr(0, kMaxDeviceIdFieldLen - 3), "...")));
@@ -1642,20 +1575,8 @@ NodeFilter MakeNodeRadiusAroundFilter(
     // are not interesting to the graph at hand.
     if (instr == root || instr->opcode() != HloOpcode::kTuple) {
       for (const HloInstruction* operand : instr->operands()) {
-        // Special logic for handling bitcasts: since sometimes bitcasts are not
-        // fused, they create a lot of extra nodes in the graph, with exactly
-        // one input and output. Adding such nodes does not "really" increase
-        // the size of the graph (since they don't add extra information), and
-        // stopping the rendering early cuts off important information (you
-        // almost never want the rendering to be cutoff at the bitcast: you'd
-        // like to see its parent).
         if (!nodes.contains(operand)) {
-          int new_depth = (operand->opcode() == HloOpcode::kBitcast ||
-                           instr->opcode() == HloOpcode::kBitcast)
-                              ? depth
-                              : depth + 1;
-
-          worklist.push_back({operand, new_depth});
+          worklist.push_back({operand, depth + 1});
         }
       }
     }
@@ -1722,19 +1643,17 @@ NodeFilter MakeNodeRadiusAroundFilter(
   // Highlight the root node.
   nodes[root] = kHighlightNode;
 
-  return NodeFilter(
-      [=](const HloInstruction* instr) {
-        auto it = nodes.find(instr);
-        if (it != nodes.end()) {
-          return it->second;
-        }
-        // Show all nodes in subcomputations.
-        if (instr->parent() != root->parent()) {
-          return kNormalNode;
-        }
-        return kHideNode;
-      },
-      nodes.size());
+  return NodeFilter([=](const HloInstruction* instr) {
+    auto it = nodes.find(instr);
+    if (it != nodes.end()) {
+      return it->second;
+    }
+    // Show all nodes in subcomputations.
+    if (instr->parent() != root->parent()) {
+      return kNormalNode;
+    }
+    return kHideNode;
+  });
 }
 
 // Gets a node filter that includes nodes on all paths from `from` to `to`.  If
@@ -1787,6 +1706,114 @@ NodeFilter MakeNodeFromToFilter(const HloInstruction* from,
   });
 }
 
+std::string WrapDotInHtml(absl::string_view dot) {
+  std::string html_prefix =
+      absl::StrReplaceAll(R"html(
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style type="text/css">
+    body {
+      height: 100vh;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  $JS_INCLUDE
+  <div id="container" style="height:95vh; border:1px solid black; "></div>
+  <script>
+    var data = `
+)html",
+                          {{"$JS_INCLUDE", kRenderDotJS}});
+
+  static const char html_suffix[] = R"html(
+`;
+    var cssregex = new RegExp('stylesheet=<([^]*)\n>\n', 'gm');
+    var results = cssregex.exec(data)
+    // graphviz has problem dealing with large stylesheets.
+    // https://github.com/tensorflow/tensorflow/issues/17220#issuecomment-369228492
+    // In order to avoid the problem, remove the stylesheet from the dot and
+    // insert it directly info the rendered SVG.
+    var dot_data = data;
+    var css_data = ''
+    if (results !== null) {
+        css_data = results[1].replace(/\s*data:.*\s*,/,''); // Strip content-type field.
+        // CSS inside DOT is URL-escaped, so we must unescape it
+        // before we can insert it into SVG.
+        css_data = unescape(css_data);
+        dot_data = data.replace(cssregex, ''); // Remove the stylesheet
+    }
+
+    var render_start = performance.now()
+    function add_controls(svg) {
+        var htmlblob = new Blob([document.documentElement.innerHTML],
+                                {type: 'text/html'});
+        var savehtml = document.createElement('a');
+        savehtml.setAttribute('href', URL.createObjectURL(htmlblob));
+        savehtml.setAttribute('download', 'graph.html');
+        savehtml.innerHTML = " [Save HTML+SVG] ";
+        document.body.append(savehtml);
+        var svgblob = new Blob([svg.outerHTML], {type: 'image/svg'});
+        var savesvg = document.createElement('a');
+        savesvg.setAttribute('href', URL.createObjectURL(svgblob));
+        savesvg.setAttribute('download', 'graph.svg');
+        savesvg.innerHTML = " [Save SVG] ";
+        document.body.append(savesvg);
+        var dotblob =  new Blob([data], {type: 'text/dot'});
+        var savedot = document.createElement('a');
+        savedot.setAttribute('href', URL.createObjectURL(dotblob));
+        savedot.setAttribute('download', 'graph.dot');
+        savedot.innerHTML = " [Save DOT] ";
+        document.body.append(savedot);
+        // Will get called after embed element was loaded
+        var panzoom = svgPanZoom(svg, {
+            zoomEnabled: true,
+            controlIconsEnabled: true,
+            maxZoom: 100,
+        });
+        document.getElementsByTagName("BODY")[0].onresize = function() {
+            panzoom.resize();
+            panzoom.fit();
+            panzoom.center();
+        };
+        var render_end = performance.now();
+        var render_note = document.createElement('div')
+        render_note.innerHTML = 'Rendering took '
+                                + (render_end - render_start).toFixed(2) + "ms."
+        document.body.append(render_note);
+    }
+    var svg = document.getElementById('graph')
+    if (svg == null) {
+        // Need to render SVG first.
+        var viz = new Viz();
+        viz.renderSVGElement(dot_data)
+            .then(function(svg){
+                var container = document.getElementById('container')
+                var style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+                var node = document.createTextNode(css_data);
+                style.appendChild(node);
+                svg.setAttribute('width', '100%');
+                svg.setAttribute('height', '100%');
+                svg.setAttribute('id', 'graph');
+                svg.appendChild(style);
+                container.appendChild(svg);
+                add_controls(svg);
+            })
+    } else {
+        // HTML already has rendered SVG embedded, so we just need to add
+        // controls.
+        add_controls(svg);
+    }
+  </script>
+</body>
+</html>
+)html";
+
+  return absl::StrCat(html_prefix, dot, html_suffix);
+}
+
 absl::Mutex url_renderer_mu(absl::kConstInit);
 std::function<StatusOr<std::string>(absl::string_view)>* url_renderer
     ABSL_GUARDED_BY(url_renderer_mu) = nullptr;
@@ -1833,6 +1860,28 @@ static std::pair<int, int> FusionVisualizerStateKey(
                         computation.unique_id());
 }
 
+// Precondition: (url_renderer != nullptr || format != kUrl).
+//
+// (We specify this as a precondition rather than checking it in here and
+// returning an error because we want to fail quickly when there's no URL
+// renderer available, and this function runs only after we've done all the work
+// of producing dot for the graph.)
+StatusOr<std::string> WrapDotInFormat(const HloComputation& computation,
+                                      absl::string_view dot,
+                                      RenderedGraphFormat format)
+    ABSL_EXCLUSIVE_LOCKS_REQUIRED(url_renderer_mu) {
+  switch (format) {
+    case RenderedGraphFormat::kUrl:
+      CHECK(url_renderer != nullptr)
+          << "Should have checked url_renderer != null before calling.";
+      return (*url_renderer)(dot);
+    case RenderedGraphFormat::kHtml:
+      return WrapDotInHtml(dot);
+    case RenderedGraphFormat::kDot:
+      return std::string(dot);
+  }
+}
+
 }  // namespace
 
 // Compress with zlib + b64 encode.
@@ -1877,11 +1926,15 @@ static std::string EscapeJSONString(absl::string_view raw) {
       "\"");
 }
 
-StatusOr<std::string> WrapFusionExplorer(
-    const FusionVisualizerProgress& visualizer_progress,
-    absl::string_view graph_title) {
+StatusOr<std::string> WrapFusionExplorer(const HloComputation& computation) {
+  absl::MutexLock lock(&fusion_visualizer_state_mu);
+  using absl::StrAppend;
+  using absl::StrFormat;
+  using absl::StrJoin;
+  const FusionVisualizerProgress& visualizer_progress =
+      fusion_visualizer_states[FusionVisualizerStateKey(computation)];
   if (visualizer_progress.frames.empty()) {
-    return Internal("Empty");
+    return InternalError("Empty");
   }
 
   std::string dot_graphs =
@@ -1901,7 +1954,7 @@ StatusOr<std::string> WrapFusionExplorer(
                       CompressAndEncode(dot_graphs));
 
   return absl::StrReplaceAll(
-      R"wrapper(
+      R"(
 <!DOCTYPE html>
 <html>
 <head>
@@ -1981,7 +2034,7 @@ StatusOr<std::string> WrapFusionExplorer(
       var area = document.getElementById('rendered');
       area.innerHTML = `${svg}<style>${css_data}</style>`;
       var panzoom = svgPanZoom(area.children[0], {
-          zoomEnabled: true, controlIconsEnabled: true, maxZoom: 200, });
+          zoomEnabled: true, controlIconsEnabled: true, });
       var to_highlight = frame[2].length ?
         document.querySelector(`${frame[2]}`) : null;
       if (to_highlight) {
@@ -1989,14 +2042,6 @@ StatusOr<std::string> WrapFusionExplorer(
       }
       document.getElementById('performance_note').innerText =
         `Rendering took ${(performance.now() - render_start).toFixed(2)}ms`;
-
-      // Change cursor.
-      let text_nodes = document.getElementsByTagName("text");
-      for (var el of text_nodes) {
-        if (title_to_id.has(el.innerHTML)) {
-          el.style.cursor = "pointer";
-        }
-      }
     };
     if (renderCache[dot_ptr]) {
       render_callback(renderCache[dot_ptr]);
@@ -2067,70 +2112,17 @@ StatusOr<std::string> WrapFusionExplorer(
       renderFrameList();
       renderCurrentFrame();
     });
-
-    window.title_to_id = new Map();
-    for (let i=0; i < frames.length; i++) {
-       title_to_id.set(frames[i][1], i);
-     }
-
-    // Navigate to next elements on click.
-    document.addEventListener("click", (event) => {
-      let txt = event.target.innerHTML;
-      if (title_to_id.has(txt)) {
-        let id = title_to_id.get(txt);
-        window.location.hash = `#frame${id}`;
-      }
-    });
   });
 
   //-->
   </script>
   </body>
 </html>
-  )wrapper",
+  )",
       {{"$DOTS", dot_graphs_compressed},
        {"$FRAMES", frames},
-       {"$TITLE", graph_title}});
-}
-
-static std::string GraphTitle(const HloComputation& computation) {
-  return absl::StrCat(computation.parent()->name(), "_", computation.name());
-}
-
-StatusOr<std::string> WrapFusionExplorer(const HloComputation& computation) {
-  absl::MutexLock lock(&fusion_visualizer_state_mu);
-  const FusionVisualizerProgress& visualizer_progress =
-      fusion_visualizer_states[FusionVisualizerStateKey(computation)];
-  return WrapFusionExplorer(visualizer_progress, GraphTitle(computation));
-}
-
-static StatusOr<std::string> WrapDotInHtml(absl::string_view dot,
-                                           absl::string_view title) {
-  FusionVisualizerProgress progress;
-  progress.AddState(dot, title, std::nullopt);
-  return WrapFusionExplorer(progress, title);
-}
-
-// Precondition: (url_renderer != nullptr || format != kUrl).
-//
-// (We specify this as a precondition rather than checking it in here and
-// returning an error because we want to fail quickly when there's no URL
-// renderer available, and this function runs only after we've done all the work
-// of producing dot for the graph.)
-static StatusOr<std::string> WrapDotInFormat(const HloComputation& computation,
-                                             absl::string_view dot,
-                                             RenderedGraphFormat format)
-    ABSL_EXCLUSIVE_LOCKS_REQUIRED(url_renderer_mu) {
-  switch (format) {
-    case RenderedGraphFormat::kUrl:
-      CHECK(url_renderer != nullptr)
-          << "Should have checked url_renderer != null before calling.";
-      return (*url_renderer)(dot);
-    case RenderedGraphFormat::kHtml:
-      return WrapDotInHtml(dot, GraphTitle(computation));
-    case RenderedGraphFormat::kDot:
-      return std::string(dot);
-  }
+       {"$TITLE",
+        absl::StrCat(computation.parent()->name(), "_", computation.name())}});
 }
 
 void RegisterGraphToURLRenderer(
@@ -2177,68 +2169,26 @@ void RegisterFusionState(const HloComputation& computation,
   fusion_progress.AddState(dot_txt, label, producer_to_highlight);
 }
 
-absl::StatusOr<std::string> RenderGraph(
-    const HloComputation& computation, absl::string_view label,
-    const DebugOptions& debug_options, RenderedGraphFormat format,
-    HloRenderOptions hlo_render_options,
-    std::optional<absl::flat_hash_map<const HloInstruction*, ColorStats>>
-        color_map) {
+StatusOr<std::string> RenderGraph(const HloComputation& computation,
+                                  absl::string_view label,
+                                  const DebugOptions& debug_options,
+                                  RenderedGraphFormat format,
+                                  HloRenderOptions hlo_render_options) {
   absl::MutexLock lock(&url_renderer_mu);
   if (format == RenderedGraphFormat::kUrl && url_renderer == nullptr) {
     return Unavailable("Can't render as URL; no URL renderer was registered.");
   }
 
-  std::string rendered_dot =
-      HloDotDumper(&computation, label, debug_options, hlo_render_options,
-                   NodeFilter(), color_map)
-          .Dump();
+  std::string rendered_dot = HloDotDumper(&computation, label, debug_options,
+                                          hlo_render_options, NodeFilter())
+                                 .Dump();
   return WrapDotInFormat(computation, rendered_dot, format);
-}
-
-StatusOr<std::string> RenderAllComputationsToHtml(const HloModule& module) {
-  FusionVisualizerProgress progress;
-
-  std::vector<HloInstruction*> instrs =
-      module.entry_computation()->MakeInstructionPostOrder();
-  absl::c_reverse(instrs);
-  for (const HloInstruction* instr : instrs) {
-    if (absl::c_linear_search(
-            std::vector<HloOpcode>{HloOpcode::kConstant,
-                                   HloOpcode::kGetTupleElement},
-            instr->opcode())) {
-      continue;
-    }
-
-    HloRenderOptions opts;
-    opts.show_fusion_subcomputations = true;
-    opts.show_backend_config = true;
-    opts.show_while_subcomputations = instr->opcode() == HloOpcode::kWhile;
-
-    // Dynamically adjusts the radius with a magical cutoff of 100.
-    static constexpr int64_t max_nodes_to_render = 100;
-    absl::flat_hash_set<const HloInstruction*> render_boundary;
-
-    NodeFilter filter = MakeNodeRadiusAroundFilter(instr, 2, render_boundary);
-    if (filter.GetNumRendered().value_or(1) > max_nodes_to_render) {
-      filter = MakeNodeRadiusAroundFilter(instr, 1, render_boundary);
-    }
-
-    std::string dot =
-        HloDotDumper(module.entry_computation(), instr->name(),
-                     module.config().debug_options(), opts, filter)
-            .Dump();
-    progress.AddState(dot, instr->name(), std::nullopt);
-  }
-
-  return WrapFusionExplorer(progress, module.name());
 }
 
 StatusOr<std::string> RenderNeighborhoodAround(
     const HloInstruction& node, int radius, RenderedGraphFormat format,
     HloRenderOptions hlo_render_options,
-    const absl::flat_hash_set<const HloInstruction*>& boundary,
-    std::optional<absl::flat_hash_map<const HloInstruction*, ColorStats>>
-        color_map) {
+    const absl::flat_hash_set<const HloInstruction*>& boundary) {
   absl::MutexLock lock(&url_renderer_mu);
   if (format == RenderedGraphFormat::kUrl && url_renderer == nullptr) {
     return FailedPrecondition(
@@ -2248,10 +2198,10 @@ StatusOr<std::string> RenderNeighborhoodAround(
   std::string label =
       StrCat("Neighborhood of ", radius, " nodes around ", node.name());
   std::string rendered_dot =
-      HloDotDumper(
-          node.parent(), label, node.GetModule()->config().debug_options(),
-          hlo_render_options,
-          MakeNodeRadiusAroundFilter(&node, radius, boundary), color_map)
+      HloDotDumper(node.parent(), label,
+                   node.GetModule()->config().debug_options(),
+                   hlo_render_options,
+                   MakeNodeRadiusAroundFilter(&node, radius, boundary))
           .Dump();
   return WrapDotInFormat(*node.parent(), rendered_dot, format);
 }

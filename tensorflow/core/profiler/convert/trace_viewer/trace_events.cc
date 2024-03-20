@@ -41,7 +41,6 @@ limitations under the License.
 #include "tsl/lib/io/table_options.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
-#include "tsl/platform/file_system.h"
 #include "tsl/platform/status.h"
 #include "tsl/profiler/utils/timespan.h"
 
@@ -183,8 +182,14 @@ std::vector<std::vector<const TraceEvent*>> GetEventsByLevel(
 // Note that each event only appears exactly once, at the first layer it's
 // eligible for.
 tsl::Status DoStoreAsLevelDbTable(
-    std::unique_ptr<tsl::WritableFile>& file, const Trace& trace,
+    const std::string& filename, const Trace& trace,
     const std::vector<std::vector<const TraceEvent*>>& events_by_level) {
+  std::unique_ptr<tensorflow::WritableFile> file;
+  tensorflow::FileSystem* file_system;
+  TF_RETURN_IF_ERROR(
+      tsl::Env::Default()->GetFileSystemForFile(filename, &file_system));
+  TF_RETURN_IF_ERROR(file_system->NewWritableFile(filename, &file));
+
   tsl::table::Options options;
   options.block_size = 20 * 1024 * 1024;
   options.compression = tsl::table::kSnappyCompression;
@@ -225,14 +230,12 @@ tsl::Status DoStoreAsLevelDbTable(
       mutable_event->set_timestamp_ps(timestamp);
     }
   }
-  absl::string_view filename;
-  TF_RETURN_IF_ERROR(file->Name(&filename));
   LOG(INFO) << "Storing " << trace.num_events() - num_of_events_dropped
             << " as LevelDb table fast file: " << filename << " with "
             << num_of_events_dropped << " events dropped.";
 
   TF_RETURN_IF_ERROR(builder.Finish());
-  return file->Close();
+  return tsl::OkStatus();
 }
 
 tsl::Status DoLoadFromLevelDbTable(

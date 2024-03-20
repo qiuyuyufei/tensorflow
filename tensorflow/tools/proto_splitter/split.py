@@ -48,14 +48,11 @@ class Splitter(abc.ABC):
     """Splits proto message into a Sequence of protos/bytes."""
 
   @abc.abstractmethod
-  def write(self, file_prefix: str) -> str:
+  def write(self, file_prefix: str) -> None:
     """Serializes proto to disk.
 
     Args:
       file_prefix: string prefix of the filepath.
-
-    Returns:
-      The actual path the proto is written to.
     """
 
 
@@ -150,7 +147,7 @@ class ComposableSplitter(Splitter):
       self._built = True
     return self._chunks, self._chunked_message
 
-  def write(self, file_prefix: str) -> str:
+  def write(self, file_prefix: str) -> None:
     """Serializes a proto to disk.
 
     The writer writes all chunks into a riegeli file. The chunk metadata
@@ -160,11 +157,6 @@ class ComposableSplitter(Splitter):
       file_prefix: string prefix of the filepath. The writer will automatically
         attach a `.pb` or `.cpb` (chunked pb) suffix depending on whether the
         proto is split.
-
-    Returns:
-      The actual filepath the proto is written to. The filepath will be
-      different depending on whether the proto is split, i.e., whether it will
-      be a pb or not.
     """
     if self._parent_splitter is not None:
       raise ValueError(
@@ -182,7 +174,7 @@ class ComposableSplitter(Splitter):
           path, self._proto.SerializeToString(deterministic=True)
       )
       logging.info("Unchunked file exported to %s", path)
-      return path
+      return
 
     path = f"{file_prefix}.cpb"
     with riegeli.RecordWriter(file_io.FileIO(path, "wb")) as f:
@@ -214,7 +206,6 @@ class ComposableSplitter(Splitter):
         "Number of chunks created (including initial message): %s",
         len(chunks),
     )
-    return path
 
   def add_chunk(
       self,

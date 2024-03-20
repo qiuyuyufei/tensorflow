@@ -75,7 +75,6 @@ py_strict_test(
     ],
     deps = [
         ":zero_out_op_1",
-        # copybara:uncomment "//third_party/py/google/protobuf:use_fast_cpp_protos",
         "//tensorflow:tensorflow_py",
     ],
 )
@@ -92,7 +91,6 @@ py_strict_test(
     deps = [
         ":zero_out_grad_2",
         ":zero_out_op_2",
-        # copybara:uncomment "//third_party/py/google/protobuf:use_fast_cpp_protos",
         "//tensorflow:tensorflow_py",
     ],
 )
@@ -108,7 +106,6 @@ py_strict_test(
     ],
     deps = [
         ":zero_out_op_3",
-        # copybara:uncomment "//third_party/py/google/protobuf:use_fast_cpp_protos",
         "//tensorflow:tensorflow_py",
     ],
 )
@@ -139,7 +136,6 @@ py_strict_test(
     ],
     deps = [
         ":cuda_op",
-        # copybara:uncomment "//third_party/py/google/protobuf:use_fast_cpp_protos",
         "//tensorflow:tensorflow_py",
     ],
 )
@@ -151,7 +147,6 @@ py_strict_test(
     python_version = "PY3",
     srcs_version = "PY3",
     deps = [
-        # copybara:uncomment "//third_party/py/google/protobuf:use_fast_cpp_protos",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/framework:test_lib",
     ],

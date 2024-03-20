@@ -91,33 +91,32 @@ class GraphDefExporter {
 
   // Export a TFG graph function to a FunctionDef. If the function has a
   // gradient, add it to the graph afterwards to preserve thread-safety.
-  absl::StatusOr<std::optional<GradientDef>> ExportFunction(GraphFuncOp func,
-                                                            FunctionDef *def);
+  StatusOr<std::optional<GradientDef>> ExportFunction(GraphFuncOp func,
+                                                      FunctionDef *def);
 
  private:
   // Export just the input and outputs of a function signature. When
   // fully-qualifying result names, this must be done before any nodes are
   // Convert argument attributes to an ArgDef.
-  absl::StatusOr<OpDef::ArgDef> ConvertArgumentAttributes(DictionaryAttr attrs);
+  StatusOr<OpDef::ArgDef> ConvertArgumentAttributes(DictionaryAttr attrs);
 
   // Convert a TFG op to a node. When converting a function, fully-qualified
   // result names must be used.
   Status ConvertOperation(Operation *op, NodeDef *node, bool is_func);
 
   // Get the name associated with a value.
-  absl::StatusOr<std::string> GetEdgeName(Value value, bool is_func);
+  StatusOr<std::string> GetEdgeName(Value value, bool is_func);
 
   // Get the name and index of an output segment to fully qualify result names.
   // This requires querying the op registry.
-  absl::StatusOr<std::pair<StringRef, unsigned int>> GetOutputSegment(
-      OpResult result);
+  StatusOr<std::pair<StringRef, unsigned>> GetOutputSegment(OpResult result);
 
   // Get the name of a function argument from a function in the symbol table.
-  absl::StatusOr<StringRef> GetFunctionOutputName(unsigned result_idx,
-                                                  const std::string &op_name,
-                                                  SymbolTable &table);
+  StatusOr<StringRef> GetFunctionOutputName(unsigned result_idx,
+                                            const std::string &op_name,
+                                            SymbolTable &table);
   // Get the name of a function argument from a function in the library.
-  static absl::StatusOr<StringRef> GetFunctionOutputName(
+  static StatusOr<StringRef> GetFunctionOutputName(
       unsigned result_idx, const std::string &op_name,
       const FunctionLibraryDefinition &library);
 
@@ -136,7 +135,7 @@ class GraphDefExporter {
 // Returns a validated graph to export. A TFG module is valid for export if it
 // contains at most one graph operation and any number of graph functions.
 // Otherwise, returns an error.
-static absl::StatusOr<GraphOp> ValidateModuleForExport(ModuleOp module) {
+static StatusOr<GraphOp> ValidateModuleForExport(ModuleOp module) {
   GraphOp graph_op;
   for (Operation &op : *module.getBody()) {
     if (isa<GraphFuncOp>(op)) continue;
@@ -231,7 +230,7 @@ Status GraphDefExporter::ExportToGraphDef(ModuleOp module, GraphDef *graph) {
 // The only dialect attributes allowed have the "tf." prefix. This is a slightly
 // faster check that an attribute is a dialect attribute.
 static bool IsDialectAttr(const NamedAttribute &attr) {
-  return attr.getName().getValue().starts_with("tf.");
+  return attr.getName().getValue().startswith("tf.");
 }
 
 // Export the given attribute list.
@@ -246,7 +245,7 @@ static Status ConvertAttributes(
   return ::tensorflow::OkStatus();
 }
 
-absl::StatusOr<std::optional<GradientDef>> GraphDefExporter::ExportFunction(
+StatusOr<std::optional<GradientDef>> GraphDefExporter::ExportFunction(
     GraphFuncOp func, FunctionDef *def) {
   std::string func_name = func.getSymName().str();
 
@@ -350,7 +349,7 @@ absl::StatusOr<std::optional<GradientDef>> GraphDefExporter::ExportFunction(
   return gradient;
 }
 
-absl::StatusOr<OpDef::ArgDef> GraphDefExporter::ConvertArgumentAttributes(
+StatusOr<OpDef::ArgDef> GraphDefExporter::ConvertArgumentAttributes(
     DictionaryAttr attrs) {
   OpDef::ArgDef arg;
   auto name = attrs.getAs<StringAttr>(dialect_->getTfgNameAttrIdentifier());
@@ -394,7 +393,7 @@ static void ExtractExperimentalDebugInfoFromLocation(
 
 Status ConvertToNodeDef(
     Operation *op, NodeDef *node, TFGraphDialect *dialect,
-    function_ref<absl::StatusOr<std::string>(Value)> get_value_name) {
+    function_ref<StatusOr<std::string>(Value)> get_value_name) {
   // Convert first-class attributes.
   if (auto name =
           op->getAttrOfType<StringAttr>(dialect->getNameAttrIdentifier()))
@@ -457,9 +456,9 @@ Status GraphDefExporter::ConvertOperation(Operation *op, NodeDef *node,
 // Get the edge name of a value. If `get_output_segment` is specified, it means
 // the name should be fully qualified if it is an operation result for exporting
 // a function.
-static absl::StatusOr<std::string> GetValueName(
+static StatusOr<std::string> GetValueName(
     Value value, TFGraphDialect *dialect,
-    function_ref<absl::StatusOr<std::pair<StringRef, unsigned int>>(OpResult)>
+    function_ref<StatusOr<std::pair<StringRef, unsigned>>(OpResult)>
         get_output_segment) {
   std::string name;
   bool is_control = value.getType() == dialect->getControlType();
@@ -519,12 +518,11 @@ static absl::StatusOr<std::string> GetValueName(
   return name;
 }
 
-absl::StatusOr<std::string> GetValueName(Value value, TFGraphDialect *dialect) {
+StatusOr<std::string> GetValueName(Value value, TFGraphDialect *dialect) {
   return GetValueName(value, dialect, /*get_output_segment=*/nullptr);
 }
 
-absl::StatusOr<std::string> GraphDefExporter::GetEdgeName(Value value,
-                                                          bool is_func) {
+StatusOr<std::string> GraphDefExporter::GetEdgeName(Value value, bool is_func) {
   if (!is_func) return GetValueName(value, dialect_);
   return GetValueName(value, dialect_, [&](OpResult result) {
     return GetOutputSegment(result);
@@ -532,8 +530,8 @@ absl::StatusOr<std::string> GraphDefExporter::GetEdgeName(Value value,
 }
 
 // Get the segment size of an op's output.
-static absl::StatusOr<unsigned int> GetOutputSegmentSize(
-    Operation *op, const OpDef::ArgDef &arg) {
+static StatusOr<unsigned> GetOutputSegmentSize(Operation *op,
+                                               const OpDef::ArgDef &arg) {
   if (!arg.type_list_attr().empty()) {
     if (auto v = op->getAttr(arg.type_list_attr()).dyn_cast<ArrayAttr>())
       return v.size();
@@ -545,7 +543,7 @@ static absl::StatusOr<unsigned int> GetOutputSegmentSize(
   return InvalidArgument("Type attr not found: ", arg.number_attr());
 }
 
-absl::StatusOr<StringRef> GraphDefExporter::GetFunctionOutputName(
+StatusOr<StringRef> GraphDefExporter::GetFunctionOutputName(
     unsigned result_idx, const std::string &op_name, SymbolTable &table) {
   if (auto func = table.lookup<GraphFuncOp>(op_name)) {
     if (result_idx >= func.getNumResults()) {
@@ -564,7 +562,7 @@ absl::StatusOr<StringRef> GraphDefExporter::GetFunctionOutputName(
 }
 
 // Get the name of a function argument from a function in the library.
-absl::StatusOr<StringRef> GraphDefExporter::GetFunctionOutputName(
+StatusOr<StringRef> GraphDefExporter::GetFunctionOutputName(
     unsigned result_idx, const std::string &op_name,
     const FunctionLibraryDefinition &library) {
   if (const FunctionDef *function = library.Find(op_name)) {
@@ -578,8 +576,8 @@ absl::StatusOr<StringRef> GraphDefExporter::GetFunctionOutputName(
                          "' is neither registered nor a function");
 }
 
-absl::StatusOr<std::pair<StringRef, unsigned int>>
-GraphDefExporter::GetOutputSegment(OpResult result) {
+StatusOr<std::pair<StringRef, unsigned>> GraphDefExporter::GetOutputSegment(
+    OpResult result) {
   // TODO(jeffniu): OpRegistry::LookUp should accept `string_view`.
   Operation *op = result.getOwner();
   std::string op_name = op->getName().stripDialect().str();

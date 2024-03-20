@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,10 +20,8 @@ limitations under the License.
 #include <ostream>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 
-#include "absl/log/check.h"
 #include "llvm/Support/ExtensibleRTTI.h"
 #include "xla/python/ifrt/device.h"
 #include "xla/python/ifrt/index_domain.h"
@@ -56,21 +54,16 @@ class Sharding : public llvm::RTTIExtends<Sharding, Serializable> {
   // Breaks a shape up into per-device shapes and shardings. See
   // Array::DisassembleIntoSingleDeviceArrays(). It may return an error if
   // disassembly is unsupported.
-  virtual absl::StatusOr<
+  virtual StatusOr<
       std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
   Disassemble(const Shape& shape) const = 0;
-
-  // Variant of `Disassemble` that takes a dynamic shape.
-  virtual absl::StatusOr<
-      std::vector<std::pair<DynamicShape, std::shared_ptr<const Sharding>>>>
-  Disassemble(const DynamicShape& dynamic_shape) const = 0;
 
   // Maps each shard to an `IndexDomain` over `shape`. The result is a list of
   // `index_domain_i` such that `array[index_domain_i] = disassembled_array_i`.
   // Note that multiple shards may map onto equal `IndexDomain`. For instance, a
   // fully replicated sharding would return a vector of `[IndexDomain(shape)] *
   // devices().size()`.
-  virtual absl::StatusOr<std::vector<IndexDomain>> IndexDomains(
+  virtual StatusOr<std::vector<IndexDomain>> IndexDomains(
       const Shape& shape) const = 0;
 
   virtual std::string DebugString() const = 0;
@@ -103,14 +96,10 @@ class SingleDeviceSharding final
 
   ~SingleDeviceSharding() override = default;
 
-  absl::StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
+  StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
   Disassemble(const Shape& shape) const override;
 
-  absl::StatusOr<
-      std::vector<std::pair<DynamicShape, std::shared_ptr<const Sharding>>>>
-  Disassemble(const DynamicShape& dynamic_shape) const override;
-
-  absl::StatusOr<std::vector<IndexDomain>> IndexDomains(
+  StatusOr<std::vector<IndexDomain>> IndexDomains(
       const Shape& shape) const override;
 
   std::string DebugString() const override;
@@ -135,14 +124,10 @@ class OpaqueSharding : public llvm::RTTIExtends<OpaqueSharding, Sharding> {
 
   ~OpaqueSharding() override = default;
 
-  absl::StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
+  StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
   Disassemble(const Shape& shape) const override;
 
-  absl::StatusOr<
-      std::vector<std::pair<DynamicShape, std::shared_ptr<const Sharding>>>>
-  Disassemble(const DynamicShape& dynamic_shape) const override;
-
-  absl::StatusOr<std::vector<IndexDomain>> IndexDomains(
+  StatusOr<std::vector<IndexDomain>> IndexDomains(
       const Shape& shape) const override;
 
   std::string DebugString() const override;
@@ -160,63 +145,28 @@ class OpaqueSharding : public llvm::RTTIExtends<OpaqueSharding, Sharding> {
 class ConcreteSharding : public llvm::RTTIExtends<ConcreteSharding, Sharding> {
  public:
   // Creates a concrete sharding that may contain non-identical shard shapes.
-  // REQUIRES: `devices`.size() == `shard_shapes`.size()
+  // REQUIRES: devices.size() == shard_shapes.size()
   static std::unique_ptr<ConcreteSharding> Create(
       DeviceList devices, MemoryKind memory_kind, Shape shape,
       std::vector<Shape> shard_shapes);
 
-  // Creates a concrete sharding that may contain non-identical shard dynamic
-  // shapes.
-  // REQUIRES: `devices`.size() == `shard_dynamic_shapes`.size()
-  static std::unique_ptr<ConcreteSharding> Create(
-      DeviceList devices, MemoryKind memory_kind, DynamicShape dynamic_shape,
-      std::vector<DynamicShape> shard_dynamic_shapes);
-
-  bool has_dynamic_shape() const {
+  Shape shape() const {
     DCHECK(this);
-    return std::holds_alternative<DynamicShape>(shape_) &&
-           std::holds_alternative<std::vector<DynamicShape>>(shard_shapes_);
+    return shape_;
   }
-
-  bool has_static_shape() const {
-    DCHECK(this);
-    return std::holds_alternative<Shape>(shape_) &&
-           std::holds_alternative<std::vector<Shape>>(shard_shapes_);
-  }
-
-  const Shape& shape() const {
-    DCHECK(has_static_shape());
-    return std::get<Shape>(shape_);
-  }
-
-  const DynamicShape& dynamic_shape() const {
-    DCHECK(has_dynamic_shape());
-    return std::get<DynamicShape>(shape_);
-  }
-
   const std::vector<Shape>& shard_shapes() const {
     DCHECK(this);
-    DCHECK(std::holds_alternative<std::vector<Shape>>(shard_shapes_));
-    return std::get<std::vector<Shape>>(shard_shapes_);
-  }
-
-  const std::vector<DynamicShape>& shard_dynamic_shapes() const {
-    DCHECK(this);
-    DCHECK(std::holds_alternative<std::vector<DynamicShape>>(shard_shapes_));
-    return std::get<std::vector<DynamicShape>>(shard_shapes_);
+    return shard_shapes_;
   }
 
   // Sharding implementation.
 
   ~ConcreteSharding() override = default;
 
-  absl::StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
+  StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
   Disassemble(const Shape& shape) const override;
-  absl::StatusOr<
-      std::vector<std::pair<DynamicShape, std::shared_ptr<const Sharding>>>>
-  Disassemble(const DynamicShape& dynamic_shape) const override;
 
-  absl::StatusOr<std::vector<IndexDomain>> IndexDomains(
+  StatusOr<std::vector<IndexDomain>> IndexDomains(
       const Shape& shape) const override;
 
   std::string DebugString() const override;
@@ -227,12 +177,8 @@ class ConcreteSharding : public llvm::RTTIExtends<ConcreteSharding, Sharding> {
   ConcreteSharding(DeviceList devices, MemoryKind memory_kind, Shape shape,
                    std::vector<Shape> shard_shapes);
 
-  ConcreteSharding(DeviceList devices, MemoryKind memory_kind,
-                   DynamicShape dynamic_shape,
-                   std::vector<DynamicShape> shard_dynamic_shapes);
-
-  std::variant<Shape, DynamicShape> shape_;
-  std::variant<std::vector<Shape>, std::vector<DynamicShape>> shard_shapes_;
+  Shape shape_;
+  std::vector<Shape> shard_shapes_;
 };
 
 // Opaque sharding that does not define a fixed semantics for conversion between
@@ -260,13 +206,10 @@ class ConcreteEvenSharding
 
   ~ConcreteEvenSharding() override = default;
 
-  absl::StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
+  StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
   Disassemble(const Shape& shape) const override;
-  absl::StatusOr<
-      std::vector<std::pair<DynamicShape, std::shared_ptr<const Sharding>>>>
-  Disassemble(const DynamicShape& dynamic_shape) const override;
 
-  absl::StatusOr<std::vector<IndexDomain>> IndexDomains(
+  StatusOr<std::vector<IndexDomain>> IndexDomains(
       const Shape& shape) const override;
 
   std::string DebugString() const override;
@@ -285,18 +228,15 @@ class ConcreteEvenSharding
 class ShardingParamSharding
     : public llvm::RTTIExtends<ShardingParamSharding, Sharding> {
  public:
-  static absl::StatusOr<std::unique_ptr<ShardingParamSharding>> Create(
+  static StatusOr<std::unique_ptr<ShardingParamSharding>> Create(
       ShardingParam sharding_param, DeviceList devices, MemoryKind memory_kind);
 
   const ShardingParam& sharding_param() const { return sharding_param_; }
 
-  absl::StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
+  StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
   Disassemble(const Shape& shape) const override;
-  absl::StatusOr<
-      std::vector<std::pair<DynamicShape, std::shared_ptr<const Sharding>>>>
-  Disassemble(const DynamicShape& dynamic_shape) const override;
 
-  absl::StatusOr<std::vector<IndexDomain>> IndexDomains(
+  StatusOr<std::vector<IndexDomain>> IndexDomains(
       const Shape& shape) const override;
 
   std::string DebugString() const override;

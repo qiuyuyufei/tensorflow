@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,9 +15,7 @@ limitations under the License.
 
 #include "xla/tools/hlo_extractor.h"
 
-#ifndef _WIN32
 #include <unistd.h>
-#endif
 
 #include <cstdint>
 #include <deque>
@@ -189,7 +187,7 @@ class ExtractionVisitor : public ConstDfsHloVisitorWithDefault {
  private:
   // Replace the `hlo` with Constant of the same shape.
   Status ReplaceWithConstant(const HloInstruction* hlo) {
-    absl::StatusOr<Literal> literal_status = MakeFakeLiteral(hlo->shape());
+    StatusOr<Literal> literal_status = MakeFakeLiteral(hlo->shape());
     TF_CHECK_OK(literal_status.status());
     auto new_const =
         HloInstruction::CreateConstant(std::move(literal_status.value()));
@@ -248,8 +246,7 @@ class ExtractionVisitor : public ConstDfsHloVisitorWithDefault {
             builder->AddInstruction(HloInstruction::CreateConstant(
                 LiteralUtil::Zero(constant_shape.element_type())));
       } else {
-        absl::StatusOr<Literal> literal_status =
-            MakeFakeLiteral(constant_shape);
+        StatusOr<Literal> literal_status = MakeFakeLiteral(constant_shape);
         TF_CHECK_OK(literal_status.status());
         constant_instruction = builder->AddInstruction(
             HloInstruction::CreateConstant(std::move(literal_status.value())));

@@ -1,4 +1,4 @@
-/* Copyright 2015 The OpenXLA Authors.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,9 +23,11 @@ limitations under the License.
 #include <memory>
 #include <string>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "xla/stream_executor/device_description.h"
+#include "xla/stream_executor/device_options.h"
+#include "xla/stream_executor/platform/port.h"
+#include "tsl/platform/status.h"
+#include "tsl/platform/statusor.h"
 
 namespace stream_executor {
 
@@ -42,7 +44,8 @@ std::string StreamPriorityToString(StreamPriority priority);
 // StreamExecutorConfig encapsulates the set of options for constructing a
 // StreamExecutor for a given platform.
 struct StreamExecutorConfig {
-  // Sets members to defaults: -1 for ordinal (must be changed).
+  // Sets members to defaults: -1 for ordinal (must be changed), and default
+  // PluginConfig and DeviceOptions.
   StreamExecutorConfig();
 
   // Simple ordinal-setting constructor.
@@ -54,9 +57,12 @@ struct StreamExecutorConfig {
 
   // The ordinal of the device to be managed by the returned StreamExecutor.
   int ordinal;
+
+  // The DeviceOptions for the returned StreamExecutor.
+  DeviceOptions device_options;
 };
 
-// Abstract base class for a platform registered with the PlatformManager.
+// Abstract base class for a platform registered with the MultiPlatformManager.
 class Platform {
  public:
   virtual ~Platform();
@@ -97,9 +103,9 @@ class Platform {
   // initialized before obtaining StreamExecutor objects.  The interpretation of
   // the platform_options argument is implementation specific.  This method may
   // return an error if unrecognized options are provided.  If using
-  // PlatformManager, this method will be called automatically by
+  // MultiPlatformManager, this method will be called automatically by
   // InitializePlatformWithId/InitializePlatformWithName.
-  virtual absl::Status Initialize(
+  virtual tsl::Status Initialize(
       const std::map<std::string, std::string>& platform_options);
 
   // Returns a populated DeviceDescription for the device at the given ordinal.
@@ -108,7 +114,7 @@ class Platform {
   //
   // Alternatively callers may call GetDeviceDescription() on the StreamExecutor
   // which returns a cached instance specific to the initialized StreamExecutor.
-  virtual absl::StatusOr<std::unique_ptr<DeviceDescription>>
+  virtual tsl::StatusOr<std::unique_ptr<DeviceDescription>>
   DescriptionForDevice(int ordinal) const = 0;
 
   // Returns a device with the given ordinal on this platform with a default
@@ -118,17 +124,17 @@ class Platform {
   //
   // Ownership of the executor is NOT transferred to the caller --
   // the Platform owns the executors in a singleton-like fashion.
-  virtual absl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) = 0;
+  virtual tsl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) = 0;
 
   // Returns a device constructed with the options specified in "config".
   // Ownership of the executor is NOT transferred to the caller.
-  virtual absl::StatusOr<StreamExecutor*> GetExecutor(
+  virtual tsl::StatusOr<StreamExecutor*> GetExecutor(
       const StreamExecutorConfig& config) = 0;
 
   // Returns a device constructed with the options specified in "config" without
   // looking in or storing to the Platform's executor cache.
   // Ownership IS transferred to the caller.
-  virtual absl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
+  virtual tsl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
       const StreamExecutorConfig& config) = 0;
 
  protected:

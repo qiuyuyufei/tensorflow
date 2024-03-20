@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,21 +34,20 @@ namespace {
 
 class ClientFactory {
  public:
-  void Register(
-      std::function<absl::StatusOr<std::shared_ptr<Client>>()> factory) {
+  void Register(std::function<StatusOr<std::shared_ptr<Client>>()> factory) {
     absl::MutexLock lock(&mu_);
     CHECK(!factory_) << "Client factory has been already registered.";
     factory_ = std::move(factory);
   }
 
-  std::function<absl::StatusOr<std::shared_ptr<Client>>()> Get() const {
+  std::function<StatusOr<std::shared_ptr<Client>>()> Get() const {
     absl::MutexLock lock(&mu_);
     return factory_;
   }
 
  private:
   mutable absl::Mutex mu_;
-  std::function<absl::StatusOr<std::shared_ptr<Client>>()> factory_
+  std::function<StatusOr<std::shared_ptr<Client>>()> factory_
       ABSL_GUARDED_BY(mu_);
 };
 
@@ -60,11 +59,11 @@ ClientFactory& GetGlobalClientFactory() {
 }  // namespace
 
 void RegisterClientFactory(
-    std::function<absl::StatusOr<std::shared_ptr<Client>>()> factory) {
+    std::function<StatusOr<std::shared_ptr<Client>>()> factory) {
   GetGlobalClientFactory().Register(std::move(factory));
 }
 
-absl::StatusOr<std::shared_ptr<Client>> GetClient() {
+StatusOr<std::shared_ptr<Client>> GetClient() {
   auto factory = GetGlobalClientFactory().Get();
   CHECK(factory) << "Client factory has not been registered.";
   return factory();

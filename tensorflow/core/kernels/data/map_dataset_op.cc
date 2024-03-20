@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/core/kernels/data/map_dataset_op.h"
 
-#include "absl/status/status.h"
 #include "tensorflow/core/common_runtime/function.h"
 #include "tensorflow/core/common_runtime/input_colocation_exemption_registry.h"
 #include "tensorflow/core/data/captured_function.h"
@@ -54,10 +53,6 @@ class MapDatasetOp::Dataset : public DatasetBase {
         output_types_(output_types),
         output_shapes_(output_shapes) {
     input_->Ref();
-    random_indexing_compatible_ = absl::OkStatus();
-    if (input_ != nullptr) {
-      random_indexing_compatible_ = input_->RandomIndexingCompatible();
-    }
   }
 
   ~Dataset() override { input_->Unref(); }
@@ -88,7 +83,7 @@ class MapDatasetOp::Dataset : public DatasetBase {
 
   Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
     inputs->push_back(input_);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status CheckExternalState() const override {
@@ -107,10 +102,6 @@ class MapDatasetOp::Dataset : public DatasetBase {
                                       &instantiated_captured_func_));
     }
     return instantiated_captured_func_->RunInstantiated(args, out_tensors);
-  }
-
-  absl::Status RandomIndexingCompatible() const override {
-    return random_indexing_compatible_;
   }
 
  protected:
@@ -151,7 +142,7 @@ class MapDatasetOp::Dataset : public DatasetBase {
          std::make_pair(kPreserveCardinality,
                         preserve_cardinality_attr)},  // Attrs
         output));
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -178,7 +169,7 @@ class MapDatasetOp::Dataset : public DatasetBase {
       std::vector<Tensor> args;
       TF_RETURN_IF_ERROR(input_impl_->GetNext(ctx, &args, end_of_sequence));
       if (*end_of_sequence) {
-        return absl::OkStatus();
+        return OkStatus();
       }
 
       Status s = instantiated_captured_func_->Run(ctx, std::move(args),
@@ -194,13 +185,11 @@ class MapDatasetOp::Dataset : public DatasetBase {
           // `f` may deliberately raise `errors::OutOfRange` to indicate
           // that we should terminate the iteration early.
           *end_of_sequence = true;
-          return absl::OkStatus();
+          return OkStatus();
         }
+      } else {
+        return s;
       }
-      if (!s.ok()) {
-        return AddErrorContext(s);
-      }
-      return s;
     }
 
    protected:
@@ -214,13 +203,13 @@ class MapDatasetOp::Dataset : public DatasetBase {
       TF_RETURN_IF_ERROR(ctx->HandleCheckExternalStateStatus(
           dataset()->captured_func_->CheckExternalState()));
       TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status RestoreInternal(IteratorContext* ctx,
                            IteratorStateReader* reader) override {
       TF_RETURN_IF_ERROR(RestoreInput(ctx, reader, input_impl_));
-      return absl::OkStatus();
+      return OkStatus();
     }
 
    private:
@@ -236,7 +225,6 @@ class MapDatasetOp::Dataset : public DatasetBase {
   // This is used for random access provided by Get().
   mutable std::unique_ptr<InstantiatedCapturedFunction>
       instantiated_captured_func_;
-  absl::Status random_indexing_compatible_;
 };
 
 MapDatasetOp::MapDatasetOp(OpKernelConstruction* ctx)

@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ StatusOr<bool> HloComputationDeduplicator::Run(
     // with large number of instructions or large-size constants due to increase
     // in time taken to stringify.
     if (comp->IsEntryComputation() || comp->instruction_count() > 128 ||
-        ContainsLargeConstants(comp) || comp->IsCollectiveCalledComputation()) {
+        ContainsLargeConstants(comp)) {
       continue;
     }
     std::string comp_str = comp->ToString(options);

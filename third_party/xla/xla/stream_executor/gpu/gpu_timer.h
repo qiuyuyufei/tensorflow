@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,11 +19,9 @@ limitations under the License.
 #include <optional>
 #include <utility>
 
-#include "absl/status/statusor.h"
-#include "absl/time/time.h"
+#include "xla/stream_executor/gpu/gpu_driver.h"
 #include "xla/stream_executor/gpu/gpu_executor.h"
-#include "xla/stream_executor/gpu/gpu_timer_kernel.h"
-#include "xla/stream_executor/gpu/gpu_types.h"
+#include "xla/stream_executor/stream_executor_internal.h"
 
 namespace xla {
 namespace gpu {
@@ -37,81 +35,41 @@ namespace gpu {
 class GpuExecutor;
 class GpuStream;
 
-// When a timer is created it launches a delay kernel into the given stream and
-// queues a start event immediately afterwards. This delay kernel blocks
-// execution on the stream until GetElapsedDuration() is called, at which point
-// an end event is queued and the delay kernel exits. This allows the device
-// execution time of the tasks queued to the stream while the timer is active
-// to be measured more accurately.
+// Timer is started once it's created, and is stopped once read.
 class GpuTimer {
  public:
-  class GpuSemaphore {
-   public:
-    GpuSemaphore() = default;
-    static absl::StatusOr<GpuSemaphore> Create(StreamExecutor* executor);
-    explicit operator bool() const { return bool{ptr_}; }
-    GpuSemaphoreState& operator*() {
-      return *static_cast<GpuSemaphoreState*>(ptr_->opaque());
-    }
-    DeviceMemory<GpuSemaphoreState> device();
-
-   private:
-    explicit GpuSemaphore(std::unique_ptr<HostMemoryAllocation> alloc)
-        : ptr_{std::move(alloc)} {}
-    std::unique_ptr<HostMemoryAllocation> ptr_;
-  };
-  static absl::StatusOr<GpuTimer> Create(Stream* stream);
-  [[deprecated("Pass Stream* not GpuStream*")]] static absl::StatusOr<GpuTimer>
-  Create(GpuStream* stream);
+  static tsl::StatusOr<GpuTimer> Create(GpuStream* stream);
 
   // An ugly but a very convenient helper: creates a timer only when we need
   // one, but always returns an object. If `is_needed` is false, returns an
   // empty optional, acts like `Create` otherwise.
-  static absl::StatusOr<std::optional<GpuTimer>> CreateIfNeeded(Stream* stream,
-                                                                bool is_needed);
-  [[deprecated("Pass Stream* not GpuStream*")]] static absl::StatusOr<
-      std::optional<GpuTimer>>
-  CreateIfNeeded(GpuStream* stream, bool is_needed);
+  static tsl::StatusOr<std::optional<GpuTimer>> CreateIfNeeded(
+      GpuStream* stream, bool is_needed);
 
   explicit GpuTimer(GpuExecutor* parent, GpuEventHandle start_event,
-                    GpuEventHandle stop_event, GpuStream* stream,
-                    GpuSemaphore semaphore = {})
+                    GpuEventHandle stop_event, GpuStream* stream)
       : parent_(parent),
         start_event_(start_event),
         stop_event_(stop_event),
-        stream_(stream),
-        semaphore_(std::move(semaphore)) {}
+        stream_(stream) {}
 
   GpuTimer(GpuTimer&& other)
       : parent_(other.parent_),
         start_event_(std::exchange(other.start_event_, nullptr)),
         stop_event_(std::exchange(other.stop_event_, nullptr)),
-        stream_(other.stream_),
-        semaphore_(std::move(other.semaphore_)) {}
-
-  GpuTimer& operator=(GpuTimer&& other) {
-    if (this != &other) {
-      parent_ = other.parent_;
-      start_event_ = std::exchange(other.start_event_, nullptr);
-      stop_event_ = std::exchange(other.stop_event_, nullptr);
-      stream_ = other.stream_;
-      semaphore_ = std::move(other.semaphore_);
-    }
-    return *this;
-  }
+        stream_(other.stream_) {}
 
   ~GpuTimer();
 
   // Stops the timer on the first call and returns the elapsed duration.
   // Subsequent calls error out.
-  absl::StatusOr<absl::Duration> GetElapsedDuration();
+  tsl::StatusOr<absl::Duration> GetElapsedDuration();
 
  private:
   GpuExecutor* parent_;
   GpuEventHandle start_event_ = nullptr;
   GpuEventHandle stop_event_ = nullptr;
   GpuStream* stream_;
-  GpuSemaphore semaphore_;
   bool is_stopped_ = false;
 
   GpuTimer(const GpuTimer&) = delete;

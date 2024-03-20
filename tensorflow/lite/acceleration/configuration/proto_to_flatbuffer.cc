@@ -388,9 +388,7 @@ Offset<EdgeTpuSettings> ConvertEdgeTpuSettings(
       static_cast<tflite::EdgeTpuSettings_::FloatTruncationType>(
           settings.float_truncation_type()),
       static_cast<tflite::EdgeTpuSettings_::QosClass>(settings.qos_class()),
-      hardware_cluster_ids_fb, public_model_id,
-      static_cast<tflite::EdgeTpuSettings_::UseLayerIrTgcBackend>(
-          settings.use_layer_ir_tgc_backend()));
+      hardware_cluster_ids_fb, public_model_id);
 }
 
 Offset<CoralSettings> ConvertCoralSettings(const proto::CoralSettings& settings,

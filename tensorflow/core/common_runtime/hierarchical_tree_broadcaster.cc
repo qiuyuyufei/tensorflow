@@ -182,7 +182,7 @@ Status HierarchicalTreeBroadcaster::InitializeCollectiveParams(
   }
 
   VLOG(2) << collective_util::SubdivPermDebugString(*col_params);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status HierarchicalTreeBroadcaster::InitializeCollectiveContext(

@@ -55,7 +55,7 @@ Status ImmediateExecutionTensorHandle::SummarizeValue(
     return status;
   }
   summary = resolved->SummarizeValue();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

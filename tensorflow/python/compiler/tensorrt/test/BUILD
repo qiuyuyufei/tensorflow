@@ -30,7 +30,6 @@ py_strict_library(
         "//tensorflow/compiler/tf2tensorrt:_pywrap_py_utils",
         "//tensorflow/core:protos_all_py",
         "//tensorflow/python/compiler/tensorrt:trt_convert_py",
-        "//tensorflow/python/compiler/tensorrt:utils",
         "//tensorflow/python/eager:def_function",
         "//tensorflow/python/framework:config",
         "//tensorflow/python/framework:graph_io",
@@ -73,13 +72,27 @@ filegroup(
     visibility = ["//tensorflow/python/compiler/tensorrt:__pkg__"],
 )
 
+filegroup(
+    name = "quantization_mnist_test_srcs",
+    srcs = ["quantization_mnist_test.py"],
+    visibility = ["//tensorflow/python/compiler/tensorrt:__pkg__"],
+)
+
+filegroup(
+    name = "quantization_mnist_test_data",
+    srcs = [
+        "testdata/mnist/checkpoint",
+        "testdata/mnist/model.ckpt-46900.data-00000-of-00001",
+        "testdata/mnist/model.ckpt-46900.index",
+    ],
+    visibility = ["//tensorflow/python/compiler/tensorrt:__pkg__"],
+)
+
 base_tags = [
     "no_cuda_on_cpu_tap",
     "no_rocm",
     "no_windows",
     "nomac",
-    # TODO(b/303453873): Re-enable tests once TensorRT has been updated
-    "notap",
 ]
 
 cuda_py_strict_test(
@@ -93,7 +106,7 @@ cuda_py_strict_test(
     xla_enable_strict_auto_jit = False,
     deps = [
         ":tf_trt_integration_test_base_srcs",
-        "//tensorflow/python/compiler/tensorrt:utils",
+        "//tensorflow/python/compiler/tensorrt:trt_convert_py",
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/framework:dtypes",
         "//tensorflow/python/framework:ops",
@@ -130,7 +143,7 @@ cuda_py_strict_test(
     xla_enable_strict_auto_jit = False,
     deps = [
         ":tf_trt_integration_test_base_srcs",
-        "//tensorflow/python/compiler/tensorrt:utils",
+        "//tensorflow/python/compiler/tensorrt:trt_convert_py",
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/framework:dtypes",
         "//tensorflow/python/ops:array_ops",
@@ -230,7 +243,7 @@ cuda_py_strict_test(
     xla_enable_strict_auto_jit = False,
     deps = [
         ":tf_trt_integration_test_base_srcs",
-        "//tensorflow/python/compiler/tensorrt:utils",
+        "//tensorflow/python/compiler/tensorrt:trt_convert_py",
         "//tensorflow/python/framework:dtypes",
         "//tensorflow/python/ops:array_ops",
         "//tensorflow/python/ops:math_ops",

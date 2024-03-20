@@ -75,7 +75,7 @@ Status ValidateInputCombiner(const std::string& combiner) {
         "Invalid combiner: only \"sum\", \"mean\", and "
         "\"sqrtn\" are supported.");
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 std::function<float(float)> GetCombinerScaleContributionFunction(

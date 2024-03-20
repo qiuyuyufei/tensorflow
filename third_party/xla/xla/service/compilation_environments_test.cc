@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -208,13 +208,6 @@ TEST_F(CompilationEnvironmentsTest, ProtoRoundTrip) {
   EXPECT_EQ(envs_deserialized->GetEnv<TestCompilationEnvironment2>()
                 .some_other_flag(),
             20);
-}
-
-TEST_F(CompilationEnvironmentsTest, EnvTypePresenceCheck) {
-  CompilationEnvironments envs;
-  EXPECT_FALSE(envs.HasEnv<TestCompilationEnvironment1>());
-  envs.GetEnv<TestCompilationEnvironment1>();
-  EXPECT_TRUE(envs.HasEnv<TestCompilationEnvironment1>());
 }
 
 }  // namespace

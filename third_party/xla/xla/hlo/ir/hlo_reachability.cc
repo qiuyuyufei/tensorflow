@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ namespace xla {
 HloReachabilityMap::HloReachabilityMap(
     absl::Span<const HloInstruction* const> instructions)
     : bit_sets_(instructions.size(), BitSet(instructions.size())) {
-  indices_.reserve(instructions.size());
   for (size_t i = 0; i < instructions.size(); ++i) {
     bit_sets_[i].Set(i);  // Instructions are reachable from themselves.
     indices_[GetKey(instructions[i])] = i;

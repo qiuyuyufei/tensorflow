@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,14 +15,10 @@ limitations under the License.
 
 #include <memory>
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-#include "xla/hlo/ir/hlo_module.h"
-#include "xla/service/hlo_module_config.h"
+#include "xla/hlo/utils/hlo_matchers.h"
 #include "xla/service/pattern_matcher.h"
 #include "xla/service/pattern_matcher_gmock.h"
 #include "xla/tests/hlo_test_base.h"
-#include "tsl/platform/logging.h"
 
 namespace xla {
 namespace gpu {
@@ -61,19 +57,15 @@ ENTRY matmul {
 
 TEST_F(AutoShardingTest, MatMulWithAutosharding) {
   auto compiled_module = CompileMatMul(true, 4);
-  auto* instruction =
-      compiled_module->entry_computation()->parameter_instruction(0);
+  auto* instruction = FindInstruction(compiled_module.get(), "param");
   VLOG(2) << instruction->ToString();
-  EXPECT_THAT(
-      instruction,
-      AnyOf(GmockMatch(m::Op().WithSharding("{devices=[1,4]0,1,2,3}")),
-            GmockMatch(m::Op().WithSharding("{devices=[4,1]0,1,2,3}"))));
+  EXPECT_THAT(instruction,
+              GmockMatch(m::Op().WithSharding("{devices=[4,1]0,1,2,3}")));
 }
 
 TEST_F(AutoShardingTest, MatMulWithoutAutosharding) {
   auto compiled_module = CompileMatMul(false, 4);
-  auto* instruction =
-      compiled_module->entry_computation()->parameter_instruction(0);
+  auto* instruction = FindInstruction(compiled_module.get(), "param");
   VLOG(2) << instruction->ToString();
   EXPECT_THAT(instruction, GmockMatch(m::Op().WithSharding("{replicated}")));
 }

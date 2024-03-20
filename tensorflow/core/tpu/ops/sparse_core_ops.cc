@@ -106,8 +106,6 @@ REGISTER_OP("XlaSparseDenseMatmulGradWithSgdAndCsrInput")
     .Input("embedding_table: float32")
     .Input("num_minibatches_per_physical_sparse_core: int32")
     .Output("updated_embedding_table: float32")
-    .Attr("clip_weight_min: float = -inf")
-    .Attr("clip_weight_max: float = inf")
     .Attr("table_name: string")
     .SetShapeFn([](shape_inference::InferenceContext* c) -> Status {
       c->set_output(0, c->input(6));
@@ -126,8 +124,6 @@ REGISTER_OP("XlaSparseDenseMatmulGradWithAdagradAndCsrInput")
     .Input("num_minibatches_per_physical_sparse_core: int32")
     .Output("updated_embedding_table: float32")
     .Output("updated_accumulator: float32")
-    .Attr("clip_weight_min: float = -inf")
-    .Attr("clip_weight_max: float = inf")
     .Attr("table_name: string")
     .SetShapeFn([](shape_inference::InferenceContext* c) -> Status {
       c->set_output(0, c->input(6));
@@ -154,8 +150,6 @@ REGISTER_OP("XlaSparseDenseMatmulGradWithAdagradMomentumAndCsrInput")
     .Attr("beta1: float")
     .Attr("beta2: float")
     .Attr("epsilon: float")
-    .Attr("clip_weight_min: float = -inf")
-    .Attr("clip_weight_max: float = inf")
     .Attr("table_name: string")
     .SetShapeFn([](shape_inference::InferenceContext* c) -> Status {
       c->set_output(0, c->input(6));
@@ -182,8 +176,6 @@ REGISTER_OP("XlaSparseDenseMatmulGradWithAdamAndCsrInput")
     .Attr("beta1: float")
     .Attr("beta2: float")
     .Attr("epsilon: float")
-    .Attr("clip_weight_min: float = -inf")
-    .Attr("clip_weight_max: float = inf")
     .Attr("table_name: string")
     .SetShapeFn([](shape_inference::InferenceContext* c) -> Status {
       c->set_output(0, c->input(6));
@@ -211,8 +203,6 @@ REGISTER_OP("XlaSparseDenseMatmulGradWithFtrlAndCsrInput")
     .Attr("learning_rate_power: float")
     .Attr("l1_regularization_strength: float")
     .Attr("l2_regularization_strength: float")
-    .Attr("clip_weight_min: float = -inf")
-    .Attr("clip_weight_max: float = inf")
     .Attr("table_name: string")
     .SetShapeFn([](shape_inference::InferenceContext* c) -> Status {
       c->set_output(0, c->input(6));
@@ -319,14 +309,6 @@ REGISTER_OP("XlaSparseCoreFtrl")
       c->set_output(0, c->input(0));
       c->set_output(1, c->input(1));
       c->set_output(2, c->input(2));
-      return OkStatus();
-    });
-
-REGISTER_OP("GlobalIterId")
-    .Output("iter_id: int64")
-    .SetIsStateful()
-    .SetShapeFn([](shape_inference::InferenceContext* c) -> Status {
-      c->set_output(0, c->Scalar());
       return OkStatus();
     });
 

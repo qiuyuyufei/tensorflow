@@ -1,11 +1,9 @@
-load("@local_tsl//tsl:tsl.bzl", "internal_visibility")
 load("@local_tsl//tsl:tsl.default.bzl", "get_compatible_with_portable")
 load("@local_tsl//tsl/profiler/builds:build_config.bzl", "tf_profiler_copts")
 load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = ["//xla/python/profiler:__subpackages__"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -16,10 +14,7 @@ cc_library(
     compatible_with = get_compatible_with_portable(),
     copts = tf_profiler_copts() + ["-fexceptions"],
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.
-    visibility = internal_visibility([
-        "//xla/backends/profiler:__subpackages__",
-        "//tensorflow/python/profiler/internal:__subpackages__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/memory",
@@ -42,10 +37,7 @@ cc_library(
     name = "traceme_wrapper",
     hdrs = ["traceme_wrapper.h"],
     copts = tf_profiler_copts(),
-    visibility = internal_visibility([
-        "//xla/python:__pkg__",
-        "//tensorflow/python/profiler/internal:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/strings",
         "@local_tsl//tsl/platform:macros",

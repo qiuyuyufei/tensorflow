@@ -16,7 +16,6 @@ limitations under the License.
 #define TENSORFLOW_CORE_TPU_KERNELS_SPARSE_CORE_LAYOUT_H_
 
 #include <cstdint>
-#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -54,14 +53,6 @@ class SparseCoreLayoutStacker {
   void SetStackingEnabled(bool stacking_enabled) {
     CHECK(stacks_by_group_.empty()) << "must call before AddTable";
     stacking_enabled_ = stacking_enabled;
-  }
-  void SetStackingRowLimit(int64_t row_limit) {
-    CHECK(stacks_by_group_.empty()) << "must call before AddTable";
-    row_limit_ = row_limit;
-  }
-  void SetStackingTableLimit(int table_limit) {
-    CHECK(stacks_by_group_.empty()) << "must call before AddTable";
-    table_limit_ = table_limit;
   }
 
   // Add a new table.  Arguments:
@@ -111,12 +102,7 @@ class SparseCoreLayoutStacker {
   bool stacking_enabled_ = true;
   int64_t activation_mem_bytes_limit_ = 0;
   int64_t variable_shard_bytes_limit_ = 0;
-  // Sparse core ops use signed int for row numbers so we had better not stack
-  // beyond this limit.
-  int64_t row_limit_ = (1LL << 31) - 1;
-
-  // The maximum number of tables in any stack.
-  int table_limit_ = std::numeric_limits<int>::max();
+  int num_tables_ = 0;
 
   // All the stacks that we currently know about. Note that we use a btree_map
   // rather than a flat_hash_map so the resulting order is deterministic as long

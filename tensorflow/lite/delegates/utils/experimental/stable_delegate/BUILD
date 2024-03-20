@@ -34,7 +34,6 @@ cc_library_with_tflite(
     deps = [
         "//tensorflow/lite/experimental/acceleration/compatibility:android_info",
         "//tensorflow/lite/tools:logging",
-        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -80,7 +79,6 @@ cc_test(
     deps = [
         ":delegate_loader",
         "//tensorflow/lite/acceleration/configuration:configuration_fbs",
-        "//tensorflow/lite/acceleration/configuration/c:stable_delegate",
         "//tensorflow/lite/delegates/utils/experimental/sample_stable_delegate",
         "@com_google_googletest//:gtest_main",
     ],

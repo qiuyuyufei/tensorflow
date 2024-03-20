@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,7 +29,6 @@ limitations under the License.
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/Types.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -225,11 +224,8 @@ LogicalResult tryLowerTo1DOr2DReduction(
   int64_t reductionDim = leadingReduction ? 0 : 1;
   auto reductionDimAttr = rewriter.getI64VectorAttr({reductionDim});
   Value initVal = op.getInitValues().front();
-  SmallVector<Type> elementTypes{llvm::map_range(
-      op.getBody().front().getTerminator()->getOperands(),
-      [](Value v) { return v.getType().cast<ShapedType>().getElementType(); })};
-  auto reductionOp = rewriter.create<ReduceOp>(loc, intermResult, initVal,
-                                               reductionDimAttr, elementTypes);
+  auto reductionOp =
+      rewriter.create<ReduceOp>(loc, intermResult, initVal, reductionDimAttr);
   rewriter.inlineRegionBefore(op.getBody(), reductionOp.getBody(),
                               reductionOp.getBody().begin());
   intermResult = reductionOp->getResults().front();

@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -45,8 +45,7 @@ class HloRematerialization : public HloModulePass {
  public:
   using ShapeSizeFunction = std::function<int64_t(const Shape&)>;
 
-  using CompactShapeFunction =
-      std::function<absl::StatusOr<Shape>(const Shape&)>;
+  using CompactShapeFunction = std::function<StatusOr<Shape>(const Shape&)>;
 
   // Helper struct that communicates the before / after sizes for the
   // rematerialization process.
@@ -167,7 +166,7 @@ class HloRematerialization : public HloModulePass {
   // specified in the constructor then no instructions are rematerialized and
   // false is returned.
   using HloPassInterface::Run;
-  absl::StatusOr<bool> Run(
+  StatusOr<bool> Run(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads) override;
 
@@ -176,15 +175,15 @@ class HloRematerialization : public HloModulePass {
   // order in which the computation's instructions will be emitted in the
   // backend. Rematerialized instructions will be added to the HLO computation
   // and inserted into 'order'.
-  absl::StatusOr<bool> RematerializeComputation(HloComputation* computation,
-                                                HloSchedule* schedule,
-                                                int64_t memory_limit_bytes,
-                                                int64_t min_remat_size) {
+  StatusOr<bool> RematerializeComputation(HloComputation* computation,
+                                          HloSchedule* schedule,
+                                          int64_t memory_limit_bytes,
+                                          int64_t min_remat_size) {
     return RematerializeComputation(computation, schedule, memory_limit_bytes,
                                     min_remat_size, /*execution_threads=*/{});
   }
 
-  virtual absl::StatusOr<bool> RematerializeComputation(
+  virtual StatusOr<bool> RematerializeComputation(
       HloComputation* computation, HloSchedule* schedule,
       int64_t memory_limit_bytes, int64_t min_remat_size,
       const absl::flat_hash_set<absl::string_view>& execution_threads);
@@ -193,13 +192,13 @@ class HloRematerialization : public HloModulePass {
   // peak memory is the maximum total size of all live HLO instruction values at
   // any program point. 'order' is the order in which the HLO instructions will
   // be emitted which is used to determine lifespans of HLO values.
-  absl::StatusOr<int64_t> ComputePeakMemory(
+  StatusOr<int64_t> ComputePeakMemory(
       const HloComputation* computation, const HloInstructionSequence& order,
       const absl::flat_hash_set<absl::string_view>& execution_threads) const;
 
   // Returns the peak memory usage of the called computations for the given
   // instruction. Zero is returned if the instruction calls no computations.
-  absl::StatusOr<int64_t> CalledComputationsMemoryUsage(
+  StatusOr<int64_t> CalledComputationsMemoryUsage(
       const HloInstruction* instruction,
       const absl::flat_hash_set<absl::string_view>& execution_threads) const;
 

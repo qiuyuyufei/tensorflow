@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,10 +22,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/status/status.h"
-#include "absl/strings/string_view.h"
 #include "xla/pjrt/c/pjrt_c_api.h"
-#include "xla/pjrt/c/pjrt_c_api_profiler_extension.h"
-#include "xla/pjrt/distributed/key_value_store_interface.h"
 #include "xla/pjrt/pjrt_client.h"
 #include "xla/pjrt/pjrt_future.h"
 #include "xla/status.h"
@@ -114,7 +111,6 @@ xla::Status PjrtErrorToStatus(const PJRT_Error* error, const PJRT_Api* api);
 absl::StatusCode PjrtErrorToStatusCode(const PJRT_Error* error,
                                        const PJRT_Api* api);
 
-absl::StatusCode PjrtErrorCodeToStatusCode(PJRT_Error_Code code);
 PJRT_Error_Code StatusCodeToPjrtErrorCode(absl::StatusCode code);
 
 // Conversion helper from xla::PrimitiveType to PJRT_Buffer_Type.
@@ -141,12 +137,12 @@ xla::PjRtFuture<xla::Status> ConvertCEventToCppFuture(PJRT_Event* c_event,
 // The data of returned variable-length PJRT_NamedValue list is backed by
 // `cpp_value_map`, so `cpp_value_map` must outlive the returned list. It will
 // raise errors for unsupported PjRtValueType.
-absl::StatusOr<std::vector<PJRT_NamedValue>> ConvertToPjRtNamedValueList(
-    const absl::flat_hash_map<std::string, xla::PjRtValueType>& cpp_value_map);
+xla::StatusOr<std::vector<PJRT_NamedValue>> ConvertToPjRtNamedValueList(
+    const absl::flat_hash_map<std::string, xla::PjRtValueType>& cpp_value_map,
+    int api_minor_version);
 
 absl::flat_hash_map<std::string, xla::PjRtValueType>
-ConvertFromPjRtNamedValueList(const PJRT_NamedValue* c_value_list,
-                              size_t list_size);
+ConvertFromPjRtNamedValueList(PJRT_NamedValue* c_value_list, size_t list_size);
 
 // Validates that all entries in value_map have a matching name and type in
 // expected_name_and_type. expected_name_and_type may contain extra entries
@@ -167,9 +163,6 @@ xla::Status ActualStructSizeIsGreaterOrEqual(absl::string_view struct_name,
 absl::string_view GetPlatformVersion(PJRT_Client* client, const PJRT_Api* api);
 absl::string_view GetPlatformName(PJRT_Client* client, const PJRT_Api* api);
 
-absl::StatusOr<PJRT_TopologyDescription*> GetTopologyDescription(
-    PJRT_Client* client, const PJRT_Api* api);
-
 // Releases `chunk`.
 PJRT_Chunk ConvertFromCppChunk(xla::PjRtChunk chunk);
 
@@ -180,10 +173,8 @@ xla::PjRtChunk ConvertToCppChunk(const PJRT_Chunk& chunk);
 PJRT_DeviceDescription* GetDeviceDescription(const PJRT_Api* api,
                                              PJRT_Device* device);
 
-absl::Span<PJRT_Memory* const> GetAddressableMemories(const PJRT_Api* api,
-                                                      PJRT_Device* device);
-
-int GetId(const PJRT_Api* api, PJRT_DeviceDescription* device_desc);
+absl::Span<PJRT_Memory*> GetAddressableMemories(const PJRT_Api* api,
+                                                PJRT_Device* device);
 
 using PJRT_KeyValueGetCFunc =
     std::function<PJRT_Error*(PJRT_KeyValueGetCallback_Args* args)>;
@@ -196,9 +187,9 @@ struct PJRT_KeyValueCallbackData {
   PJRT_KeyValueCallbackData() = default;
   PJRT_KeyValueCallbackData(const PJRT_KeyValueCallbackData&) = delete;
 
-  std::shared_ptr<xla::KeyValueStoreInterface> kv_store;
-
-  // kv_get_c_func and kv_put_c_func are holding pointers to kv_store.
+  xla::PjRtClient::KeyValueGetCallback kv_get;
+  xla::PjRtClient::KeyValuePutCallback kv_put;
+  // kv_get_c_func and kv_put_c_func are holding pointers to kv_get and kv_put.
   pjrt::PJRT_KeyValueGetCFunc kv_get_c_func;
   pjrt::PJRT_KeyValuePutCFunc kv_put_c_func;
   // c_kv_get and c_kv_put are holding pointers to kv_get_c_func and
@@ -213,29 +204,8 @@ struct PJRT_KeyValueCallbackData {
 // PJRT_KeyValueCallbackData must be kept alive as long as c_kv_get and c_kv_put
 // may be called.
 std::unique_ptr<PJRT_KeyValueCallbackData> ConvertToCKeyValueCallbacks(
-    std::shared_ptr<xla::KeyValueStoreInterface> kv_store);
-
-// std::function version of PJRT_SendCallback
-using PJRT_SendCallbackFunction =
-    std::function<PJRT_Error*(PJRT_Chunk*, PJRT_CallbackError*, size_t, bool)>;
-// std::function version of PJRT_RecvCallback
-using PJRT_RecvCallbackFunction = std::function<void(PJRT_CopyToDeviceStream*)>;
-
-// Wraps original `xla::SendCallback` inside `PJRT_Callback` using
-// 1) void* `user_arg` to capture `cpp_send_callback.callback` (std::function)
-// 2) `PJRT_SendCallback` function pointer, which reinterprets and calls
-// `user_arg` to call `cpp_send_callback.callback` function.
-PJRT_SendCallbackInfo CppSendCallbackToCSendCallback(
-    xla::SendCallback cpp_send_callback,
-    PJRT_SendCallbackFunction* send_callback_function);
-
-// Wraps original `xla::RecvCallback` inside `PJRT_Callback` using
-// 1) void* `user_arg` to capture `cpp_send_callback.callback` (std::function)
-// 2) `PJRT_RecvCallback` function pointer, which reinterprets and calls
-// `user_arg` to call `cpp_recv_callback.callback` function.
-PJRT_RecvCallbackInfo CppRecvCallbackToCRecvCallback(
-    xla::RecvCallback cpp_recv_callback,
-    PJRT_RecvCallbackFunction* recv_callback_function);
+    xla::PjRtClient::KeyValueGetCallback kv_get,
+    xla::PjRtClient::KeyValuePutCallback kv_put);
 
 // Data needed to support PJRT_Buffer_MemoryLayout. `minor_to_major` holds the
 // data in PJRT_Buffer_MemoryLayout_Tiled.minor_to_major. `tile_dims` and
@@ -247,12 +217,12 @@ struct BufferMemoryLayoutData {
   std::vector<int64_t> tile_dims;
   std::vector<size_t> tile_dim_sizes;
 };
-absl::StatusOr<BufferMemoryLayoutData> ConvertToBufferMemoryLayoutData(
+xla::StatusOr<BufferMemoryLayoutData> ConvertToBufferMemoryLayoutData(
     const xla::Layout& cpp_layout);
-absl::StatusOr<BufferMemoryLayoutData> ConvertToBufferMemoryLayoutData(
+xla::StatusOr<BufferMemoryLayoutData> ConvertToBufferMemoryLayoutData(
     absl::Span<int64_t const> byte_strides);
 
-absl::StatusOr<xla::Layout> ConvertToLayout(
+xla::StatusOr<xla::Layout> ConvertToLayout(
     const PJRT_Buffer_MemoryLayout_Tiled& c_tiled);
 
 PJRT_Buffer_Type GetElementType(const PJRT_Api* api, PJRT_Buffer* buffer);
@@ -261,58 +231,10 @@ absl::Span<const int64_t> GetDimensions(const PJRT_Api* api,
 PJRT_Buffer_MemoryLayout GetMemoryLayout(const PJRT_Api* api,
                                          PJRT_Buffer* buffer);
 
-absl::StatusOr<xla::Shape> BuildXlaShapeFromC(PJRT_Buffer_Type element_type,
-                                              const int64_t* dims,
-                                              size_t num_dims,
-                                              PJRT_Buffer_MemoryLayout* layout);
-
-absl::string_view PlatformName(const PJRT_Api* api,
-                               const PJRT_TopologyDescription* topo_desc);
-absl::Span<PJRT_DeviceDescription* const> DeviceDescriptions(
-    const PJRT_Api* api, const PJRT_TopologyDescription* topo_desc);
-
-absl::StatusOr<xla::CompiledMemoryStats> GetCompiledMemoryStats(
-    const PJRT_Api* api, PJRT_Executable* executable);
-
-// Creates a PJRT_Profiler_Extension and adds a producer trace with
-// the given name. The created PJRT_Profiler_Extension will be used in argument
-// structs to pass the producer traceme context id to add a corresponding
-// consumer trace in the API implementation.
-PJRT_Profiler_Extension CreatePjrtProfilerExtension(
-    absl::string_view traceme_name);
-
-// Traverses an extension chain to find an extension struct with type
-// `type`. `in` can either be a PJRT_Api* or a pointer to an Args struct --
-// anything with an `extension_start` field. The ExtType template parameter
-// specifies the C extension type of the returned struct, if found (i.e. a
-// specific extension struct that is layout-compatible with
-// PJRT_Extension_Base).
-template <typename ExtType, typename InputType>
-ExtType* FindExtension(InputType* in, PJRT_Extension_Type type) {
-  PJRT_Extension_Base* ext = in->extension_start;
-  while (ext != nullptr) {
-    if (ext->type == type) {
-      return reinterpret_cast<ExtType*>(ext);
-    }
-    ext = ext->next;
-  }
-  // 'type' wasn't found in extension chain
-  return nullptr;
-}
-
-// Gets a traceme context id attached to PJRT_Profiler_Extension.
-// Returns -1 if there is no PJRT_Profiler_Extension in args.
-template <typename InputType>
-int64_t GetTracemeContextId(InputType* args) {
-  PJRT_Profiler_Extension* profiler_extension =
-      FindExtension<PJRT_Profiler_Extension>(
-          args, PJRT_Extension_Type::PJRT_Extension_Type_Profiler);
-  int64_t traceme_context_id = -1;
-  if (profiler_extension != nullptr) {
-    traceme_context_id = profiler_extension->traceme_context_id;
-  }
-  return traceme_context_id;
-}
+xla::StatusOr<xla::Shape> BuildXlaShapeFromC(PJRT_Buffer_Type element_type,
+                                             const int64_t* dims,
+                                             size_t num_dims,
+                                             PJRT_Buffer_MemoryLayout* layout);
 
 }  // namespace pjrt
 

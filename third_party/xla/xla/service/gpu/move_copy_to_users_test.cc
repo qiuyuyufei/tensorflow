@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@ limitations under the License.
 #include "xla/service/gpu/move_copy_to_users.h"
 
 #include <optional>
+#include <utility>
 
-#include "absl/strings/string_view.h"
 #include "xla/tests/hlo_test_base.h"
 #include "tsl/platform/test.h"
 

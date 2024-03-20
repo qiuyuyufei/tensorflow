@@ -39,7 +39,7 @@ xla::CompileOptions GetPjRtCompileOptions(
   return pjrt_compile_options;
 }
 
-absl::StatusOr<std::unique_ptr<xla::PjRtLoadedExecutable>>
+StatusOr<std::unique_ptr<xla::PjRtLoadedExecutable>>
 PjRtDeviceCompilerClient::BuildExecutable(
     const XlaCompiler::Options& options,
     const XlaCompiler::CompilationResult& result) {
@@ -56,13 +56,13 @@ PjRtDeviceCompilerClient::BuildExecutable(
   return std::move(executable);
 }
 
-absl::StatusOr<std::string> PjRtDeviceCompilerClient::SerializeExecutable(
+StatusOr<std::string> PjRtDeviceCompilerClient::SerializeExecutable(
     const xla::PjRtLoadedExecutable& executable) {
   VLOG(1) << "Serializing xla::PjRtLoadedExecutable to string.";
   return executable.SerializeExecutable();
 }
 
-absl::StatusOr<std::string> PjRtDeviceCompilerClient::BuildSerializedExecutable(
+StatusOr<std::string> PjRtDeviceCompilerClient::BuildSerializedExecutable(
     const XlaCompiler::Options& options,
     const XlaCompiler::CompilationResult& result) {
   VLOG(1) << "PJRT currently doesn't support AOT compilation. Compiling to "
@@ -71,7 +71,7 @@ absl::StatusOr<std::string> PjRtDeviceCompilerClient::BuildSerializedExecutable(
   return executable->SerializeExecutable();
 }
 
-absl::StatusOr<std::unique_ptr<xla::PjRtLoadedExecutable>>
+StatusOr<std::unique_ptr<xla::PjRtLoadedExecutable>>
 PjRtDeviceCompilerClient::LoadExecutable(
     const XlaCompiler::Options& options,
     const XlaCompiler::CompilationResult& result,

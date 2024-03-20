@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -77,9 +77,6 @@ StatusOr<PaddingConfig> ParsePaddingConfig(absl::string_view str);
 
 // Parses and returns a Shape::ToString-format string.
 StatusOr<Shape> ParseShape(absl::string_view str);
-
-// Parses and returns a Layout::ToString-format string.
-StatusOr<Layout> ParseLayout(absl::string_view str);
 
 // Parses and returns a std::vector<ReplicaGroup> from str. str is supposed to
 // contain a list of the replica groups, i.e. just the rhs of the

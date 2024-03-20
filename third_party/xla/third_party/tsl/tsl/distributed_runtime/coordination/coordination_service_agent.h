@@ -16,12 +16,10 @@ limitations under the License.
 #ifndef TENSORFLOW_TSL_DISTRIBUTED_RUNTIME_COORDINATION_COORDINATION_SERVICE_AGENT_H_
 #define TENSORFLOW_TSL_DISTRIBUTED_RUNTIME_COORDINATION_COORDINATION_SERVICE_AGENT_H_
 
-#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -53,22 +51,23 @@ class Env;
 // reported by the user via `agent->ReportError()`.
 //
 // Possible service errors:
-//    - Internal: Coordination service is not enabled.
+//    - errors::Internal: Coordination service is not enabled.
 //                        If it was previously accessible, coordination service
 //                        has been shut down.
-//    - Aborted: Incarnation mismatch during heartbeat (either remote
+//    - errors::Aborted: Incarnation mismatch during heartbeat (either remote
 //                       task or coordination service has restarted).
-//    - Unavailable: Heartbeat timeout from remote task (failed,
+//    - errors::Unavailable: Heartbeat timeout from remote task (failed,
 //                           crashed or got preempted).
-//    - InvalidArgument: Unexpected heartbeat from remote task (not
+//    - errors::InvalidArgument: Unexpected heartbeat from remote task (not
 //                               registered or wrong config).
+// TODO(hanyangtay): Migrate to string_view for string parameters.
 class CoordinationServiceAgent {
  public:
   using StatusOrValueCallback =
-      std::function<void(const absl::StatusOr<std::string>&)>;
+      std::function<void(const StatusOr<std::string>&)>;
   // Collection of key-value pairs in the same directory.
   using StatusOrValueDirCallback = std::function<void(
-      const absl::StatusOr<std::vector<tensorflow::KeyValueEntry>>&)>;
+      const StatusOr<std::vector<tensorflow::KeyValueEntry>>&)>;
   using ChangedKeyValuesCallback =
       std::function<void(const std::map<std::string, std::string>&)>;
 
@@ -76,7 +75,7 @@ class CoordinationServiceAgent {
 
   // Initialize coordination service agent.
   virtual Status Initialize(
-      tsl::Env* env, std::string_view job_name, int task_id,
+      tsl::Env* env, const std::string& job_name, int task_id,
       const tensorflow::CoordinationServiceConfig& configs,
       std::unique_ptr<CoordinationClient> leader_client,
       StatusCallback error_fn) = 0;
@@ -127,10 +126,10 @@ class CoordinationServiceAgent {
   //                                         Reset
 
   // Get task associated with this agent.
-  virtual absl::StatusOr<tensorflow::CoordinatedTask> GetOwnTask() = 0;
+  virtual StatusOr<tensorflow::CoordinatedTask> GetOwnTask() = 0;
 
   // Get status of a remote task.
-  virtual absl::StatusOr<std::vector<tensorflow::CoordinatedTaskStateInfo>>
+  virtual StatusOr<std::vector<tensorflow::CoordinatedTaskStateInfo>>
   GetTaskState(const std::vector<tensorflow::CoordinatedTask>& task) = 0;
 
   // Report error to coordination service. This will invoke the error callback.
@@ -168,46 +167,51 @@ class CoordinationServiceAgent {
   // Get config key-value from the service.
   // If the key-value is not inserted yet, this is a blocking call that waits
   // until the corresponding key is inserted.
-  //   - DeadlineExceeded: timed out waiting for key.
-  virtual absl::StatusOr<std::string> GetKeyValue(std::string_view key) = 0;
-  virtual absl::StatusOr<std::string> GetKeyValue(std::string_view key,
-                                                  absl::Duration timeout) = 0;
+  //   - errors::DeadlineExceeded: timed out waiting for key.
+  virtual StatusOr<std::string> GetKeyValue(const std::string& key) = 0;
+  virtual StatusOr<std::string> GetKeyValue(const char* key,
+                                            int64_t key_size) = 0;
+  virtual StatusOr<std::string> GetKeyValue(const std::string& key,
+                                            absl::Duration timeout) = 0;
   // Note: Cancel the underlying RPC call with `call_opts->StartCancel()` and
   // `call_opts->ClearCancelCallback()`.
   virtual std::shared_ptr<CallOptions> GetKeyValueAsync(
-      std::string_view, StatusOrValueCallback done) = 0;
+      const std::string& key, StatusOrValueCallback done) = 0;
 
   // Get config key-value from the service.
-  //   - NotFound: the requested key does not exist.
-  virtual absl::StatusOr<std::string> TryGetKeyValue(std::string_view key) = 0;
+  //   - errors::NotFound: the requested key does not exist.
+  virtual StatusOr<std::string> TryGetKeyValue(const std::string& key) = 0;
 
   // Get all values under a directory (key).
   // A value is considered to be in the directory if its key is prefixed with
   // the directory.
   // This is not a blocking call. If no keys are found, an empty vector is
   // returned immediately.
-  virtual absl::StatusOr<std::vector<tensorflow::KeyValueEntry>> GetKeyValueDir(
-      std::string_view key) = 0;
-  virtual void GetKeyValueDirAsync(std::string_view key,
+  virtual StatusOr<std::vector<tensorflow::KeyValueEntry>> GetKeyValueDir(
+      const std::string& key) = 0;
+  virtual void GetKeyValueDirAsync(const std::string& key,
                                    StatusOrValueDirCallback done) = 0;
 
   // Insert config key-value to the service.
-  //   - AlreadyExists: key is already set.
-  virtual Status InsertKeyValue(std::string_view key,
-                                std::string_view value) = 0;
+  //   - errors::AlreadyExists: key is already set.
+  virtual Status InsertKeyValue(const std::string& key,
+                                const std::string& value) = 0;
+  virtual Status InsertKeyValue(const char* key, int64_t key_size,
+                                const char* value, int64_t value_size) = 0;
 
   // Delete config keys in the coordination service.
-  virtual Status DeleteKeyValue(std::string_view key) = 0;
+  virtual Status DeleteKeyValue(const std::string& key) = 0;
+  virtual Status DeleteKeyValue(const char* key, int64_t key_size) = 0;
 
   // Update the value of a config key.
-  virtual Status UpdateKeyValue(std::string_view key,
-                                std::string_view value) = 0;
+  virtual Status UpdateKeyValue(const std::string& key,
+                                const std::string& value) = 0;
 
   // Register a callback that will be invoked when the key or keys under the key
   // directory are changed (inserted, deleted, or updated).
-  virtual Status StartWatchKey(std::string_view key,
+  virtual Status StartWatchKey(const std::string& key,
                                ChangedKeyValuesCallback on_change) = 0;
-  virtual Status StopWatchKey(std::string_view key) = 0;
+  virtual Status StopWatchKey(const std::string& key) = 0;
 
   // Blocks until all (or a subset of) tasks are at the barrier or the barrier
   // fails.
@@ -242,11 +246,11 @@ class CoordinationServiceAgent {
   //   - FailedPrecondition: Agent is in UNINITIALIZED or ERROR state. Or the
   //       same barrier_id was already used previously.
   virtual Status WaitAtBarrier(
-      std::string_view barrier_id, absl::Duration timeout,
+      const std::string& barrier_id, absl::Duration timeout,
       const std::vector<tensorflow::CoordinatedTask>& tasks) = 0;
 
   virtual void WaitAtBarrierAsync(
-      std::string_view barrier_id, absl::Duration timeout,
+      const std::string& barrier_id, absl::Duration timeout,
       const std::vector<tensorflow::CoordinatedTask>& tasks,
       StatusCallback done) = 0;
 
@@ -255,12 +259,12 @@ class CoordinationServiceAgent {
   // CANCELLED error status.
   // Possible service errors:
   //   - FailedPrecondition: Barrier has already been passed.
-  virtual Status CancelBarrier(std::string_view barrier_id) = 0;
-  virtual void CancelBarrierAsync(std::string_view barrier_id,
+  virtual Status CancelBarrier(const std::string& barrier_id) = 0;
+  virtual void CancelBarrierAsync(const std::string& barrier_id,
                                   StatusCallback done) = 0;
 
   // Get unowned Env* that the agent was initialized with.
-  virtual absl::StatusOr<tsl::Env*> GetEnv() = 0;
+  virtual StatusOr<tsl::Env*> GetEnv() = 0;
 
  protected:
   // Set the service agent to error status and invoke the error callback.
@@ -269,7 +273,7 @@ class CoordinationServiceAgent {
   virtual void SetError(const Status& error) = 0;
 
   // Activate the key-value callback watch.
-  virtual Status ActivateWatch(std::string_view,
+  virtual Status ActivateWatch(const std::string& key,
                                const std::map<std::string, std::string>&) = 0;
 
  private:

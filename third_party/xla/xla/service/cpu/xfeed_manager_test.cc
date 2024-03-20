@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ class TestInfeedBuffer : public cpu::runtime::XfeedBuffer {
 
   int32_t length() override { return length_; }
   void* data() override { return nullptr; }
-  void Done(absl::StatusOr<Shape> shape) override {
+  void Done(StatusOr<Shape> shape) override {
     CHECK(!done_called_);
     done_called_ = true;
     TF_ASSERT_OK(shape.status());

@@ -3,8 +3,7 @@
 
 namespace {
 
-absl::Status SetTpuProfilerApiFns(
-    void* library_handle) {  // TENSORFLOW_STATUS_OK
+tsl::Status SetTpuProfilerApiFns(void* library_handle) {  // TENSORFLOW_STATUS_OK
   // Constant cast so that we can initialize the functions. The functions are
   // mutable here because this is the only place where they are initialized.
   auto* profiler_api_fn =
@@ -19,7 +18,7 @@ absl::Status SetTpuProfilerApiFns(
   TFTPU_SET_FN(profiler_api_fn, TpuStatus_Free);
   TFTPU_SET_FN(profiler_api_fn, TpuStatus_Message);
   TFTPU_SET_FN(profiler_api_fn, TpuStatus_Code);
-  return absl::OkStatus();
+  return tsl::OkStatus();
 }
 
 }  // namespace

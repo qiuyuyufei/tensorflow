@@ -52,7 +52,10 @@ tf_cc_binary(
         "//conditions:default": [
             "//tensorflow/core:all_kernels",
         ],
-    }) + if_cuda([]),
+    }) + if_cuda([
+        "//tensorflow/core/runtime_fallback/runtime:runtime_fallback_gpu_alwayslink",
+        "//tensorflow/core/runtime_fallback/kernel:kernel_fallback_gpu_alwayslink",
+    ]),
 )
 
 cc_library(

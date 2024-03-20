@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,13 +16,8 @@ limitations under the License.
 #ifndef XLA_SERVICE_GPU_MODEL_GPU_HLO_COST_ANALYSIS_H_
 #define XLA_SERVICE_GPU_MODEL_GPU_HLO_COST_ANALYSIS_H_
 
-#include <cstddef>
-#include <cstdint>
 #include <memory>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/service/hlo_cost_analysis.h"
@@ -44,22 +39,20 @@ class GpuHloCostAnalysis : public HloCostAnalysis {
       const se::DeviceDescription* device_info = nullptr)
       : HloCostAnalysis(options), device_info_(device_info) {}
 
-  absl::Status Preprocess(const HloInstruction* hlo) override;
+  Status Preprocess(const HloInstruction* hlo) override;
 
   float ScalingRatio(const HloInstruction& hlo) const;
   int64_t NumOfDevices(const HloInstruction& hlo) const;
 
-  absl::Status HandleCustomCall(const HloInstruction* call) override;
+  Status HandleCustomCall(const HloInstruction* call) override;
 
   int64_t GetConvolutionFlops(const HloInstruction* convolution) override;
 
-  absl::Status HandleElementwiseOp(const HloInstruction* hlo);
-  absl::Status HandleElementwiseUnary(const HloInstruction* hlo) override;
-  absl::Status HandleElementwiseBinary(const HloInstruction* hlo) override;
+  Status HandleElementwiseOp(const HloInstruction* hlo);
+  Status HandleElementwiseUnary(const HloInstruction* hlo) override;
+  Status HandleElementwiseBinary(const HloInstruction* hlo) override;
 
-  absl::Status HandleConcatenate(const HloInstruction* hlo) override;
-  absl::Status HandleAllReduce(const HloInstruction* allreduce) override;
-  absl::Status HandleReduce(const HloInstruction* hlo) override;
+  Status HandleAllReduce(const HloInstruction* allreduce) override;
 
   // Estimate the total size of IR accounting for both duplication
   // of producer code by consumer and the total number of basic blocks.
@@ -84,8 +77,7 @@ class GpuHloCostAnalysis : public HloCostAnalysis {
  protected:
   std::unique_ptr<HloCostAnalysis> CreateNestedCostAnalysis() override;
   int64_t FusionParameterReadBytes(const HloInstruction* hlo) const override;
-  absl::Status FusionCalculateUtilizations(
-      const HloInstruction* fusion) override;
+  Status FusionCalculateUtilizations(const HloInstruction* fusion) override;
 
   size_t immediate_constant_max_elements() const override { return 8; }
 

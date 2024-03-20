@@ -63,8 +63,12 @@ class TaskIterator {
         "Restoring from a tf.data service task iterator is unsupported.");
   }
 
-  // Returns the dataset model for performance analysis.
-  virtual std::shared_ptr<model::Model> model() const { return nullptr; }
+  // Returns the time it takes the pipeline associated with this task iterator
+  // to process an element.
+  // Returns std::nullopt if there is not currently enough information to
+  // determine the processing time, e.g. because not enough data has been
+  // produced yet from the iterator.
+  virtual std::optional<double> GetProcessingTimeNsec() const = 0;
 };
 
 // Implementation of TaskIterator wrapping a standalone iterator.
@@ -79,7 +83,7 @@ class StandaloneTaskIterator : public TaskIterator {
   int64_t Cardinality() const override;
   StatusOr<std::vector<Tensor>> Save() override;
   Status Restore(const std::vector<Tensor>& saved_iterator) override;
-  std::shared_ptr<model::Model> model() const override;
+  std::optional<double> GetProcessingTimeNsec() const override;
 
  private:
   std::unique_ptr<standalone::Dataset> dataset_;
@@ -98,10 +102,14 @@ class TaskRunner {
   // Gets the next element for the given request.
   virtual Status GetNext(const GetElementRequest& req,
                          GetElementResult& result) = 0;
+  // Returns the time it takes the pipeline associated with this task runner to
+  // process an element. Returns 0 if the model is null or empty.
+  // Returns std::nullopt if there is not currently enough information to
+  // determine the processing time, e.g. because not enough data has been
+  // produced yet from the iterator.
+  virtual std::optional<double> GetProcessingTimeNsec() = 0;
   // Cancels in-progress `GetNext` requests.
   virtual void Cancel() = 0;
-  // Returns the dataset model for performance analysis.
-  virtual std::shared_ptr<model::Model> model() const = 0;
 };
 
 // A task runner which provides elements on a first-come first-served basis.
@@ -119,7 +127,7 @@ class FirstComeFirstServedTaskRunner : public TaskRunner {
 
   void Cancel() override;
 
-  std::shared_ptr<model::Model> model() const override;
+  std::optional<double> GetProcessingTimeNsec() override TF_LOCKS_EXCLUDED(mu_);
 
  private:
   // Function to continually prefetch the next element. Returns an error if the
@@ -132,7 +140,6 @@ class FirstComeFirstServedTaskRunner : public TaskRunner {
   // Gets the next element from the input iterator.
   StatusOr<GetElementResult> GetNextFromInputIterator() TF_LOCKS_EXCLUDED(mu_);
 
-  const std::shared_ptr<model::Model> model_;
   mutex mu_;
   std::unique_ptr<TaskIterator> iterator_ TF_GUARDED_BY(mu_);
   int64_t element_index_ TF_GUARDED_BY(mu_) = 0;
@@ -166,8 +173,7 @@ class CachingTaskRunner : public TaskRunner {
   // return a Cancelled status.
   void Cancel() override;
 
-  // Returns the dataset model for performance analysis.
-  std::shared_ptr<model::Model> model() const override;
+  std::optional<double> GetProcessingTimeNsec() override;
 
  private:
   // The `GetElementResultSequence` generates a sequence of elements from the
@@ -218,8 +224,7 @@ class PrefetchThread {
                     std::vector<std::unique_ptr<Element>>& out);
   // Returns the status for any failures encountered by the prefetch thread.
   Status GetStatus();
-  // Returns the dataset model for performance analysis.
-  std::shared_ptr<model::Model> model() const;
+  std::optional<double> GetProcessingTimeNsec() const;
 
  private:
   const std::unique_ptr<TaskIterator> iterator_;
@@ -229,7 +234,7 @@ class PrefetchThread {
   // Buffered results for the next round.
   std::vector<std::unique_ptr<Element>> buffer_ TF_GUARDED_BY(mu_);
   // The status if the prefetch thread fails.
-  Status status_ TF_GUARDED_BY(mu_) = absl::OkStatus();
+  Status status_ TF_GUARDED_BY(mu_) = OkStatus();
   // Condition variable notified when elements are added to or removed from
   // `buffer_`, or when `status_` is changed.
   condition_variable cv_;
@@ -264,7 +269,7 @@ class RoundRobinTaskRunner : public TaskRunner {
   Status GetNext(const GetElementRequest& req,
                  GetElementResult& result) override;
   void Cancel() override;
-  std::shared_ptr<model::Model> model() const override;
+  std::optional<double> GetProcessingTimeNsec() override;
 
  private:
   // Prepares a full round of data. `wait_us` indicates how long to wait before

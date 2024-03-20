@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,15 +16,11 @@ limitations under the License.
 #ifndef XLA_SERVICE_GPU_GPU_FUSIBLE_H_
 #define XLA_SERVICE_GPU_GPU_FUSIBLE_H_
 
-#include <cstddef>
-#include <cstdint>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/inlined_vector.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/service/gpu/hlo_traversal.h"
+#include "xla/service/gpu/reduction_utils.h"
 #include "xla/service/instruction_fusion.h"
 #include "xla/stream_executor/device_description.h"
 
@@ -67,26 +63,16 @@ struct FusionInfoCache {
 int64_t SharedMemoryUsage(const HloInstruction& instr,
                           FusionInfoCache* cache = nullptr);
 
+// Returns projected shared memory usage of a reduction fusion.
+int64_t ReductionProjectedShmemUsageBytes(
+    const ReductionDimensions& reduction_dimensions,
+    const std::vector<std::vector<const HloInstruction*>>& instr_index_groups);
+
 inline constexpr int64_t MaxOperandsAndOutputsPerFusion() { return 64; }
 
-// Whether the op transposes the physical data layout. Fusing such ops may lead
+// Whether the op tranposes the physical data layout. Fusing such ops may lead
 // to uncoalesced data access and may thus not be beneficial.
 bool IsPhysicallyTransposing(const HloInstruction& instr);
-
-// Whether the op transposes the minor-most dimension. In the case of fusions,
-// whether the fusion contains some op that does this.
-// If the minor-most dimension is transposed, this results in uncoalesced memory
-// accesses in untiled code generators. If some other dimension is transposed,
-// this just results in additional index computations.
-// Note that this function makes several simplifying assumptions:
-// - For non-fusion instructions, we assume the output is materialized as is.
-//   For internal instructions, this may not be the case.
-// - For fusions, it simply checks the output of this function for each
-//   instruction in the fusion's computation.
-// - There's no way to tell which parameters of the fusion are transposed.
-// TODO(jreiffers): Take into account the size of the transposed dimension as
-// well.
-bool TransposesMinorDimension(const HloInstruction* instr);
 
 // Note that reduction ops are lowered in different ways. Reduce input fusions
 // are lowered by IrEmitterUnnested::EmitReductionToVector and must be rooted at
@@ -167,7 +153,7 @@ FusionDecision IsProducerMultiOutputFusible(const HloInstruction& producer);
 // a producer-consumer multi-output fusion.
 bool IsFusibleAsMultiOutputFusionRoot(const HloInstruction& instr);
 
-// Determines the fusion kind to be used when fusing into `consumer`.
+// Determines the fusion kind to be used when fusing `producer` and `consumer`.
 HloInstruction::FusionKind ChooseFusionKind(const HloInstruction& producer,
                                             const HloInstruction& consumer);
 
@@ -206,12 +192,9 @@ size_t GetOutputSizeOfFusible(const HloInstruction& instr);
 std::vector<const HloInstruction*> GetFusionRoots(
     const HloComputation& computation);
 
-// Whether the instruction is a Triton Softmax fusion.
-bool IsTritonSoftmaxFusion(const HloInstruction& instr);
-
-// Whether the fusion will likely behave poorly with vectorization due to the
-// instructions it contains.
-bool MayPreventVectorization(const HloFusionAdaptor& fusion);
+// Whether the instruction is a reduction hero for the given root.
+bool IsRealReductionHero(const HloInstruction& root,
+                         const HloInstruction& hero);
 
 }  // namespace gpu
 }  // namespace xla

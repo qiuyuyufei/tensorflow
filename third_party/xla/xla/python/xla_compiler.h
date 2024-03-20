@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,11 +17,11 @@ limitations under the License.
 #define XLA_PYTHON_XLA_COMPILER_H_
 
 // placeholder for index annotation headers
-#include "third_party/nanobind/include/nanobind/nanobind.h"
+#include "pybind11/pybind11.h"  // from @pybind11
 
 namespace xla {
 
-void BuildXlaCompilerSubmodule(nanobind::module_& m);
+void BuildXlaCompilerSubmodule(pybind11::module& m);
 
 }  // namespace xla
 

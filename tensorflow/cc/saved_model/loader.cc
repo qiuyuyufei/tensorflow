@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "tensorflow/cc/saved_model/loader.h"
 
-#include <memory>
 #include <string>
 #include <unordered_set>
 
@@ -104,7 +103,7 @@ static Status ValidateNode(const NodeDef& node) {
         "Saved model contains node \"", node.name(),
         "\" which is a constant tensor but no value has been provided"));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 static Status ValidateFunctionNotRecursive(const FunctionDef& function) {
@@ -117,7 +116,7 @@ static Status ValidateFunctionNotRecursive(const FunctionDef& function) {
     }
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 static Status ValidateSavedTensors(const GraphDef& graph_def) {
@@ -137,7 +136,7 @@ static Status ValidateSavedTensors(const GraphDef& graph_def) {
     }
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Tensor CreateStringTensor(const string& value) {
@@ -223,7 +222,7 @@ Status RunInitOp(const RunOptions& run_options, const string& export_dir,
     return RunOnce(run_options, inputs, {}, {init_op_name},
                    nullptr /* outputs */, &run_metadata, session);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status RunRestore(const RunOptions& run_options, const string& export_dir,
@@ -247,7 +246,7 @@ Status RunRestore(const RunOptions& run_options, const string& export_dir,
     LOG(INFO) << "The specified SavedModel has no variables; no checkpoints "
                  "were restored. File does not exist: "
               << variables_index_path;
-    return absl::OkStatus();
+    return OkStatus();
   }
   const string variables_path =
       io::JoinPath(variables_directory, kSavedModelVariablesFilename);
@@ -268,7 +267,7 @@ Status RunRestore(const RunOptions& run_options, const string& export_dir,
 
 }  // namespace
 
-SavedModelBundleInterface::~SavedModelBundleInterface() = default;
+SavedModelBundleInterface::~SavedModelBundleInterface() {}
 
 Status LoadMetagraphIntoSession(const SessionOptions& session_options,
                                 const MetaGraphDef& meta_graph,
@@ -293,7 +292,7 @@ Status LoadSavedModelInternal(const SessionOptions& session_options,
       session_options, bundle->meta_graph_def, &bundle->session));
   TF_RETURN_IF_ERROR(RestoreSession(run_options, bundle->meta_graph_def,
                                     export_dir, &bundle->session));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LoadSavedModel(const SessionOptions& session_options,
@@ -469,7 +468,7 @@ Status RestoreSession(const RunOptions& run_options,
   // Record wall time spent in init op.
   load_latency_by_stage->GetCell(export_dir, "init_graph")
       ->Add(GetLatencyMicroseconds(graph_init_start_microseconds));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LoadSavedModel(const SessionOptions& session_options,
@@ -492,9 +491,9 @@ Status LoadSavedModel(const SessionOptions& session_options,
   TF_RETURN_IF_ERROR(LoadSavedModel(rewritten_options, run_options, export_dir,
                                     tags, &legacy_bundle));
   *bundle = SavedModelBundleLite(
-      std::make_unique<LiteSessionWrapper>(std::move(legacy_bundle.session)),
+      absl::make_unique<LiteSessionWrapper>(std::move(legacy_bundle.session)),
       std::move(*legacy_bundle.meta_graph_def.mutable_signature_def()));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 bool MaybeSavedModelDirectory(const string& export_dir) {

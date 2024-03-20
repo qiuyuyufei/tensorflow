@@ -53,7 +53,7 @@ Status GraphAnalyzer::Run() {
     return st;
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status GraphAnalyzer::BuildMap() {
@@ -305,7 +305,7 @@ Status GraphAnalyzer::CollateResult() {
 
   result_.clear();  // Not needed after collation.
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 std::vector<string> GraphAnalyzer::DumpRawSubgraphs() {
@@ -335,7 +335,7 @@ Status GraphAnalyzer::OutputSubgraphs() {
   if (std::cout.fail()) {
     return Status(absl::StatusCode::kDataLoss, "Failed to write to stdout");
   } else {
-    return absl::OkStatus();
+    return OkStatus();
   }
 }
 

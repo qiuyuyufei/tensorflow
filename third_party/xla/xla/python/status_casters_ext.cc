@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,47 +13,45 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "third_party/nanobind/include/nanobind/nanobind.h"
-#include "xla/pjrt/exceptions.h"
-#include "xla/pjrt/status_casters.h"
+#include "pybind11/pybind11.h"  // from @pybind11
+#include "pybind11/pytypes.h"  // from @pybind11
+#include "xla/python/exceptions.h"
+#include "xla/python/status_casters.h"
 
 namespace xla {
 
-namespace nb = ::nanobind;
+namespace py = ::pybind11;
 
 namespace {
 
-absl::Status MyFunc() { return absl::OkStatus(); }
+xla::Status MyFunc() { return xla::OkStatus(); }
 
 class MyClass {
  public:
-  absl::Status MyMethod(int a, int b) { return absl::OkStatus(); }
-  absl::Status MyMethodConst(int a, int b) const { return absl::OkStatus(); }
+  xla::Status MyMethod(int a, int b) { return xla::OkStatus(); }
+  xla::Status MyMethodConst(int a, int b) const { return xla::OkStatus(); }
 
-  absl::StatusOr<int> MyStatusOrMethod(int a, int b) { return a + b; }
-  absl::StatusOr<int> MyStatusOrMethodConst(int a, int b) const {
-    return a + b;
-  }
+  xla::StatusOr<int> MyStatusOrMethod(int a, int b) { return a + b; }
+  xla::StatusOr<int> MyStatusOrMethodConst(int a, int b) const { return a + b; }
 };
 
-absl::StatusOr<int> StatusOrIdentity(int i) { return i; }
+xla::StatusOr<int> StatusOrIdentity(int i) { return i; }
 
-NB_MODULE(status_casters_ext, m) {
+PYBIND11_MODULE(status_casters_ext, m) {
   // Exceptions
-  nb::exception<xla::XlaRuntimeError>(m, "XlaRuntimeError", PyExc_RuntimeError);
+  py::register_exception<xla::XlaRuntimeError>(m, "XlaRuntimeError",
+                                               PyExc_RuntimeError);
 
   m.def("my_lambda",
-        xla::ThrowIfErrorWrapper([]() { return absl::OkStatus(); }));
+        xla::ThrowIfErrorWrapper([]() { return xla::OkStatus(); }));
   m.def("my_lambda2", xla::ThrowIfErrorWrapper(MyFunc));
 
   m.def("my_lambda_statusor",
-        xla::ValueOrThrowWrapper([]() -> absl::StatusOr<int> { return 1; }));
+        xla::ValueOrThrowWrapper([]() -> xla::StatusOr<int> { return 1; }));
   m.def("status_or_identity", xla::ValueOrThrowWrapper(StatusOrIdentity));
 
-  nb::class_<MyClass> my_class(m, "MyClass");
-  my_class.def(nb::init<>());
+  py::class_<MyClass> my_class(m, "MyClass");
+  my_class.def(py::init<>());
   my_class.def("my_method", xla::ThrowIfErrorWrapper(&MyClass::MyMethod));
   my_class.def("my_method_const", xla::ThrowIfErrorWrapper(&MyClass::MyMethod));
   my_class.def("my_method_status_or",

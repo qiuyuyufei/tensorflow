@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ limitations under the License.
 #include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
 #include "tsl/platform/protobuf.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace {
@@ -124,7 +123,7 @@ CompilationEnvironments& CompilationEnvironments::operator=(
   return *this;
 }
 
-absl::StatusOr<std::unique_ptr<CompilationEnvironments>>
+StatusOr<std::unique_ptr<CompilationEnvironments>>
 CompilationEnvironments::CreateFromProto(
     const CompilationEnvironmentsProto& proto) {
   auto envs = std::make_unique<CompilationEnvironments>();
@@ -254,8 +253,8 @@ Status CompilationEnvironments::AddEnvImpl(
     return tsl::errors::InvalidArgument(
         "Unknown compilation environment type: %s", descriptor.full_name());
   }
-  TF_ASSIGN_OR_RETURN(std::unique_ptr<tsl::protobuf::Message> processed_env,
-                      process_new_env(std::move(env)));
+  std::unique_ptr<tsl::protobuf::Message> processed_env =
+      process_new_env(std::move(env));
 
   // Check for unknown fields
   const tsl::protobuf::UnknownFieldSet& unknown_fields =

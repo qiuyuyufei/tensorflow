@@ -15,12 +15,11 @@ package(
     licenses = ["notice"],
 )
 
-# Expand the DEFAULT_VISIBILITY so that we can replace with public visibility with copybara.
 tf_proto_library(
     name = "batch_op_rewriter_proto",
     srcs = ["batch_op_rewriter.proto"],
     cc_api_version = 2,
-    visibility = ["//visibility:public"],
+    visibility = DEFAULT_VISIBILITY,
 )
 
 # copybara:uncomment_begin(google-only)

@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,8 +42,8 @@ namespace {
 // divide by the number of partitions. Depending on the topology and the
 // implementation of the all-reduce for the backend, this may give a better
 // performance.
-absl::StatusOr<bool> ReplaceReplicatedAllReduce(HloModule* module,
-                                                int64_t partition_count) {
+StatusOr<bool> ReplaceReplicatedAllReduce(HloModule* module,
+                                          int64_t partition_count) {
   TF_ASSIGN_OR_RETURN(
       auto replication_analysis,
       HloReplicationAnalysis::Run(module, /*cross_partition_spmd=*/true));
@@ -534,7 +534,7 @@ Status ArCrsCombiner::KeepProvablyEqualInstructionGroupsSPMD(
   return OkStatus();
 }
 
-absl::StatusOr<bool> ArCrsCombiner::RewriteGraph() {
+StatusOr<bool> ArCrsCombiner::RewriteGraph() {
   if (all_reduce_map_.empty()) {
     return false;
   }
@@ -600,7 +600,7 @@ absl::StatusOr<bool> ArCrsCombiner::RewriteGraph() {
   return true;
 }
 
-absl::StatusOr<bool> ArCrsCombiner::Run(
+StatusOr<bool> ArCrsCombiner::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   call_graph_ = CallGraph::Build(module);

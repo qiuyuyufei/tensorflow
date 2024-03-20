@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -148,13 +148,15 @@ CallGraph::CallGraph(
 
 const CallGraphNode& CallGraph::GetNode(
     const HloComputation* computation) const {
-  DCHECK(node_indices_.contains(computation));
-  return nodes_[node_indices_.find(computation)->second];
+  auto it = node_indices_.find(computation);
+  CHECK(it != node_indices_.end());
+  return nodes_[it->second];
 }
 
 CallGraphNode& CallGraph::GetNode(const HloComputation* computation) {
-  DCHECK(node_indices_.contains(computation));
-  return nodes_[node_indices_.find(computation)->second];
+  auto it = node_indices_.find(computation);
+  CHECK(it != node_indices_.end());
+  return nodes_[it->second];
 }
 
 bool CallGraph::DominatesHelper(
@@ -186,21 +188,6 @@ bool CallGraph::Dominates(const HloComputation* a,
                           const HloComputation* b) const {
   absl::flat_hash_set<const HloComputation*> visited;
   return DominatesHelper(a, b, &visited);
-}
-
-bool CallGraph::CanReach(const HloComputation* a,
-                         const HloComputation* b) const {
-  if (a == b) {
-    return true;
-  }
-
-  const CallGraphNode& b_node = GetNode(b);
-  for (const HloComputation* b_caller : b_node.callers()) {
-    if (CanReach(a, b_caller)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 namespace {

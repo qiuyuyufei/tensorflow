@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ TEST(IndexUtilTest, VectorIndexing) {
   Shape vector_shape = ShapeUtil::MakeShape(F32, {100});
   EXPECT_EQ(42,
             IndexUtil::MultidimensionalIndexToLinearIndex(vector_shape, {42}));
-  auto multi_index =
+  std::vector<int64_t> multi_index =
       IndexUtil::LinearIndexToMultidimensionalIndex(vector_shape, 42);
   EXPECT_EQ(1, multi_index.size());
   EXPECT_EQ(42, multi_index[0]);
@@ -56,9 +56,8 @@ TEST(IndexUtilTest, MatrixIndexingRowMajor) {
                                                                {9, 19}));
   EXPECT_EQ(53, IndexUtil::MultidimensionalIndexToLinearIndex(matrix_shape_01,
                                                               {3, 5}));
-  EXPECT_THAT(
-      IndexUtil::LinearIndexToMultidimensionalIndex(matrix_shape_01, 53),
-      testing::ElementsAre(3, 5));
+  EXPECT_EQ(std::vector<int64_t>({3, 5}),
+            IndexUtil::LinearIndexToMultidimensionalIndex(matrix_shape_01, 53));
 }
 
 TEST(IndexUtilTest, MatrixIndexingColumnMajor) {
@@ -73,9 +72,8 @@ TEST(IndexUtilTest, MatrixIndexingColumnMajor) {
                                                                {9, 19}));
   EXPECT_EQ(65, IndexUtil::MultidimensionalIndexToLinearIndex(matrix_shape_10,
                                                               {3, 5}));
-  EXPECT_THAT(
-      IndexUtil::LinearIndexToMultidimensionalIndex(matrix_shape_10, 65),
-      testing::ElementsAre(3, 5));
+  EXPECT_EQ(std::vector<int64_t>({3, 5}),
+            IndexUtil::LinearIndexToMultidimensionalIndex(matrix_shape_10, 65));
 }
 
 TEST(IndexUtilTest, ThreeDArrayIndexing210) {
@@ -133,7 +131,7 @@ TEST(IndexUtilTest, LinearToMultiToLinear) {
     Shape shape = ShapeUtil::MakeShape(F32, {10, 20, 30, 40, 30, 20, 10});
     SetMinorToMajorLayout(&shape, minor_to_major_order);
     for (auto linear_index : linear_indexes) {
-      auto multi_index =
+      std::vector<int64_t> multi_index =
           IndexUtil::LinearIndexToMultidimensionalIndex(shape, linear_index);
       EXPECT_EQ(linear_index, IndexUtil::MultidimensionalIndexToLinearIndex(
                                   shape, multi_index));

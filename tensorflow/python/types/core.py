@@ -26,6 +26,7 @@ from tensorflow.python.types import doc_typealias
 
 
 from tensorflow.python import pywrap_tensorflow  # pylint: disable=unused-import, g-bad-import-order
+from tensorflow.python.util import _pywrap_utils
 from tensorflow.python.util.tf_export import tf_export
 
 # pylint:disable=g-import-not-at-top
@@ -382,6 +383,10 @@ class TensorProtocol(Protocol):
       A Tensor.
     """
     pass
+
+
+_pywrap_utils.RegisterType("TensorProtocol", TensorProtocol)
+_pywrap_utils.RegisterType("CoreTypeValue", Value)
 
 
 # TODO(rahulkamat): Add missing types that are convertible to Tensor.

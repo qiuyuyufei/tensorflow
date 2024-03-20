@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -115,7 +115,7 @@ class ShapedBuffer {
   const ShapeTree<se::DeviceMemoryBase>& buffers() const { return buffers_; }
   ShapeTree<se::DeviceMemoryBase>& buffers() { return buffers_; }
 
-  absl::StatusOr<ShapedBuffer> SubShapedBuffer(const ShapeIndex& index) const;
+  StatusOr<ShapedBuffer> SubShapedBuffer(const ShapeIndex& index) const;
 
   // Set all device memory pointers in the object to null.
   void clear();

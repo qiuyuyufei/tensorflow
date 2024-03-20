@@ -100,7 +100,7 @@ void CreateDummyTfDevices(
   }
 }
 
-absl::StatusOr<RCReference<tfrt::BEFFile>> CreateBefFileFromBefBuffer(
+StatusOr<RCReference<tfrt::BEFFile>> CreateBefFileFromBefBuffer(
     const tensorflow::tfrt_stub::Runtime& runtime, const tfrt::BefBuffer& bef) {
   auto* core_runtime = runtime.core_runtime();
   DCHECK(core_runtime);

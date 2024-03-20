@@ -86,7 +86,7 @@ Status GetInputValues(
         absl::StrJoin(seen_request_inputs, ","),
         ", request input: ", absl::StrJoin(GetMapKeys(request_inputs), ",")));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace saved_model

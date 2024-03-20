@@ -94,14 +94,13 @@ void SigtermNotifier::StartListenerThread() {
 
 }  // namespace
 
-absl::StatusOr<absl::Time> PreemptionNotifier::WillBePreemptedAt() {
+StatusOr<absl::Time> PreemptionNotifier::WillBePreemptedAt() {
   absl::Notification n;
-  absl::StatusOr<absl::Time> result;
-  WillBePreemptedAtAsync(
-      [&n, &result](absl::StatusOr<absl::Time> async_result) {
-        result = async_result;
-        n.Notify();
-      });
+  StatusOr<absl::Time> result;
+  WillBePreemptedAtAsync([&n, &result](StatusOr<absl::Time> async_result) {
+    result = async_result;
+    n.Notify();
+  });
   n.WaitForNotification();
   return result;
 }
@@ -118,7 +117,7 @@ void PreemptionNotifier::WillBePreemptedAtAsync(PreemptTimeCallback callback) {
 }
 
 void PreemptionNotifier::NotifyRegisteredListeners(
-    absl::StatusOr<absl::Time> death_time) {
+    StatusOr<absl::Time> death_time) {
   mutex_lock l(mu_);
   if (death_time.ok()) {
     death_time_ = death_time.value();

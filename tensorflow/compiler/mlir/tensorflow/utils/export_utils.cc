@@ -294,7 +294,7 @@ static bool IsRefTypeControlOp(mlir::Operation* op) {
 
 }  // anonymous namespace
 
-absl::StatusOr<llvm::StringRef> GetTensorFlowOpName(llvm::StringRef op_name) {
+StatusOr<llvm::StringRef> GetTensorFlowOpName(llvm::StringRef op_name) {
   // When being converted to MLIR, some prefixes and suffixes are added to the
   // operation types, and we have to remove them when converting the
   // operations back to a graph:
@@ -315,8 +315,8 @@ absl::StatusOr<llvm::StringRef> GetTensorFlowOpName(llvm::StringRef op_name) {
   return op_name;
 }
 
-absl::StatusOr<std::unique_ptr<NodeDef>> GetOperationNodeDef(
-    mlir::Operation* inst, llvm::StringRef name) {
+StatusOr<std::unique_ptr<NodeDef>> GetOperationNodeDef(mlir::Operation* inst,
+                                                       llvm::StringRef name) {
   auto node_def = std::make_unique<NodeDef>();
   // Note: we do not use NodeBuilder or NodeDefBuilder as that would require
   // mapping back from the inputs to the input arguments.

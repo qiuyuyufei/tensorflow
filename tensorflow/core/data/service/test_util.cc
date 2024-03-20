@@ -19,11 +19,8 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "absl/strings/substitute.h"
+#include "absl/types/span.h"
 #include "tensorflow/core/data/dataset_test_base.h"
 #include "tensorflow/core/data/service/common.pb.h"
 #include "tensorflow/core/framework/function.h"
@@ -36,11 +33,13 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor_testutil.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/platform/env.h"
+#include "tensorflow/core/platform/errors.h"
 #include "tensorflow/core/platform/path.h"
+#include "tensorflow/core/platform/status.h"
+#include "tensorflow/core/platform/statusor.h"
 #include "tensorflow/core/platform/tstring.h"
+#include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/protobuf/struct.pb.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/protobuf.h"
 
 namespace tensorflow {
 namespace data {
@@ -54,11 +53,9 @@ using ::tensorflow::test::function::NDef;
 constexpr int64_t kShardHint = -1;
 constexpr const char kTestdataDir[] =
     "tensorflow/core/data/service/testdata";
-constexpr const char kEnumerateDatasetFile[] = "enumerate_dataset.pbtxt";
 constexpr const char kInterleaveTextlineDatasetFile[] =
     "interleave_textline_dataset.pbtxt";
 constexpr const char kChooseFromDatasetsFile[] = "choose_from_datasets.pbtxt";
-constexpr const char kSampleFromDatasetsFile[] = "sample_from_datasets.pbtxt";
 
 NodeDef GetMapNode(absl::string_view name, absl::string_view input_node_name,
                    absl::string_view function_name) {
@@ -80,16 +77,16 @@ FunctionDef XTimesX() {
       /*ret_def=*/{{"y", "y:z:0"}});
 }
 
-absl::Status CreateTestFiles(const std::vector<tstring>& filenames,
-                             const std::vector<tstring>& contents) {
+Status CreateTestFiles(const std::vector<tstring>& filenames,
+                       const std::vector<tstring>& contents) {
   if (filenames.size() != contents.size()) {
-    return absl::InvalidArgumentError(
+    return errors::InvalidArgument(
         "The number of files does not match with the contents.");
   }
   for (int i = 0; i < filenames.size(); ++i) {
     TF_RETURN_IF_ERROR(WriteDataToFile(filenames[i], contents[i].data()));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 }  // namespace
 
@@ -97,32 +94,6 @@ std::string LocalTempFilename() {
   std::string path;
   CHECK(Env::Default()->LocalTempFilename(&path));
   return path;
-}
-
-absl::StatusOr<DatasetDef> GetTestDataset(
-    absl::string_view dataset_name, const std::vector<std::string>& args) {
-  std::string graph_file =
-      io::JoinPath(kTestdataDir, absl::StrCat(dataset_name, ".pbtxt"));
-  std::string graph_str;
-  TF_RETURN_IF_ERROR(ReadFileToString(Env::Default(), graph_file, &graph_str));
-  if (args.size() == 1) {
-    graph_str = absl::Substitute(graph_str, args[0]);
-  } else if (args.size() == 2) {
-    graph_str = absl::Substitute(graph_str, args[0], args[1]);
-  } else if (args.size() == 3) {
-    graph_str = absl::Substitute(graph_str, args[0], args[1], args[2]);
-  } else if (args.size() > 3) {
-    return absl::UnimplementedError(
-        "GetTestDataset does not support more than 3 arguments.");
-  }
-
-  DatasetDef dataset;
-  if (!tsl::protobuf::TextFormat::ParseFromString(graph_str,
-                                                  dataset.mutable_graph())) {
-    return absl::FailedPreconditionError(
-        absl::StrCat("Can't parse ", graph_file, " as text proto."));
-  }
-  return dataset;
 }
 
 DatasetDef RangeDataset(int64_t range) {
@@ -211,6 +182,14 @@ DatasetDef InfiniteDataset() {
   return dataset_def;
 }
 
+StatusOr<DatasetDef> ChooseFromDatasets() {
+  DatasetDef dataset;
+  std::string graph_file = io::JoinPath(kTestdataDir, kChooseFromDatasetsFile);
+  TF_RETURN_IF_ERROR(
+      ReadTextProto(Env::Default(), graph_file, dataset.mutable_graph()));
+  return dataset;
+}
+
 experimental::DistributedSnapshotMetadata
 CreateDummyDistributedSnapshotMetadata() {
   StructuredValue decoded_spec;
@@ -225,7 +204,7 @@ CreateDummyDistributedSnapshotMetadata() {
   return metadata;
 }
 
-absl::StatusOr<DatasetDef> InterleaveTextlineDataset(
+StatusOr<DatasetDef> InterleaveTextlineDataset(
     const std::vector<tstring>& filenames,
     const std::vector<tstring>& contents) {
   TF_RETURN_IF_ERROR(CreateTestFiles(filenames, contents));
@@ -243,11 +222,11 @@ absl::StatusOr<DatasetDef> InterleaveTextlineDataset(
   return dataset;
 }
 
-absl::Status WaitWhile(std::function<absl::StatusOr<bool>()> f) {
+Status WaitWhile(std::function<StatusOr<bool>()> f) {
   while (true) {
     TF_ASSIGN_OR_RETURN(bool result, f());
     if (!result) {
-      return absl::OkStatus();
+      return OkStatus();
     }
     Env::Default()->SleepForMicroseconds(10 * 1000);  // 10ms.
   }

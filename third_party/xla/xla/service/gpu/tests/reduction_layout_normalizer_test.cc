@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,10 +16,13 @@ limitations under the License.
 #include "xla/service/gpu/reduction_layout_normalizer.h"
 
 #include <optional>
+#include <utility>
 
-#include "absl/strings/string_view.h"
-#include "xla/error_spec.h"
+#include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/service/hlo_parser.h"
+#include "xla/tests/filecheck.h"
 #include "xla/tests/hlo_test_base.h"
+#include "tsl/lib/core/status_test_util.h"
 #include "tsl/platform/test.h"
 
 namespace xla {

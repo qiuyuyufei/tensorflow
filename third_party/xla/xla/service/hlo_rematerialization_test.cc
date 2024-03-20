@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -48,9 +48,9 @@ using ::testing::_;
 class RecomputeAndCompressHloRematerializationTest
     : public RematerializationTestBase {
  protected:
-  absl::StatusOr<bool> RunHloRematerialization(int64_t memory_limit_bytes,
-                                               HloModule* module,
-                                               int64_t min_remat_size = 0) {
+  StatusOr<bool> RunHloRematerialization(int64_t memory_limit_bytes,
+                                         HloModule* module,
+                                         int64_t min_remat_size = 0) {
     TF_EXPECT_OK(verifier().Run(module).status());
     if (!module->has_schedule()) {
       HloMemoryScheduler scheduler(
@@ -995,7 +995,7 @@ class CompressingRematerializationTest : public RematerializationTestBase {
 
   // Swap the layout of the two most-minor dimensions if the second-minor
   // dimension is bigger than the most-minor dimension.
-  static absl::StatusOr<Shape> ChooseCompactLayoutForShape(const Shape& shape) {
+  static StatusOr<Shape> ChooseCompactLayoutForShape(const Shape& shape) {
     if (shape.rank() != 2) {
       return shape;
     }
@@ -1014,9 +1014,9 @@ class CompressingRematerializationTest : public RematerializationTestBase {
     return result;
   }
 
-  absl::StatusOr<bool> RunHloRematerialization(int64_t memory_limit_bytes,
-                                               HloModule* module,
-                                               int64_t min_remat_size = 0) {
+  StatusOr<bool> RunHloRematerialization(int64_t memory_limit_bytes,
+                                         HloModule* module,
+                                         int64_t min_remat_size = 0) {
     TF_EXPECT_OK(verifier().Run(module).status());
     HloRematerialization::RematerializationModeConfig config(
         /*recompute=*/false, /*compress=*/true, /*host_offload=*/false);
@@ -1209,9 +1209,9 @@ ENTRY %entry {
 
 class OffloadingRematerializationTest : public RematerializationTestBase {
  protected:
-  absl::StatusOr<bool> RunHloRematerialization(int64_t memory_limit_bytes,
-                                               HloModule* module,
-                                               int64_t min_remat_size = 0) {
+  StatusOr<bool> RunHloRematerialization(int64_t memory_limit_bytes,
+                                         HloModule* module,
+                                         int64_t min_remat_size = 0) {
     TF_EXPECT_OK(verifier().Run(module).status());
     if (!module->has_schedule()) {
       HloMemoryScheduler scheduler(

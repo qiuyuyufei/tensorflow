@@ -176,13 +176,6 @@ void AddDynamicUpdateSliceNode(Subgraph* subgraph, int input0, int input1,
 }
 }  // namespace
 
-void Setup1DTensor(Subgraph* subgraph, int tensor_index, TfLiteType type) {
-  int dim = 1;
-  ASSERT_EQ(subgraph->SetTensorParametersReadWrite(tensor_index, type, "", 1,
-                                                   &dim, {}, false),
-            kTfLiteOk);
-}
-
 void SetupTensor(Subgraph* subgraph, int tensor_index, TfLiteType type) {
   ASSERT_EQ(subgraph->SetTensorParametersReadWrite(tensor_index, type, "", 0,
                                                    nullptr, {}, false),
@@ -282,7 +275,7 @@ void SubgraphBuilder::BuildOutputNotConsumedSubgraph(Subgraph& subgraph) {
   ASSERT_EQ(subgraph.SetInputs({kInput0, kInput1, kInput2}), kTfLiteOk);
   ASSERT_EQ(subgraph.SetOutputs({kOutput0, kOutput1, kConstRhs}), kTfLiteOk);
   for (int i = 0; i < kTensorCount; ++i) {
-    Setup1DTensor(&subgraph, i, kTfLiteInt32);
+    SetupTensor(&subgraph, i, kTfLiteInt32);
   }
 
   // kInput0 --> +---+
@@ -429,13 +422,6 @@ void SubgraphBuilder::BuildAddSubgraph(Subgraph* subgraph,
   params->activation = kTfLiteActNone;
   BuildBinaryOpSubgraph(subgraph, ops::builtin::Register_ADD, kTfLiteBuiltinAdd,
                         params, operand_type, operand_type, operand_type);
-}
-
-void SubgraphBuilder::BuildStablehloAddSubgraph(Subgraph* subgraph,
-                                                const TfLiteType operand_type) {
-  BuildBinaryOpSubgraph(subgraph, ops::builtin::Register_STABLEHLO_ADD,
-                        kTfLiteBuiltinStablehloAdd, nullptr, operand_type,
-                        operand_type, operand_type);
 }
 
 // This body subgraph has arena and dynamic output tensors which are not in
@@ -587,13 +573,6 @@ void SubgraphBuilder::BuildMaximumSubgraph(Subgraph* subgraph,
                         /*output_type=*/operand_type);
 }
 
-void SubgraphBuilder::BuildStablehloMaximumSubgraph(
-    Subgraph* subgraph, const TfLiteType operand_type) {
-  BuildBinaryOpSubgraph(subgraph, ops::builtin::Register_STABLEHLO_MAXIMUM,
-                        kTfLiteBuiltinStablehloMaximum, nullptr, operand_type,
-                        operand_type, operand_type);
-}
-
 void SubgraphBuilder::BuildMinimumSubgraph(Subgraph* subgraph,
                                            const TfLiteType operand_type) {
   BuildBinaryOpSubgraph(subgraph, ops::builtin::Register_MINIMUM,
@@ -601,29 +580,6 @@ void SubgraphBuilder::BuildMinimumSubgraph(Subgraph* subgraph,
                         /*input1_type=*/operand_type,
                         /*input2_type=*/operand_type,
                         /*output_type=*/operand_type);
-}
-
-void SubgraphBuilder::BuildStablehloMinimumSubgraph(
-    Subgraph* subgraph, const TfLiteType operand_type) {
-  BuildBinaryOpSubgraph(subgraph, ops::builtin::Register_STABLEHLO_MINIMUM,
-                        kTfLiteBuiltinStablehloMinimum, nullptr, operand_type,
-                        operand_type, operand_type);
-}
-
-void SubgraphBuilder::BuildLogicalOrSubgraph(Subgraph* subgraph) {
-  BuildBinaryOpSubgraph(subgraph, ops::builtin::Register_LOGICAL_OR,
-                        kTfLiteBuiltinLogicalOr, /*params=*/nullptr,
-                        /*input1_type=*/kTfLiteBool,
-                        /*input2_type=*/kTfLiteBool,
-                        /*output_type=*/kTfLiteBool);
-}
-
-void SubgraphBuilder::BuildLogicalAndSubgraph(Subgraph* subgraph) {
-  BuildBinaryOpSubgraph(subgraph, ops::builtin::Register_LOGICAL_AND,
-                        kTfLiteBuiltinLogicalAnd, /*params=*/nullptr,
-                        /*input1_type=*/kTfLiteBool,
-                        /*input2_type=*/kTfLiteBool,
-                        /*output_type=*/kTfLiteBool);
 }
 
 void SubgraphBuilder::BuildOutputIsSecondInputSubgraph(Subgraph* subgraph) {
@@ -655,13 +611,6 @@ void SubgraphBuilder::BuildMulSubgraph(Subgraph* subgraph,
                         params, /*input1_type=*/operand_type,
                         /*input2_type=*/operand_type,
                         /*output_type=*/operand_type);
-}
-
-void SubgraphBuilder::BuildStablehloMulSubgraph(Subgraph* subgraph,
-                                                const TfLiteType operand_type) {
-  BuildBinaryOpSubgraph(subgraph, ops::builtin::Register_STABLEHLO_MULTIPLY,
-                        kTfLiteBuiltinStablehloMultiply, nullptr, operand_type,
-                        operand_type, operand_type);
 }
 
 // Build a subgraph with a pad op. Helper function for testing.

@@ -34,8 +34,8 @@ TEST(ErrorUtilTest, StatusScopedDiagnosticHandler) {
 
   // Test OK without diagnostic gets passed through.
   {
-    TF_ASSERT_OK(
-        StatusScopedDiagnosticHandler(&context).Combine(absl::OkStatus()));
+    TF_ASSERT_OK(StatusScopedDiagnosticHandler(&context).Combine(
+        ::tensorflow::OkStatus()));
   }
 
   // Verify diagnostics are captured as Unknown status.

@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,26 +15,21 @@ limitations under the License.
 
 #include "xla/service/gpu/dot_dimension_sorter.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/layout_util.h"
 #include "xla/permutation_util.h"
-#include "xla/status.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
 
 namespace xla {
@@ -43,7 +38,7 @@ namespace gpu {
 namespace {
 
 // Sort contracting dimensions of a dot() instruction preserving lhs-rhs pairs.
-absl::Status SortDotDimensions(HloDotInstruction* dot) {
+Status SortDotDimensions(HloInstruction* dot) {
   const DotDimensionNumbers& dims = dot->dot_dimension_numbers();
   DotDimensionNumbers new_dims(dims);
   new_dims.clear_lhs_contracting_dimensions();
@@ -69,8 +64,7 @@ absl::Status SortDotDimensions(HloDotInstruction* dot) {
                                                     sorted_rhs.end()};
   std::unique_ptr<HloInstruction> new_dot = HloInstruction::CreateDot(
       dot->shape(), dot->mutable_operand(0), dot->mutable_operand(1), new_dims,
-      dot->precision_config(), {dot->sparsity().begin(), dot->sparsity().end()},
-      absl::MakeSpan(dot->operands()).subspan(HloDotInstruction::kOperands));
+      dot->precision_config());
   dot->SetupDerivedInstruction(new_dot.get());
 
   VLOG(3) << "Sorted dot() dimensions:\n"
@@ -81,7 +75,7 @@ absl::Status SortDotDimensions(HloDotInstruction* dot) {
 
 }  // namespace
 
-absl::StatusOr<bool> DotDimensionSorter::Run(
+StatusOr<bool> DotDimensionSorter::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   std::vector<HloInstruction*> dots_to_process;
@@ -127,7 +121,7 @@ absl::StatusOr<bool> DotDimensionSorter::Run(
     return false;
   }
   for (HloInstruction* dot : dots_to_process) {
-    TF_RETURN_IF_ERROR(SortDotDimensions(Cast<HloDotInstruction>(dot)));
+    TF_RETURN_IF_ERROR(SortDotDimensions(dot));
   }
   return true;
 }

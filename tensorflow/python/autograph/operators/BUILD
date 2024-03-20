@@ -159,7 +159,6 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":data_structures",
-        #internal proto upb dep
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/framework:dtypes",
         "//tensorflow/python/framework:tensor",
@@ -177,7 +176,6 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":conditional_expressions",
-        #internal proto upb dep
         "//tensorflow/python/eager:def_function",
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/framework:test_lib",
@@ -196,8 +194,6 @@ py_strict_test(
     deps = [
         ":control_flow",
         ":variables",
-        #internal proto upb dep
-        "//third_party/py/numpy",
         "//tensorflow/python/autograph/utils:ag_logging",
         "//tensorflow/python/autograph/utils:testing",
         "//tensorflow/python/data/ops:dataset_ops",
@@ -213,6 +209,7 @@ py_strict_test(
         "//tensorflow/python/ops:random_ops",
         "//tensorflow/python/ops/ragged:ragged_factory_ops",
         "//tensorflow/python/platform:client_testlib",
+        "//third_party/py/numpy",
     ],
 )
 
@@ -223,7 +220,6 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":exceptions",
-        #internal proto upb dep
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/framework:errors",
         "//tensorflow/python/framework:test_lib",
@@ -238,7 +234,6 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":logical",
-        #internal proto upb dep
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/framework:test_lib",
         "//tensorflow/python/platform:client_testlib",
@@ -253,7 +248,6 @@ py_strict_test(
     deps = [
         ":data_structures",
         ":py_builtins",
-        #internal proto upb dep
         "//tensorflow/python/autograph/core:converter",
         "//tensorflow/python/autograph/core:function_wrappers",
         "//tensorflow/python/data/ops:dataset_ops",
@@ -276,7 +270,6 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":slices",
-        #internal proto upb dep
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/ops:list_ops",
         "//tensorflow/python/platform:client_testlib",
@@ -290,7 +283,6 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":variables",
-        #internal proto upb dep
         "//tensorflow/python/platform:client_testlib",
     ],
 )

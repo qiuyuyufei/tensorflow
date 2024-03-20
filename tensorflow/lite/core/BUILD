@@ -1,5 +1,5 @@
-load("//tensorflow:tensorflow.default.bzl", "get_compatible_with_portable")
 load("//tensorflow/lite:build_def.bzl", "tflite_copts", "tflite_copts_warnings", "tflite_self_contained_libs_test_suite")
+load("//tensorflow:tensorflow.default.bzl", "get_compatible_with_portable")
 load("//tensorflow/lite:special_rules.bzl", "internal_visibility_allowlist", "tflite_portable_test_suite")
 load("//tensorflow/lite/core:special_rules.bzl", "macros_visibility_allowlist")
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
@@ -170,7 +170,6 @@ cc_library(
     ],
     compatible_with = get_compatible_with_portable(),
     visibility = [
-        "//research/drishti/benchmarking/async:__subpackages__",
         "//tensorflow/lite:__subpackages__",
     ],
     deps = [
@@ -514,9 +513,8 @@ cc_test(
         ":framework_stable",
         "//tensorflow/lite:framework",
         "//tensorflow/lite:util",
-        "//tensorflow/lite/c:c_api_types",
         "//tensorflow/lite/kernels:builtin_ops",  # build_cleaner: keep
-        "@com_google_absl//absl/log:check",
+        "//tensorflow/lite/testing:util",
         "@com_google_googletest//:gtest_main",
     ],
 )

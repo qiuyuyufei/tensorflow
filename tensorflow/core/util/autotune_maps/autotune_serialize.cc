@@ -24,7 +24,6 @@ limitations under the License.
 #include "xla/status_macros.h"
 #include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/gpu/gpu_init.h"
-#include "xla/stream_executor/platform_manager.h"
 #include "tensorflow/core/platform/str_util.h"
 #include "tensorflow/core/util/activation_mode.h"
 #include "tensorflow/core/util/autotune_maps/autotune_map.pb.h"
@@ -101,7 +100,7 @@ Status PopulateConvMap(
   // Get the list of all GPU StreamExecutors.
   TF_ASSIGN_OR_RETURN(
       se::Platform * platform,
-      se::PlatformManager::PlatformWithName(se::GpuPlatformName()));
+      se::MultiPlatformManager::PlatformWithName(se::GpuPlatformName()));
   std::vector<std::string> device_descs;
   for (int i = 0; i < platform->VisibleDeviceCount(); i++) {
     TF_ASSIGN_OR_RETURN(std::unique_ptr<se::DeviceDescription> device_desc,
@@ -182,7 +181,7 @@ Status SerializeAutotuneMaps(std::string *output) {
                       ConvMapToProto(*FusedConvAutotuneMap::GetInstance()));
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
   TF_RET_CHECK(tsl::SerializeToStringDeterministic(proto, output));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LoadSerializedAutotuneMaps(absl::string_view s) {
@@ -201,7 +200,7 @@ Status LoadSerializedAutotuneMaps(absl::string_view s) {
                                      FusedConvAutotuneMap::GetInstance()));
   // TODO(b/189530096): Populate autotune maps for more ops.
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void ResetAutotuneMaps() {

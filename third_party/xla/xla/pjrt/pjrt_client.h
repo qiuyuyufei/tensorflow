@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ limitations under the License.
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -47,7 +46,6 @@ limitations under the License.
 #include "xla/pjrt/pjrt_device_description.h"
 #include "xla/pjrt/pjrt_executable.h"
 #include "xla/pjrt/pjrt_future.h"
-#include "xla/pjrt/pjrt_layout.h"
 #include "xla/service/computation_placer.h"
 #include "xla/service/hlo_cost_analysis.h"
 #include "xla/shape.h"
@@ -120,39 +118,7 @@ class PjRtDevice {
   // The ID of this device. IDs are unique among devices of this type
   // (e.g. CPUs, GPUs). On multi-host platforms, this will be unique across all
   // hosts' devices.  This is the ID that should be used in a DeviceAssignment.
-  ABSL_DEPRECATED("Use global_device_id() instead")
-  virtual int id() const { return global_device_id().value(); }
-
-  // There are several different IDs for a PJRT device.
-  //
-  // - global_device_id: The logical global device ID. This is unique among
-  // devices of this type (e.g. CPUs, GPUs). On multi-host platforms, this will
-  // be unique across all hosts' devices.  This is the ID that should be used in
-  // a DeviceAssignment.
-  //
-  // - local_device_id: The logical local device ID. This will be used to look
-  // up an addressable device local to a given client. It is -1 if undefined.
-  //
-  // - local_hardware_id: The physical local device ID, e.g., the CUDA device
-  // number. Multiple PJRT devices can have the same local_hardware_id if
-  // these PJRT devices share the same physical device. This is useful for
-  // identifying which physical device when interacting with non-JAX code. In
-  // general, not guaranteed to be dense, and -1 if undefined.
-
-  // TODO(b/314368788): Remove `id()` and replace it with this function.
-  virtual PjRtGlobalDeviceId global_device_id() const {
-    return PjRtGlobalDeviceId(description().id());
-  }
-
-  virtual PjRtLocalDeviceId local_device_id() const {
-    // By default, local_device_id is the same as local_hardware_id when there
-    // is only one PJRT device on a physical device.
-    return PjRtLocalDeviceId(local_hardware_id_typed().value());
-  }
-
-  // TODO(b/314368788): Remove `int local_hardware_id()` and rename this
-  // function to `local_hardware_id()`.
-  virtual PjRtLocalHardwareId local_hardware_id_typed() const = 0;
+  virtual int id() const { return description().id(); }
 
   // The index of the process that this device belongs to, i.e. is addressable
   // from. This is not always identical to PjRtClient::process_index() in a
@@ -164,10 +130,7 @@ class PjRtDevice {
   // Opaque hardware ID, e.g., the CUDA device number, useful for identifying
   // which GPU when interacting with non-JAX code. In general, not guaranteed to
   // be dense, and -1 if undefined.
-  ABSL_DEPRECATED("Use local_hardware_id_typed() instead")
-  virtual int local_hardware_id() const {
-    return local_hardware_id_typed().value();
-  }
+  virtual int local_hardware_id() const = 0;
 
   // A vendor-dependent string that uniquely identifies the kind of device,
   // e.g., "Tesla V100-SXM2-16GB". May be used to determine whether two GPUs are
@@ -438,11 +401,6 @@ class PjRtHostMemoryForDeviceManager {
 
 class PjRtLoadedExecutable;
 
-struct PjRtPluginAttributes {
-  int64_t pjrt_c_api_major_version;
-  int64_t pjrt_c_api_minor_version;
-};
-
 // Encapsulates the state of Python session with XLA.
 //
 // It is the responsibility of the client of this API to keep the PjRtClient
@@ -492,6 +450,21 @@ struct PjRtPluginAttributes {
 // will eventually be able to make progress.
 class PjRtClient {
  public:
+  // In the multi-node case, the caller of PjRtClient can provide a key-value
+  // store accessible across nodes. The caller can provide the two callbacks
+  // below to access the key-value store. There are a few requirements:
+  // (1) KeyValueGetCallback and KeyValuePutCallback must be thread-safe.
+  // (2) The caller that provides the two callbacks is responsible for avoiding
+  // key collisions between different users of key-value store (i.e. between
+  // different plugins, but not between different GPU plugin nodes).
+  // (3) KeyValueGetCallback is blocking.
+  // Subclasses of PjRtClient can optionally take these callbacks in their
+  // constructors.
+  using KeyValueGetCallback = std::function<xla::StatusOr<std::string>(
+      const std::string& key, absl::Duration timeout)>;
+  using KeyValuePutCallback = std::function<xla::Status(
+      const std::string& key, const std::string& value)>;
+
   PjRtClient() = default;
   explicit PjRtClient(std::unique_ptr<PjRtHostMemoryForDeviceManager>
                           host_memory_for_device_manager)
@@ -521,22 +494,12 @@ class PjRtClient {
   virtual absl::Span<PjRtDevice* const> addressable_devices() const = 0;
 
   // Lookup any PjRtDevice for a given PjRtDevice::id().
-  ABSL_DEPRECATED("Use LookupDevice(PjRtGlobalDeviceId) instead")
-  virtual StatusOr<PjRtDevice*> LookupDevice(int device_id) const {
-    return LookupDevice(PjRtGlobalDeviceId(device_id));
-  }
-  virtual StatusOr<PjRtDevice*> LookupDevice(
-      PjRtGlobalDeviceId global_device_id) const = 0;
+  virtual StatusOr<PjRtDevice*> LookupDevice(int device_id) const = 0;
 
   // Return an addressable PjRtDevice for a given
   // PjRtDevice::local_hardware_id().
-  ABSL_DEPRECATED("Use LookupAddressableDevice(PjRtLocalDeviceId) instead")
   virtual StatusOr<PjRtDevice*> LookupAddressableDevice(
-      int local_hardware_id) const {
-    return LookupAddressableDevice(PjRtLocalDeviceId(local_hardware_id));
-  }
-  virtual StatusOr<PjRtDevice*> LookupAddressableDevice(
-      PjRtLocalDeviceId local_device_id) const = 0;
+      int local_hardware_id) const = 0;
 
   // Return all memory spaces owned by the client.
   // The memory spaces are in no particular order.
@@ -551,12 +514,6 @@ class PjRtClient {
   // Returns a string containing human-readable, platform-specific version info
   // (e.g. the CUDA version on GPU or libtpu version on Cloud TPU).
   virtual absl::string_view platform_version() const = 0;
-
-  // Returns information about the underlying PJRT C API plugin if such a plugin
-  // is being used, otherwise returns nullopt.
-  virtual std::optional<PjRtPluginAttributes> plugin_attributes() const {
-    return std::nullopt;
-  }
 
   // TODO(b/244756954): Rethink this function altogether
   // Returns an enum that identifies the type of runtime being used under this
@@ -580,15 +537,6 @@ class PjRtClient {
     return Unimplemented("Multi slice device assignment is not supported.");
   }
 
-  // Returns the default device layout for a buffer with `element_type` and
-  // `dims`. The default layout is a platform-specific layout used when no other
-  // layout is specified, e.g. for host-to-device transfers. When compiling, the
-  // default layout is used for program arguments and outputs unless
-  // user-specified or compiler-chosen layouts are requested via the
-  // "mhlo.layout_mode" attribute.
-  virtual StatusOr<Layout> GetDefaultLayout(PrimitiveType element_type,
-                                            absl::Span<const int64_t> dims) = 0;
-
   // Returns a backend-specific HLO cost analysis visitor.
   virtual StatusOr<std::unique_ptr<HloCostAnalysis>> GetHloCostAnalysis()
       const = 0;
@@ -600,6 +548,10 @@ class PjRtClient {
   // Variant of `Compile` that accepts an MLIR module.
   virtual StatusOr<std::unique_ptr<PjRtLoadedExecutable>> Compile(
       mlir::ModuleOp module, CompileOptions options) = 0;
+
+  // Generates a unique fingerprint for `executable`, may be std::nullopt.
+  virtual StatusOr<std::optional<std::string>> ExecutableFingerprint(
+      const PjRtLoadedExecutable& executable) const = 0;
 
   // Deserializes a serialized executable as produced by
   // PjRtExecutable::SerializeExecutable(). `serialized` must have been
@@ -646,8 +598,7 @@ class PjRtClient {
   // Gets the pointer to the topology description held by the client.
   virtual StatusOr<const PjRtTopologyDescription*> GetTopologyDescription()
       const {
-    return Unimplemented("GetTopologyDescription not supported on platform %s",
-                         platform_name());
+    return Unimplemented("GetTopologyDescription not supported!");
   }
 
   // Returns topology object for compilation based on this client's topology.
@@ -756,43 +707,6 @@ class PjRtClient {
   CreateBuffersForAsyncHostToDevice(absl::Span<const Shape> shapes,
                                     PjRtMemorySpace* memory_space) = 0;
 
-  // Creates a shapeless buffer on the device that can be partitioned into
-  // multiple PjRtBuffer. This class is an Arena version of
-  // `AsyncHostToDeviceTransferManager`.
-  // As a low-level interface, the user must make sure that invocations of
-  // `Slice` match properly with the writes from `TransferRawDataToSubBuffer`.
-  //
-  // For the intended application to Arena allocation / transfer, the user can
-  // use `GetOnDeviceSizeInBytes` to calculate the offsets for the host buffers
-  // that need to be transferred.
-  class PjRtRawDeviceBuffer {
-   public:
-    virtual ~PjRtRawDeviceBuffer() = default;
-
-    // Transfers data to the device buffer. Data should already be in the
-    // device layout.
-    virtual Status TransferRawDataToSubBuffer(
-        const void* data, int64_t offset, int64_t transfer_size,
-        bool is_last_transfer, absl::AnyInvocable<void() &&> on_done) = 0;
-
-    // The resulting buffer becomes ready when all transfers complete.
-    virtual StatusOr<std::unique_ptr<PjRtBuffer>> Slice(
-        int64_t offset, PrimitiveType type, absl::Span<int64_t const> dims,
-        const Layout& layout) = 0;
-  };
-  // Creates a raw device buffer of a given size in bytes.
-  virtual StatusOr<std::unique_ptr<PjRtRawDeviceBuffer>> CreateRawDeviceBuffer(
-      int64_t size, PjRtDevice* device) {
-    return Unimplemented("CreateRawDeviceBuffer is not implemented.");
-  }
-
-  // On-device bytes required for a PjRt buffer with these `Shape` attributes.
-  virtual StatusOr<int64_t> GetOnDeviceSizeInBytes(
-      PrimitiveType type, absl::Span<int64_t const> dims,
-      const Layout& layout) {
-    return Unimplemented("GetOnDeviceSizeInBytes is not implemented.");
-  };
-
   // Describes the semantics the caller to BufferFromHostBuffer expects from the
   // runtime, in a total order from most restrictive to least restrictive.
   enum class HostBufferSemantics {
@@ -834,8 +748,7 @@ class PjRtClient {
       const void* data, PrimitiveType type, absl::Span<int64_t const> dims,
       std::optional<absl::Span<int64_t const>> byte_strides,
       HostBufferSemantics host_buffer_semantics,
-      absl::AnyInvocable<void() &&> on_done_with_host_buffer,
-      PjRtDevice* device) = 0;
+      std::function<void()> on_done_with_host_buffer, PjRtDevice* device) = 0;
 
   // Variant of BufferFromHostBuffer that takes an optional device layout. It is
   // used when non-compact layout is preferred.
@@ -845,8 +758,8 @@ class PjRtClient {
       const void* data, PrimitiveType type, absl::Span<int64_t const> dims,
       std::optional<absl::Span<int64_t const>> byte_strides,
       HostBufferSemantics host_buffer_semantics,
-      absl::AnyInvocable<void() &&> on_done_with_host_buffer,
-      PjRtDevice* device, const Layout* device_layout) {
+      std::function<void()> on_done_with_host_buffer, PjRtDevice* device,
+      const Layout* device_layout) {
     return tsl::errors::Unimplemented(
         "BufferFromHostBuffer with an optional device layout is not "
         "implemented on platform: ",
@@ -859,7 +772,7 @@ class PjRtClient {
       const void* data, PrimitiveType type, absl::Span<int64_t const> dims,
       std::optional<absl::Span<int64_t const>> byte_strides,
       HostBufferSemantics host_buffer_semantics,
-      absl::AnyInvocable<void() &&> on_done_with_host_buffer,
+      std::function<void()> on_done_with_host_buffer,
       PjRtMemorySpace* memory_space, const Layout* device_layout) {
     return tsl::errors::Unimplemented(
         "BufferFromHostBuffer with PjRtMemorySpace is not implemented on "
@@ -1007,12 +920,9 @@ class PjRtBuffer {
     return on_device_shape().dimensions();
   }
 
-  // The on-device memory layout of this buffer. Returned via unique_ptr to make
-  // memory management easier -- PjRtLayout is an abstract base class, so cannot
-  // be easily copied.
-  virtual std::unique_ptr<PjRtLayout> layout() const {
+  virtual const Layout& layout() const {
     CHECK(on_device_shape().has_layout());
-    return std::make_unique<PjRtXlaLayout>(on_device_shape().layout());
+    return on_device_shape().layout();
   }
 
   // PjRtBuffers can either represent a single array buffer or a tuple of array
@@ -1096,20 +1006,21 @@ class PjRtBuffer {
   // completed. The transfer respects the layout of `literal`; to specify a
   // particular layout, set the layout before calling `ToLiteral`.
   virtual PjRtFuture<Status> ToLiteral(MutableLiteralBase* literal) = 0;
-  // This version of ToLiteral allows the implementation to defer the
-  // construction of the literal (e.g. until the underlying buffer is ready).
-  // The specific timing of calling `generator` is implementation defined, and
-  // might be done eagerly, but it is guaranteed to be earlier than when the
-  // returned future becomes ready.
-  virtual PjRtFuture<Status> LazyToLiteral(
-      absl::AnyInvocable<absl::StatusOr<MutableLiteralBase*>() &&>
-          generator) = 0;
+
+  // Copies the buffer's value into `literal`. Calls `on_ready` when the value
+  // (or an error) is ready. The transfer respects the layout of `literal`; to
+  // specify a particular layout, set the layout before calling `ToLiteral`.
+  ABSL_DEPRECATED("Use ToLiteral(...).OnReady() instead")
+  void ToLiteral(MutableLiteralBase* literal,
+                 std::function<void(Status)> on_ready) {
+    ToLiteral(literal).OnReady(std::move(on_ready));
+  }
 
   // Synchronous overload of ToLiteral, as a convenience.
   Status ToLiteralSync(MutableLiteralBase* literal) {
     absl::Notification done;
     Status status;
-    ToLiteral(literal).OnReady([&](Status s) {
+    ToLiteral(literal, [&](Status s) {
       status = std::move(s);
       done.Notify();
     });
@@ -1117,7 +1028,9 @@ class PjRtBuffer {
     return status;
   }
 
-  absl::StatusOr<Shape> HostShape() {
+  // Convenience synchronous overload that allocates a literal with a default
+  // layout.
+  StatusOr<std::shared_ptr<Literal>> ToLiteralSync() {
     Shape device_shape;
     if (!IsTuple()) {
       absl::Span<const int64_t> literal_dims;
@@ -1131,8 +1044,7 @@ class PjRtBuffer {
         literal_dims = dimensions();
       }
       device_shape = ShapeUtil::MakeShape(element_type(), literal_dims);
-      // TODO(b/327524065): use PjRtLayout directly instead of xla::Layout
-      *device_shape.mutable_layout() = GetXlaLayoutUnsafe(layout());
+      *device_shape.mutable_layout() = layout();
     } else {
       // TODO(skyewm): does anything need to create tuple literals? The PJRT C
       // API doesn't support tuples or {logical_}on_device_shape(), so we prefer
@@ -1142,14 +1054,8 @@ class PjRtBuffer {
         TF_ASSIGN_OR_RETURN(device_shape, logical_on_device_shape());
       }
     }
-    return ShapeUtil::DeviceShapeToHostShape(device_shape);
-  }
-
-  // Convenience synchronous overload that allocates a literal with a default
-  // layout.
-  absl::StatusOr<std::shared_ptr<Literal>> ToLiteralSync() {
-    TF_ASSIGN_OR_RETURN(Shape host_shape, HostShape());
-    auto literal = std::make_shared<Literal>(host_shape);
+    auto literal = std::make_shared<Literal>(
+        ShapeUtil::DeviceShapeToHostShape(device_shape));
     TF_RETURN_IF_ERROR(ToLiteralSync(literal.get()));
     return literal;
   }
@@ -1376,6 +1282,25 @@ class PjRtBuffer {
           "BlockHostUntilReady() called on deleted or donated buffer");
     }
     return s;
+  }
+
+  // Calls callback when the buffer is ready.
+  //
+  //   buf->OnReady(callback);
+  //
+  // is semantically almost identical to:
+  //
+  //   ForkThread([]() { callback(buf->Await()); });
+  //
+  // the only difference being that the callback may happen immediately on the
+  // calling thread. (The implementation may also be more efficient.)
+  //
+  // The interface makes no assumptions about what thread calls callback, so the
+  // caller must ensure that callback returns quickly and hands off long-running
+  // work or any blocking operation to a caller-managed threadpool.
+  ABSL_DEPRECATED("Use GetReadyFuture().OnReady() instead")
+  void OnReady(std::function<void(Status)> callback) {
+    return GetReadyFuture().OnReady(std::move(callback));
   }
 
   // Whether this buffer is on CPU and thus allows for certain optimizations.

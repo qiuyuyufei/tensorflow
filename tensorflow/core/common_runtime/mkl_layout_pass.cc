@@ -1,4 +1,4 @@
-/* Copyright 2024 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -46,7 +46,6 @@ limitations under the License.
 #include "tensorflow/core/lib/hash/hash.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/util/mkl_heuristics.h"
-#include "tensorflow/core/util/onednn_env_vars.h"
 #include "tensorflow/core/util/tensor_format.h"
 #include "tensorflow/core/util/util.h"
 
@@ -371,7 +370,6 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     csinfo_.tanh = "Tanh";
     csinfo_.tanh_grad = "TanhGrad";
     csinfo_.reshape = "Reshape";
-    csinfo_.sparse_matrix_matmul = "SparseMatrixMatMul";
     csinfo_.slice = "Slice";
     csinfo_.softmax = "Softmax";
     csinfo_.split = "Split";
@@ -542,12 +540,6 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     rinfo_.push_back({csinfo_.matmul,
                       mkl_op_registry::GetMklOpName(csinfo_.matmul),
                       CopyAttrsAll, MatMulRewrite, kRewriteForOpNameChange});
-#ifdef ENABLE_ONEDNN_V3
-    rinfo_.push_back(
-        {csinfo_.sparse_matrix_matmul,
-         mkl_op_registry::GetMklOpName(csinfo_.sparse_matrix_matmul),
-         CopyAttrsAll, SparseMatrixMatMulRewrite, kRewriteForOpNameChange});
-#endif
     rinfo_.push_back({csinfo_.leakyrelu,
                       mkl_op_registry::GetMklOpName(csinfo_.leakyrelu),
                       CopyAttrsAll, LeakyReluRewrite, GetRewriteCause()});
@@ -993,7 +985,6 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     string tanh_grad;
     string transpose;
     string reshape;
-    string sparse_matrix_matmul;
     string slice;
     string softmax;
     string split;
@@ -1083,12 +1074,10 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     if (HasNodeAttr(n->def(), type_attr)) {
       const auto& attr = n->def().attr().at(type_attr);
       DataType dtype = attr.type();
-      if ((dtype == DT_BFLOAT16 || dtype == DT_HALF) &&
-          !IsDataTypeSupportedByOneDNNOnThisCPU(dtype)) {
-        DataTypeUnsupportedWarning(dtype);
+      if (dtype == DT_BFLOAT16 && !IsBF16SupportedByOneDNNOnThisCPU()) {
+        mkl_op_registry::BF16UnsupportedWarning();
         result = false;
-        reason =
-            "Intel oneDNN with " + DataType_Name(dtype) + " is not supported.";
+        reason = "Intel oneDNN with bfloat16 is not supported.";
       }
     }
 
@@ -1139,8 +1128,8 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     DataType T_m;
     TF_CHECK_OK(GetNodeAttr(m->def(), "T", &T_m));
 
-    // Don't try to merge if datatype is not DT_FLOAT or DT_BFLOAT16 or DT_HALF
-    if (T_m != DT_FLOAT && T_m != DT_BFLOAT16 && T_m != DT_HALF) return n;
+    // Don't try to merge if datatype is not DT_FLOAT or DT_BFLOAT16
+    if (T_m != DT_FLOAT && T_m != DT_BFLOAT16) return n;
 
     if (m->type_string() == csinfo_.bias_add) {
       // If a is BiasAdd, then Conv2D is 0th input of BiasAdd.
@@ -1179,8 +1168,8 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     DataType T_m;
     TF_CHECK_OK(GetNodeAttr(m->def(), "T", &T_m));
 
-    // Don't try to merge if datatype is not DT_FLOAT or DT_BFLOAT16 or DT_HALF
-    if (T_m != DT_FLOAT && T_m != DT_BFLOAT16 && T_m != DT_HALF) return n;
+    // Don't try to merge if datatype is not DT_FLOAT or DT_BFLOAT16
+    if (T_m != DT_FLOAT && T_m != DT_BFLOAT16) return n;
 
     const Node* conv_node;
     if (m->type_string() == csinfo_.pad) {
@@ -1319,8 +1308,8 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     DataType T_m;
     TF_CHECK_OK(GetNodeAttr(m->def(), "T", &T_m));
 
-    // Don't try to merge if datatype is not DT_FLOAT or DT_BFLOAT16 or DT_HALF
-    if (T_m != DT_FLOAT && T_m != DT_BFLOAT16 && T_m != DT_HALF) return n;
+    // Don't try to merge if datatype is not DT_FLOAT or DT_BFLOAT16
+    if (T_m != DT_FLOAT && T_m != DT_BFLOAT16) return n;
 
     if (m->type_string() == csinfo_.bias_add_grad) {
       // Get 1st input 'g' of BiasAddGrad.
@@ -1540,7 +1529,7 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
   static bool MatMulRewrite(const Node* n) {
     DataType T;
     TF_CHECK_OK(GetNodeAttr(n->def(), "T", &T));
-    if ((T == DT_FLOAT) || (T == DT_BFLOAT16) || (T == DT_HALF)) {
+    if ((T == DT_FLOAT) || (T == DT_BFLOAT16)) {
       VLOG(2) << "Rewriting MatMul to _MklMatMul";
 #ifdef DNNL_AARCH64_USE_ACL
       return MatMulHeuristic(n);
@@ -1550,49 +1539,6 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     }
     return false;
   }
-
-  static bool SparseMatrixMatMulRewrite(const Node* n) {
-    DataType T;
-    Tensor tensor;
-    bool adjoint_a, adjoint_b, transpose_a, transpose_b, transpose_out;
-
-    // Check the environment variable.
-    if (!UseOnednnSpmm()) {
-      VLOG(2) << "TF_ENABLE_ONEDNN_SPMM is disabled";
-      return false;
-    } else {
-      VLOG(2) << "TF_ENABLE_ONEDNN_SPMM is enabled";
-    }
-
-    // Check the datatype.
-    TF_CHECK_OK(GetNodeAttr(n->def(), "T", &T));
-    if (T != DT_FLOAT) {
-      VLOG(2) << "_MklSparseMatrixMatMul only supports DT_FLOAT";
-      return false;
-    }
-
-    // Check for adjointing.
-    TF_CHECK_OK(GetNodeAttr(n->def(), "adjoint_a", &adjoint_a));
-    TF_CHECK_OK(GetNodeAttr(n->def(), "adjoint_b", &adjoint_b));
-    if (adjoint_a || adjoint_b) {
-      VLOG(2)
-          << "_MklNativeSparseMatrixMatMul doesn't support adjointing matrices";
-      return false;
-    }
-
-    // Check for transposing.
-    TF_CHECK_OK(GetNodeAttr(n->def(), "transpose_a", &transpose_a));
-    TF_CHECK_OK(GetNodeAttr(n->def(), "transpose_b", &transpose_b));
-    TF_CHECK_OK(GetNodeAttr(n->def(), "transpose_output", &transpose_out));
-    if (transpose_a || transpose_b || transpose_out) {
-      VLOG(2) << "_MklNativeSparseMatrixMatMul doesn't support transposing "
-                 "matrices";
-      return false;
-    }
-
-    return true;
-  }
-
   // For oneDNN, only int32 is supported for axis data type
   static bool ConcatV2Rewrite(const Node* n) {
     DataType T;
@@ -1640,12 +1586,11 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     // impact.
     TF_CHECK_OK(GetNodeAttr(n->def(), "transpose_a", &trans_a));
 
-    // Only rewrite float, bfloat16 and half.
+    // Only rewrite float and bfloat16.
     DataType T_m;
     TF_CHECK_OK(GetNodeAttr(n->def(), "T", &T_m));
 
-    return !trans_a &&
-           (T_m == DT_FLOAT || T_m == DT_BFLOAT16 || T_m == DT_HALF);
+    return !trans_a && (T_m == DT_FLOAT || T_m == DT_BFLOAT16);
   }
 
   // Check if we are performing pooling on depth or batch. If it is, then we
@@ -1923,7 +1868,6 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
             fused_ops == std::vector<string>{"BiasAdd", "Relu"} ||
             fused_ops == std::vector<string>{"BiasAdd", "Relu6"} ||
             fused_ops == std::vector<string>{"BiasAdd", "Elu"} ||
-            fused_ops == std::vector<string>{"BiasAdd", "_FusedHardSwish"} ||
             fused_ops == std::vector<string>{"BiasAdd", "Add"} ||
             fused_ops == std::vector<string>{"BiasAdd", "Add", "Relu"} ||
             fused_ops == std::vector<string>{"BiasAdd", "Add", "Relu6"} ||
@@ -1959,8 +1903,7 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     return (fused_ops == std::vector<string>{"BiasAdd"} ||
             fused_ops == std::vector<string>{"BiasAdd", "Relu"} ||
             fused_ops == std::vector<string>{"BiasAdd", "Relu6"} ||
-            fused_ops == std::vector<string>{"BiasAdd", "Elu"} ||
-            fused_ops == std::vector<string>{"BiasAdd", "_FusedHardSwish"});
+            fused_ops == std::vector<string>{"BiasAdd", "Elu"});
   }
 
   // Rewrites input node to a new node specified by its matching rewrite info.

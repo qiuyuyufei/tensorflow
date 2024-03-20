@@ -35,7 +35,7 @@ limitations under the License.
 namespace tensorflow {
 namespace data {
 
-absl::StatusOr<std::unique_ptr<TestContext>> TestContext::Create() {
+StatusOr<std::unique_ptr<TestContext>> TestContext::Create() {
   auto ctx = std::unique_ptr<TestContext>(new TestContext());
   SessionOptions options;
   auto* device_count = options.config.mutable_device_count();

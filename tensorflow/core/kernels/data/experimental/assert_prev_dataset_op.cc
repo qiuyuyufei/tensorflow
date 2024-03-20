@@ -43,7 +43,7 @@ namespace {
 
 // Returns a `NameAttrList` of an op name and attrs, parsed from
 // `transformation`.
-absl::StatusOr<NameAttrList> GetAssertions(const tstring& transformation) {
+StatusOr<NameAttrList> GetAssertions(const tstring& transformation) {
   NameAttrList assertions;
   if (!std::is_base_of<protobuf::Message, NameAttrList>()) {
     return errors::InvalidArgument(
@@ -58,8 +58,7 @@ absl::StatusOr<NameAttrList> GetAssertions(const tstring& transformation) {
 }
 
 // Returns `dataset`'s input dataset.
-absl::StatusOr<const DatasetBase*> GetPreviousDataset(
-    const DatasetBase& dataset) {
+StatusOr<const DatasetBase*> GetPreviousDataset(const DatasetBase& dataset) {
   std::vector<const DatasetBase*> inputs;
   TF_RETURN_IF_ERROR(dataset.InputDatasets(&inputs));
   if (inputs.empty()) {
@@ -75,12 +74,12 @@ Status CheckOpName(const DatasetBase& dataset, const NameAttrList& assertions) {
                                    assertions.name(), "', but found '",
                                    dataset.type_string(), "'.");
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Returns a NodeDef representation of `dataset`.
-absl::StatusOr<NodeDef> GetDatasetNode(const DatasetBase& dataset,
-                                       absl::string_view op_name) {
+StatusOr<NodeDef> GetDatasetNode(const DatasetBase& dataset,
+                                 absl::string_view op_name) {
   SerializationContext serialization_ctx((SerializationContext::Params()));
   GraphDefBuilder b;
   GraphDef graph_def;
@@ -93,7 +92,7 @@ absl::StatusOr<NodeDef> GetDatasetNode(const DatasetBase& dataset,
 // Checks `dataset`'s attrs against those in `assertions`.
 Status CheckAttributes(const DatasetBase& dataset,
                        const NameAttrList& assertions) {
-  if (assertions.attr().empty()) return absl::OkStatus();
+  if (assertions.attr().empty()) return OkStatus();
   TF_ASSIGN_OR_RETURN(NodeDef node, GetDatasetNode(dataset, assertions.name()));
   std::vector<std::string> attrs_not_found;
   for (const auto& attr : assertions.attr()) {
@@ -117,7 +116,7 @@ Status CheckAttributes(const DatasetBase& dataset,
           attr.second.DebugString(), "', but found no such attribute defined.");
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Checks `dataset`'s op name and attrs against those in `transformation`.
@@ -126,7 +125,7 @@ Status CheckTransformation(const DatasetBase& dataset,
   TF_ASSIGN_OR_RETURN(NameAttrList assertions, GetAssertions(transformation));
   TF_RETURN_IF_ERROR(CheckOpName(dataset, assertions));
   TF_RETURN_IF_ERROR(CheckAttributes(dataset, assertions));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
@@ -168,7 +167,7 @@ class AssertPrevDatasetOp::Dataset : public DatasetBase {
 
   Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
     inputs->push_back(input_);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status CheckExternalState() const override {
@@ -185,7 +184,7 @@ class AssertPrevDatasetOp::Dataset : public DatasetBase {
     TF_RETURN_IF_ERROR(b->AddVector(transformations_, &transformations_node));
     TF_RETURN_IF_ERROR(
         b->AddDataset(this, {input_graph_node, transformations_node}, output));
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -197,7 +196,7 @@ class AssertPrevDatasetOp::Dataset : public DatasetBase {
     Status Initialize(IteratorContext* ctx) override {
       const DatasetBase* current_dataset = dataset();
       for (int i = 0; i < dataset()->transformations_.size(); ++i) {
-        absl::StatusOr<const DatasetBase*> previous_dataset =
+        StatusOr<const DatasetBase*> previous_dataset =
             GetPreviousDataset(*current_dataset);
         if (!previous_dataset.ok()) {
           return errors::InvalidArgument(
@@ -234,13 +233,13 @@ class AssertPrevDatasetOp::Dataset : public DatasetBase {
     Status SaveInternal(SerializationContext* ctx,
                         IteratorStateWriter* writer) override {
       TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status RestoreInternal(IteratorContext* ctx,
                            IteratorStateReader* reader) override {
       TF_RETURN_IF_ERROR(RestoreInput(ctx, reader, input_impl_));
-      return absl::OkStatus();
+      return OkStatus();
     }
 
    private:

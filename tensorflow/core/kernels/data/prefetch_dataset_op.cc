@@ -19,7 +19,6 @@ limitations under the License.
 #include <limits>
 #include <string>
 
-#include "absl/status/status.h"
 #include "tensorflow/core/data/dataset_utils.h"
 #include "tensorflow/core/data/name_utils.h"
 #include "tensorflow/core/data/stats_utils.h"
@@ -38,7 +37,6 @@ limitations under the License.
 #include "tensorflow/core/profiler/lib/traceme.h"
 #include "tensorflow/core/profiler/lib/traceme_encode.h"
 #include "tensorflow/core/protobuf/error_codes.pb.h"
-#include "tsl/platform/mutex.h"
 
 namespace tensorflow {
 namespace data {
@@ -78,10 +76,6 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
         legacy_autotune_(legacy_autotune),
         buffer_size_min_(buffer_size_min) {
     input_->Ref();
-    random_indexing_compatible_ = absl::OkStatus();
-    if (input_ != nullptr) {
-      random_indexing_compatible_ = input_->RandomIndexingCompatible();
-    }
   }
 
   ~Dataset() override { input_->Unref(); }
@@ -110,7 +104,7 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
 
   Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
     inputs->push_back(input_);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status CheckExternalState() const override {
@@ -120,10 +114,6 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
   Status Get(OpKernelContext* ctx, int64 index,
              std::vector<Tensor>* out_tensors) const override {
     return input_->Get(ctx, index, out_tensors);
-  }
-
-  absl::Status RandomIndexingCompatible() const override {
-    return random_indexing_compatible_;
   }
 
  protected:
@@ -147,7 +137,7 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
                        std::make_pair(kLegacyAutotune, legacy_autotune_attr),
                        std::make_pair(kBufferSizeMin, buffer_size_min_attr)},
                       output));
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -198,7 +188,7 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
         TF_RETURN_IF_ERROR(EnsureThreadsStarted(ctx));
       }
       ctx->MergeCheckpoint(iter_ctx.checkpoint());
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status GetNextInternal(IteratorContext* ctx,
@@ -227,7 +217,7 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
 
         if (prefetch_thread_finished_) {
           *end_of_sequence = true;
-          return absl::OkStatus();
+          return OkStatus();
         }
 
         DCHECK_EQ(buffer_limit(), 0);
@@ -269,7 +259,7 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
     Status SaveInternal(SerializationContext* ctx,
                         IteratorStateWriter* writer) override {
       if (ctx->symbolic_checkpoint()) {
-        return absl::OkStatus();
+        return OkStatus();
       }
       // Acquire both locks to ensure that the prefetch thread and
       // all GetNext threads are blocked.
@@ -292,16 +282,11 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
           }
         }
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status RestoreInternal(IteratorContext* ctx,
                            IteratorStateReader* reader) override {
-      if (ctx->restored_element_count().has_value()) {
-        tsl::mutex_lock l(input_mu_);
-        return RestoreInput(ctx, reader, input_impl_);
-      }
-
       mutex_lock input_l(input_mu_);
       mutex_lock l(*mu_);
       DCHECK(!prefetch_thread_);
@@ -316,7 +301,7 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
         TF_RETURN_IF_ERROR(EnsureThreadsStarted(ctx));
       }
       cond_var_->notify_all();
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     data::TraceMeMetadata GetTraceMeMetadata() const override {
@@ -408,7 +393,7 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
         }
         RecordBufferEnqueue(ctx, buffer_element.value);
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     int64_t buffer_limit() const TF_EXCLUSIVE_LOCKS_REQUIRED(*mu_) {
@@ -507,7 +492,7 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
         prefetch_thread_ = ctx->StartThread(
             "tf_data_prefetch", [this, new_ctx]() { PrefetchThread(new_ctx); });
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     // Prefetches elements of the input, storing results in an internal buffer.
@@ -591,7 +576,7 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
             absl::StrCat(prefix(), "::", index), ErrorMessageKey(),
             std::string(status.message())));
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status ReadStatus(IteratorStateReader* reader, size_t index, Status* status)
@@ -608,9 +593,9 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
                                ErrorMessageKey(), &error_message));
         *status = Status(code, error_message);
       } else {
-        *status = absl::OkStatus();
+        *status = OkStatus();
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     string CodeKey() { return absl::StrCat(kStatus, kCodeSuffix); }
@@ -670,7 +655,6 @@ class PrefetchDatasetOp::Dataset : public DatasetBase {
   // parameter.
   const int64_t buffer_size_min_ = 0;
 
-  absl::Status random_indexing_compatible_;
   TraceMeMetadata traceme_metadata_;
 };
 

@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -29,7 +28,6 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/utils/serialize_mlir_module_utils.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/lib/monitoring/cell_reader.h"
-#include "tsl/lib/core/status_test_util.h"
 #include "tsl/platform/statusor.h"
 
 namespace mlir::quant::stablehlo {
@@ -40,12 +38,11 @@ using ::mlir::MLIRContext;
 using ::mlir::ModuleOp;
 using ::mlir::OwningOpRef;
 using ::tensorflow::monitoring::testing::CellReader;
-using ::testing::Test;
 
 static constexpr char kMetricsName[] =
     "/tensorflow/core/tf2xla/tf_quant_op_count";
 
-class LegalizeTfTypesTest : public Test {
+class LegalizeTfTypesTest : public ::testing::Test {
  protected:
   void CreateModule(const char* module_string) {
     DialectRegistry mlir_registry;

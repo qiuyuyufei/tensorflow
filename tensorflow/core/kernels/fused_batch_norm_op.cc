@@ -25,7 +25,6 @@ limitations under the License.
 #endif  // GOOGLE_CUDA
 
 #include "tensorflow/core/kernels/conv_2d.h"
-#include "tensorflow/core/kernels/gpu_utils.h"
 #include "tensorflow/core/platform/stream_executor.h"
 #include "tensorflow/core/util/stream_executor_util.h"
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
@@ -73,11 +72,11 @@ Status ParseActivationMode(OpKernelConstruction* context,
 
   if (activation_mode_str == "Identity") {
     *activation_mode = FusedBatchNormActivationMode::kIdentity;
-    return absl::OkStatus();
+    return OkStatus();
   }
   if (activation_mode_str == "Relu") {
     *activation_mode = FusedBatchNormActivationMode::kRelu;
-    return absl::OkStatus();
+    return OkStatus();
   }
   return errors::InvalidArgument("Unsupported activation mode: ",
                                  activation_mode_str);
@@ -967,30 +966,38 @@ struct FusedBatchNormImplGPU {
     }
     if (!batch_mean->SharesBufferWith(estimated_mean) &&
         exponential_avg_factor != 1.0f) {
-      OP_REQUIRES_OK(
-          context, stream->MemcpyD2D(&batch_mean_ptr, estimated_mean_ptr,
-                                     estimated_mean.NumElements() * sizeof(U)));
+      OP_REQUIRES(
+          context,
+          stream
+              ->ThenMemcpyD2D(&batch_mean_ptr, estimated_mean_ptr,
+                              estimated_mean.NumElements() * sizeof(U))
+              .ok(),
+          errors::Internal("MatrixTriangularSolveOp: failed to copy rhs "
+                           "from device"));
     }
     if (!batch_var->SharesBufferWith(estimated_variance) &&
         exponential_avg_factor != 1.0f) {
-      OP_REQUIRES_OK(
+      OP_REQUIRES(
           context,
-          stream->MemcpyD2D(&batch_var_ptr, estimated_variance_ptr,
-                            estimated_variance.NumElements() * sizeof(U)));
+          stream
+              ->ThenMemcpyD2D(&batch_var_ptr, estimated_variance_ptr,
+                              estimated_variance.NumElements() * sizeof(U))
+              .ok(),
+          errors::Internal("MatrixTriangularSolveOp: failed to copy rhs "
+                           "from device"));
     }
-    auto dnn = stream->parent()->AsDnn();
-    if (dnn == nullptr) {
-      context->SetStatus(absl::InternalError("No DNN support for stream"));
-      return;
-    }
-    bool cudnn_launch_status = dnn->DoBatchNormalizationForward(
-        stream, x_ptr, scale_ptr, offset_ptr, estimated_mean_ptr,
-        estimated_variance_ptr, side_input_ptr, x_desc, scale_offset_desc,
-        static_cast<double>(epsilon),
-        static_cast<double>(exponential_avg_factor),
-        AsDnnActivationMode(activation_mode), &y_ptr, &batch_mean_ptr,
-        &batch_var_ptr, &saved_mean_ptr, &saved_inv_var_ptr, is_training,
-        reserve_space_allocator.get(), workspace_allocator.get());
+    bool cudnn_launch_status =
+        stream
+            ->ThenBatchNormalizationForward(
+                x_ptr, scale_ptr, offset_ptr, estimated_mean_ptr,
+                estimated_variance_ptr, side_input_ptr, x_desc,
+                scale_offset_desc, static_cast<double>(epsilon),
+                static_cast<double>(exponential_avg_factor),
+                AsDnnActivationMode(activation_mode), &y_ptr, &batch_mean_ptr,
+                &batch_var_ptr, &saved_mean_ptr, &saved_inv_var_ptr,
+                is_training, reserve_space_allocator.get(),
+                workspace_allocator.get())
+            .ok();
 
     if (!cudnn_launch_status) {
       context->SetStatus(
@@ -1038,9 +1045,11 @@ struct FusedBatchNorm<GPUDevice, Eigen::bfloat16, float, is_training> {
                   Tensor* batch_mean, Tensor* batch_var, Tensor* saved_mean,
                   Tensor* saved_inv_var, TensorFormat tensor_format,
                   bool use_reserved_space) {
+    // Performant bfloat16 operations are supported for Ampere+ GPUs. For
+    // pre-Ampere GPUs, we cast inputs to float and outputs back to bfloat16.
     auto* stream = context->op_device_context()->stream();
-    const bool cast_to_float = !IsBF16SupportedInOps(stream);
-
+    const bool cast_to_float = !stream->GetCudaComputeCapability().IsAtLeast(
+        se::CudaComputeCapability::AMPERE);
     if (cast_to_float) {
       Tensor casted_x = x;
       Tensor casted_side_input;
@@ -1248,19 +1257,18 @@ struct FusedBatchNormGradImplGPU {
       }
     }
 #endif  // CUDNN_VERSION >= 7402
-    auto dnn = stream->parent()->AsDnn();
-    if (dnn == nullptr) {
-      context->SetStatus(absl::InternalError("No DNN support for stream"));
-      return;
-    }
 
-    bool cudnn_launch_status = dnn->DoBatchNormalizationBackward(
-        stream, y_backprop_ptr, x_ptr, scale_ptr, offset_ptr, mean_ptr,
-        inv_variance_ptr, y_ptr, x_desc, scale_offset_desc,
-        static_cast<double>(epsilon), AsDnnActivationMode(activation_mode),
-        &x_backprop_ptr, &scale_backprop_ptr, &offset_backprop_ptr,
-        &side_input_backprop_ptr, reserve_space_data_ptr,
-        workspace_allocator.get());
+    bool cudnn_launch_status =
+        stream
+            ->ThenBatchNormalizationBackward(
+                y_backprop_ptr, x_ptr, scale_ptr, offset_ptr, mean_ptr,
+                inv_variance_ptr, y_ptr, x_desc, scale_offset_desc,
+                static_cast<double>(epsilon),
+                AsDnnActivationMode(activation_mode), &x_backprop_ptr,
+                &scale_backprop_ptr, &offset_backprop_ptr,
+                &side_input_backprop_ptr, reserve_space_data_ptr,
+                workspace_allocator.get())
+            .ok();
 
     if (!cudnn_launch_status) {
       context->SetStatus(
@@ -1303,8 +1311,11 @@ struct FusedBatchNormGrad<GPUDevice, Eigen::bfloat16, float> {
                   Tensor* x_backprop, Tensor* scale_backprop,
                   Tensor* offset_backprop, Tensor* side_input_backprop,
                   bool use_reserved_space, TensorFormat tensor_format) {
+    // Performant bfloat16 operations are supported for Ampere+ GPUs. For
+    // pre-Ampere GPUs, we cast inputs to float and outputs back to bfloat16.
     auto* stream = context->op_device_context()->stream();
-    const bool cast_to_float = !IsBF16SupportedInOps(stream);
+    const bool cast_to_float = !stream->GetCudaComputeCapability().IsAtLeast(
+        se::CudaComputeCapability::AMPERE);
     if (cast_to_float) {
       Tensor casted_y_backprop = y_backprop;
       Tensor casted_x = x;

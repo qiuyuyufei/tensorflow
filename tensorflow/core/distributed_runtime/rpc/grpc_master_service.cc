@@ -211,7 +211,7 @@ class GrpcMasterService : public tsl::AsyncServiceInterface {
                 static_cast<error::Code>(status.code()));
             call->response.set_status_error_message(
                 std::string(status.message()));
-            call->SendResponse(ToGrpcStatus(absl::OkStatus()));
+            call->SendResponse(ToGrpcStatus(OkStatus()));
           } else {
             call->SendResponse(ToGrpcStatus(status));
           }

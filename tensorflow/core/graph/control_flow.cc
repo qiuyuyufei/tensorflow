@@ -79,7 +79,7 @@ Status ValidateControlFlowInfo(const Graph* graph,
       frame.loop_cond = node;
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 }  // namespace
 
@@ -180,7 +180,7 @@ Status BuildControlFlowInfo(const Graph* g, std::vector<ControlFlowInfo>* info,
     }
   }
   TF_RETURN_IF_ERROR(ValidateControlFlowInfo(g, *info));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

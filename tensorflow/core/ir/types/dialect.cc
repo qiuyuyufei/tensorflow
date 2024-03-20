@@ -142,12 +142,12 @@ Type TFTypeDialect::parseType(DialectAsmParser& parser) const {
 // NOLINTNEXTLINE: intended redundant include.
 #include "tensorflow/core/ir/types/types.def"
 
-  if (type_tag.starts_with("resource")) {
+  if (type_tag.startswith("resource")) {
     Type ret = ParseResourceType(getContext(), parser);
     if (!ret) parser.emitError(loc, "invalid resource type");
     return ret;
   }
-  if (type_tag.starts_with("variant")) {
+  if (type_tag.startswith("variant")) {
     Type ret = ParseVariantType(getContext(), parser);
     if (!ret) parser.emitError(loc, "invalid variant type");
     return ret;

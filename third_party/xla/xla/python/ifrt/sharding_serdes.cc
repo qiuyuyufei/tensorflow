@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "absl/status/status.h"
 #include "xla/python/ifrt/device.h"
 #include "xla/python/ifrt/memory.h"
 #include "xla/python/ifrt/serdes.h"
@@ -137,17 +136,9 @@ class ConcreteShardingSerDes
     if (sharding.memory_kind().memory_kind().has_value()) {
       proto.set_memory_kind(std::string(*sharding.memory_kind().memory_kind()));
     }
-    if (sharding.has_static_shape()) {
-      *proto.mutable_shape() = sharding.shape().ToProto();
-      for (const Shape& shape : sharding.shard_shapes()) {
-        *proto.add_shard_shapes() = shape.ToProto();
-      }
-    } else {
-      *proto.mutable_dynamic_shape() = sharding.dynamic_shape().ToProto();
-      for (const DynamicShape& dynamic_shape :
-           sharding.shard_dynamic_shapes()) {
-        *proto.add_shard_dynamic_shapes() = dynamic_shape.ToProto();
-      }
+    *proto.mutable_shape() = sharding.shape().ToProto();
+    for (const Shape& shape : sharding.shard_shapes()) {
+      *proto.add_shard_shapes() = shape.ToProto();
     }
     return proto.SerializeAsString();
   }
@@ -171,35 +162,16 @@ class ConcreteShardingSerDes
     if (proto.has_memory_kind()) {
       memory_kind = MemoryKind(proto.memory_kind());
     }
-    if (proto.has_shape()) {
-      TF_ASSIGN_OR_RETURN(auto shape, Shape::FromProto(proto.shape()));
-      std::vector<Shape> shard_shapes;
-      shard_shapes.reserve(proto.shard_shapes_size());
-      for (const auto& shard_shape_proto : proto.shard_shapes()) {
-        TF_ASSIGN_OR_RETURN(auto shard_shape,
-                            Shape::FromProto(shard_shape_proto));
-        shard_shapes.push_back(std::move(shard_shape));
-      }
-      return ConcreteSharding::Create(std::move(devices), memory_kind,
-                                      std::move(shape),
-                                      std::move(shard_shapes));
-    }
-    if (!proto.has_dynamic_shape()) {
-      return absl::InvalidArgumentError(
-          "ConcreteSharding must have Shape or DynamicShape.");
-    }
-    TF_ASSIGN_OR_RETURN(auto dynamic_shape,
-                        DynamicShape::FromProto(proto.dynamic_shape()));
-    std::vector<DynamicShape> shard_dynamic_shapes;
-    shard_dynamic_shapes.reserve(proto.shard_dynamic_shapes_size());
-    for (const auto& shard_dynamic_shape_proto : proto.shard_dynamic_shapes()) {
-      TF_ASSIGN_OR_RETURN(auto dynamic_shape,
-                          DynamicShape::FromProto(shard_dynamic_shape_proto));
-      shard_dynamic_shapes.push_back(std::move(dynamic_shape));
+    TF_ASSIGN_OR_RETURN(auto shape, Shape::FromProto(proto.shape()));
+    std::vector<Shape> shard_shapes;
+    shard_shapes.reserve(proto.shard_shapes_size());
+    for (const auto& shard_shape_proto : proto.shard_shapes()) {
+      TF_ASSIGN_OR_RETURN(auto shard_shape,
+                          Shape::FromProto(shard_shape_proto));
+      shard_shapes.push_back(std::move(shard_shape));
     }
     return ConcreteSharding::Create(std::move(devices), memory_kind,
-                                    std::move(dynamic_shape),
-                                    std::move(shard_dynamic_shapes));
+                                    std::move(shape), std::move(shard_shapes));
   }
 
   static char ID;  // NOLINT
@@ -287,7 +259,7 @@ bool register_concrete_even_sharding_serdes = ([]{
 
 }  // namespace
 
-absl::StatusOr<std::unique_ptr<DeserializeShardingOptions>>
+StatusOr<std::unique_ptr<DeserializeShardingOptions>>
 GetDeserializeShardingOptions(std::unique_ptr<DeserializeOptions> options) {
   if (!llvm::isa<DeserializeShardingOptions>(options.get())) {
     return xla::InvalidArgument("options must be DeserializeShardingOptions");

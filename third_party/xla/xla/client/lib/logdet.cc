@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,8 +36,7 @@ limitations under the License.
 namespace xla {
 
 SignAndLogDet SLogDet(XlaOp a) {
-  absl::StatusOr<SignAndLogDet> result =
-      [&]() -> absl::StatusOr<SignAndLogDet> {
+  StatusOr<SignAndLogDet> result = [&]() -> StatusOr<SignAndLogDet> {
     TF_ASSIGN_OR_RETURN(Shape a_shape, a.builder()->GetShape(a));
     auto qr = Qr(a);
 

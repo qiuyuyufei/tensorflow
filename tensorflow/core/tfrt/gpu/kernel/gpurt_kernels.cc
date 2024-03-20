@@ -96,7 +96,7 @@ Status GetDevices(const tfrt::ExecutionContext& exec_ctx, Devices* devices) {
       return absl::InternalError("Device IDs are not consecutive.");
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Kernel for transferring `tensor` from host to device.

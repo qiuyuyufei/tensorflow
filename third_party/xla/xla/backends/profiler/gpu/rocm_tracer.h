@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,20 +16,15 @@ limitations under the License.
 #ifndef XLA_BACKENDS_PROFILER_GPU_ROCM_TRACER_H_
 #define XLA_BACKENDS_PROFILER_GPU_ROCM_TRACER_H_
 
-#include <cstdint>
-#include <limits>
-#include <map>
-#include <set>
-#include <string>
-#include <vector>
-
 #include "absl/container/fixed_array.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/node_hash_set.h"
-#include "absl/status/status.h"
+#include "absl/types/optional.h"
 #include "xla/stream_executor/rocm/roctracer_wrapper.h"
+#include "tsl/platform/errors.h"
 #include "tsl/platform/macros.h"
+#include "tsl/platform/status.h"
 #include "tsl/platform/types.h"
 
 namespace xla {
@@ -246,7 +241,7 @@ class RocmApiCallbackImpl {
                       RocmTraceCollector* collector)
       : options_(options), tracer_(tracer), collector_(collector) {}
 
-  absl::Status operator()(uint32_t domain, uint32_t cbid, const void* cbdata);
+  tsl::Status operator()(uint32_t domain, uint32_t cbid, const void* cbdata);
 
  private:
   void AddKernelEventUponApiExit(uint32_t cbid, const hip_api_data_t* data,
@@ -284,7 +279,7 @@ class RocmActivityCallbackImpl {
                            RocmTraceCollector* collector)
       : options_(options), tracer_(tracer), collector_(collector) {}
 
-  absl::Status operator()(const char* begin, const char* end);
+  tsl::Status operator()(const char* begin, const char* end);
 
  private:
   void AddHipKernelActivityEvent(const roctracer_record_t* record);
@@ -300,7 +295,7 @@ class RocmActivityCallbackImpl {
   RocmTraceCollector* collector_ = nullptr;
 };
 
-// The class uses roctracer callback/activity API and forward the collected
+// The class use to enable cupti callback/activity API and forward the collected
 // trace events to RocmTraceCollector. There should be only one RocmTracer
 // per process.
 class RocmTracer {
@@ -314,9 +309,9 @@ class RocmTracer {
   void Enable(const RocmTracerOptions& options, RocmTraceCollector* collector);
   void Disable();
 
-  absl::Status ApiCallbackHandler(uint32_t domain, uint32_t cbid,
-                                  const void* cbdata);
-  absl::Status ActivityCallbackHandler(const char* begin, const char* end);
+  tsl::Status ApiCallbackHandler(uint32_t domain, uint32_t cbid,
+                                 const void* cbdata);
+  tsl::Status ActivityCallbackHandler(const char* begin, const char* end);
 
   static uint64_t GetTimestamp();
   static int NumGpus();
@@ -340,11 +335,11 @@ class RocmTracer {
   explicit RocmTracer() : num_gpus_(NumGpus()) {}
 
  private:
-  absl::Status EnableApiTracing();
-  absl::Status DisableApiTracing();
+  tsl::Status EnableApiTracing();
+  tsl::Status DisableApiTracing();
 
-  absl::Status EnableActivityTracing();
-  absl::Status DisableActivityTracing();
+  tsl::Status EnableActivityTracing();
+  tsl::Status DisableActivityTracing();
 
   int num_gpus_;
   std::optional<RocmTracerOptions> options_;

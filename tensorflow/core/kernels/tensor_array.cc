@@ -111,7 +111,7 @@ Status TensorArray::CopyShapesFrom(TensorArray* rhs,
     tensors_[i].written = true;
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

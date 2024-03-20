@@ -149,8 +149,7 @@ TEST(CompileMlirUtil, CanonicalizationIsExplicitDuringInlining) {
   OpPassManager pass_manager;
   llvm::StringRef device_type = "XLA_CPU_JIT";
   absl::string_view kInlinePass =
-      "inline{default-pipeline=canonicalize "
-      "inlining-threshold=4294967295 max-iterations=4 }";
+      "inline{default-pipeline=canonicalize max-iterations=4 }";
 
   CreateConvertMlirToXlaHloPipeline(pass_manager, device_type,
                                     /*enable_op_fallback=*/true,

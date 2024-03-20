@@ -16,9 +16,10 @@ limitations under the License.
 #include "tensorflow/lite/delegates/gpu/common/model_builder_helper.h"
 
 #include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
-#include <cstdint>
-#include <cstring>
+#include <any>
 #include <limits>
 #include <string>
 #include <vector>
@@ -256,32 +257,34 @@ void ConvertFloat16ToFloat32(size_t num_elements, const uint16_t* src,
 }
 
 template <>
-absl::Status CreateVectorCopyData<float>(const TfLiteTensor& src, float* dst) {
-  switch (src.type) {
+absl::Status CreateVectorCopyData<float>(const TfLiteTensor& tensor,
+                                         float* tensor_data) {
+  switch (tensor.type) {
     case kTfLiteFloat32:
-      std::memcpy(dst, src.data.f, src.bytes);
-      return absl::OkStatus();
+      std::memcpy(tensor_data, tensor.data.f, tensor.bytes);
+      break;
     case kTfLiteFloat16:
-      ConvertFloat16ToFloat32(NumElements(&src),
-                              reinterpret_cast<uint16_t const*>(src.data.f16),
-                              dst);
-      return absl::OkStatus();
+      ConvertFloat16ToFloat32(
+          NumElements(&tensor),
+          reinterpret_cast<uint16_t const*>(tensor.data.f16), tensor_data);
+      break;
     case kTfLiteInt8:
-      DequantizeConstantTensor(src, src.data.int8, dst);
-      return absl::OkStatus();
+      DequantizeConstantTensor(tensor, tensor.data.int8, tensor_data);
+      break;
     case kTfLiteUInt8:
-      DequantizeConstantTensor(src, src.data.uint8, dst);
-      return absl::OkStatus();
+      DequantizeConstantTensor(tensor, tensor.data.uint8, tensor_data);
+      break;
     case kTfLiteInt32:
-      DequantizeConstantTensor(src, src.data.i32, dst);
-      return absl::OkStatus();
+      DequantizeConstantTensor(tensor, tensor.data.i32, tensor_data);
+      break;
     default:
       return absl::InvalidArgumentError(
           "Unsupported data type for float32 tensor");
   }
+  return absl::OkStatus();
 }
 
-std::string GetDimensionString(const TfLiteIntArray* dimensions) {
+const std::string GetDimensionString(const TfLiteIntArray* dimensions) {
   return absl::StrJoin(TfLiteIntArrayView(dimensions), "x");
 }
 

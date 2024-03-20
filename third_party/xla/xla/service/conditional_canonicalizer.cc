@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ Status CanonicalizeNonTupleConditional(HloInstruction* conditional) {
 }
 }  // namespace
 
-absl::StatusOr<bool> ConditionalCanonicalizer::Run(
+StatusOr<bool> ConditionalCanonicalizer::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   XLA_VLOG_LINES(

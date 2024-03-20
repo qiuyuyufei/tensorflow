@@ -6,7 +6,6 @@ package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         ":friends",
-        "//tensorflow/tools/pip_package:__subpackages__",
     ],
     licenses = ["notice"],
 )
@@ -54,6 +53,5 @@ py_strict_test(
     python_version = "PY3",
     deps = [
         ":stablehlo",
-        #internal proto upb dep
     ],
 )

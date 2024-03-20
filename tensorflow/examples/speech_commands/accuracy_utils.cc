@@ -52,7 +52,7 @@ Status ReadGroundTruthFile(const string& file_name,
                const std::pair<string, int64>& right) {
               return left.second < right.second;
             });
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void CalculateAccuracyStats(

@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,12 +17,7 @@ limitations under the License.
 #define XLA_SERVICE_GPU_CUSOLVER_CONTEXT_H_
 
 #include <complex>
-#include <cstdint>
 #include <memory>
-#include <type_traits>
-
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
 
 #define TENSORFLOW_USE_HIPSOLVER \
   (TENSORFLOW_USE_ROCM && (TF_ROCM_VERSION >= 40500))
@@ -47,6 +42,7 @@ using gpusolverHandle_t = rocblas_handle;
 #endif  // TF_ROCM_VERSION >= 40500
 #endif  // TENSORFLOW_USE_ROCM
 
+#include "xla/statusor.h"
 #include "xla/stream_executor/blas.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/xla_data.pb.h"
@@ -58,44 +54,27 @@ namespace se = ::stream_executor;
 
 class GpuSolverContext {
  public:
-  static absl::StatusOr<GpuSolverContext> Create();
+  static StatusOr<GpuSolverContext> Create();
 
-  absl::Status SetStream(se::Stream* stream);
+  Status SetStream(se::Stream* stream);
 
   // Computes the Cholesky factorization of multiple matrices.  See
   // https://docs.nvidia.com/cuda/cusolver/index.html#cuSolverDN-lt-t-gt-batchpotrf
   //
   // `as` is a list of pointers to the batch_size individual n x n matricies
   // that make up the input array.
-  absl::Status PotrfBatched(se::blas::UpperLower uplo, int n,
-                            se::DeviceMemory<float*> as, int lda,
-                            se::DeviceMemory<int> lapack_info, int batch_size);
-  absl::Status PotrfBatched(se::blas::UpperLower uplo, int n,
-                            se::DeviceMemory<double*> as, int lda,
-                            se::DeviceMemory<int> lapack_info, int batch_size);
-  absl::Status PotrfBatched(se::blas::UpperLower uplo, int n,
-                            se::DeviceMemory<std::complex<float>*> as, int lda,
-                            se::DeviceMemory<int> lapack_info, int batch_size);
-  absl::Status PotrfBatched(se::blas::UpperLower uplo, int n,
-                            se::DeviceMemory<std::complex<double>*> as, int lda,
-                            se::DeviceMemory<int> lapack_info, int batch_size);
-
-  absl::Status Potrf(se::blas::UpperLower uplo, int n,
-                     se::DeviceMemory<float> a, int lda,
-                     se::DeviceMemory<int> lapack_info,
-                     se::DeviceMemory<float> workspace);
-  absl::Status Potrf(se::blas::UpperLower uplo, int n,
-                     se::DeviceMemory<double> a, int lda,
-                     se::DeviceMemory<int> lapack_info,
-                     se::DeviceMemory<double> workspace);
-  absl::Status Potrf(se::blas::UpperLower uplo, int n,
-                     se::DeviceMemory<std::complex<float>> a, int lda,
-                     se::DeviceMemory<int> lapack_info,
-                     se::DeviceMemory<std::complex<float>> workspace);
-  absl::Status Potrf(se::blas::UpperLower uplo, int n,
-                     se::DeviceMemory<std::complex<double>> a, int lda,
-                     se::DeviceMemory<int> lapack_info,
-                     se::DeviceMemory<std::complex<double>> workspace);
+  Status PotrfBatched(se::blas::UpperLower uplo, int n,
+                      se::DeviceMemory<float*> as, int lda,
+                      se::DeviceMemory<int> lapack_info, int batch_size);
+  Status PotrfBatched(se::blas::UpperLower uplo, int n,
+                      se::DeviceMemory<double*> as, int lda,
+                      se::DeviceMemory<int> lapack_info, int batch_size);
+  Status PotrfBatched(se::blas::UpperLower uplo, int n,
+                      se::DeviceMemory<std::complex<float>*> as, int lda,
+                      se::DeviceMemory<int> lapack_info, int batch_size);
+  Status PotrfBatched(se::blas::UpperLower uplo, int n,
+                      se::DeviceMemory<std::complex<double>*> as, int lda,
+                      se::DeviceMemory<int> lapack_info, int batch_size);
 
   // Returns the max size of the `workspace` required by Potrf and PotrfBatched,
   // in number of elements of `type`.
@@ -111,9 +90,9 @@ class GpuSolverContext {
   //
   // In practice, this does not result in a notable increase in scratch space
   // needed, because both cases require a relatively small amount of scratch.
-  absl::StatusOr<int64_t> PotrfBufferSize(PrimitiveType type,
-                                          se::blas::UpperLower uplo, int n,
-                                          int lda, int batch_size);
+  StatusOr<int64_t> PotrfBufferSize(PrimitiveType type,
+                                    se::blas::UpperLower uplo, int n, int lda,
+                                    int batch_size);
 
  private:
   explicit GpuSolverContext(gpusolverHandle_t handle);

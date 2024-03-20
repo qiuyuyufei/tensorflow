@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -91,9 +91,6 @@ class LRUCache {
 
   int Size() const { return entries_.size(); }
   int Capacity() const { return lru_list_->Capacity(); }
-
-  auto begin() const { return entries_.begin(); }
-  auto end() const { return entries_.end(); }
 
  private:
   LRUList* lru_list_;

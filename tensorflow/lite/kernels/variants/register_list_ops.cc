@@ -32,7 +32,6 @@ void RegisterListOps(MutableOpResolver* resolver) {
   resolver->AddCustom("TensorListPopBack", Register_LIST_POP_BACK());
   resolver->AddCustom("TensorListPushBack", Register_LIST_PUSH_BACK());
   resolver->AddCustom("VariantAddN", Register_VARIANT_ADD_N());
-  resolver->AddCustom("VariantZerosLike", Register_VARIANT_ZEROS_LIKE());
 }
 
 }  // namespace ops

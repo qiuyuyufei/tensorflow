@@ -98,7 +98,7 @@ static Status ValidateGraphDefForDevices(const GraphDef& gdef) {
                                      FormatNodeDefForError(ndef));
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status GraphMgr::DecorateAndPublishGraphForDebug(
@@ -108,7 +108,7 @@ Status GraphMgr::DecorateAndPublishGraphForDebug(
       DebugGraphDecoratorRegistry::CreateDecorator(debug_options, &decorator));
   TF_RETURN_IF_ERROR(decorator->DecorateGraph(graph, device));
   TF_RETURN_IF_ERROR(decorator->PublishGraph(*graph, device->name()));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Creates executors given a graph definition "gdef" of a "session".
@@ -130,7 +130,6 @@ Status GraphMgr::InitItem(const string& handle, const GraphDef& gdef,
                           DistributedFunctionLibraryRuntime* cluster_flr,
                           Item* item) {
   item->session = handle;
-  item->session_config = config_proto;
   item->collective_graph_key = collective_graph_key;
   item->lib_def.reset(
       new FunctionLibraryDefinition(OpRegistry::Global(), gdef.library()));
@@ -151,7 +150,7 @@ Status GraphMgr::InitItem(const string& handle, const GraphDef& gdef,
                 this->worker_env_->rendezvous_mgr->Find(step_id);
             TF_RETURN_IF_ERROR(remote_r->Initialize(session));
             *r = std::move(remote_r);
-            return absl::OkStatus();
+            return OkStatus();
           }}));
 
   // Constructs the graph out of "gdef".
@@ -289,7 +288,7 @@ Status GraphMgr::InitItem(const string& handle, const GraphDef& gdef,
     }
     TF_RETURN_IF_ERROR(NewLocalExecutor(params, *unit->graph, &unit->root));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status GraphMgr::Register(const string& handle, const GraphDef& gdef,
@@ -315,7 +314,7 @@ Status GraphMgr::Register(const string& handle, const GraphDef& gdef,
     item->handle = *graph_handle;
     CHECK(table_.insert({*graph_handle, item}).second);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status GraphMgr::Deregister(const string& handle) {
@@ -332,7 +331,7 @@ Status GraphMgr::Deregister(const string& handle) {
     table_.erase(iter);
   }
   item->Unref();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status GraphMgr::DeregisterAll() {
@@ -348,7 +347,7 @@ Status GraphMgr::DeregisterAll() {
   for (auto item : items) {
     item->Unref();
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status GraphMgr::SendInputs(const int64_t step_id, const NamedTensors& in) {
@@ -539,7 +538,6 @@ void GraphMgr::StartParallelExecutors(
   args.rendezvous = rendezvous;
   args.collective_executor = ce_handle ? ce_handle->get() : nullptr;
   args.cancellation_manager = cancellation_manager;
-  args.session_config = &item->session_config;
   args.stats_collector = collector;
   args.step_container = step_container;
   args.sync_on_finish = sync_on_finish_;

@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,20 +15,15 @@ limitations under the License.
 
 #include "xla/service/gpu/copy_fusion.h"
 
-#include <cstdint>
 #include <queue>
 #include <vector>
 
-#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/gpu/gpu_fusible.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/reduction_utils.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/logging.h"
 
 namespace xla {
 namespace gpu {
@@ -58,7 +53,7 @@ bool OnlyElementwiseOpsReachableFromParams(HloComputation* fused_computation) {
   return true;
 }
 
-absl::StatusOr<bool> CopyFusion::DoCopyFusion(HloComputation* computation) {
+StatusOr<bool> CopyFusion::DoCopyFusion(HloComputation* computation) {
   bool changed = false;
   std::vector<HloInstruction*> defs_before_uses =
       computation->MakeInstructionPostOrder();
@@ -179,7 +174,7 @@ absl::StatusOr<bool> CopyFusion::DoCopyFusion(HloComputation* computation) {
   return changed;
 }
 
-absl::StatusOr<bool> CopyFusion::Run(
+StatusOr<bool> CopyFusion::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   // Only for the entry computation we can be sure that the copies do not share

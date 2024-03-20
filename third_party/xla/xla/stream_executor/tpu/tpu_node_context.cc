@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ limitations under the License.
 namespace tensorflow {
 namespace tpu {
 
-using absl::StatusOr;
+using tsl::StatusOr;
 
 /*static*/
 StatusOr<std::unique_ptr<TpuNodeContext>> TpuNodeContext::Create(
@@ -46,7 +46,7 @@ TpuNodeContext::~TpuNodeContext() {
 }
 
 /* static */
-absl::Status TpuNodeContext::CloseTpuHost() {
+tsl::Status TpuNodeContext::CloseTpuHost() {
   StatusHelper status;
   stream_executor::tpu::OpsApiFn()->TpuNodeContext_CloseTpuHostFn(
       status.c_status);
@@ -54,7 +54,7 @@ absl::Status TpuNodeContext::CloseTpuHost() {
 }
 
 /* static */
-absl::Status TpuNodeContext::Initialize(int device_ordinal) {
+tsl::Status TpuNodeContext::Initialize(int device_ordinal) {
   StatusHelper status;
   stream_executor::tpu::OpsApiFn()->TpuNodeContext_InitializeFn(
       device_ordinal, status.c_status);

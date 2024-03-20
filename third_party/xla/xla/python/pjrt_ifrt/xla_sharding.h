@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ limitations under the License.
 #include <vector>
 
 #include "xla/python/ifrt/memory.h"
-#include "xla/python/ifrt/shape.h"
 #include "xla/python/ifrt/sharding.h"
 
 namespace xla {
@@ -57,13 +56,10 @@ class HloSharding final
 
   ~HloSharding() override = default;
 
-  absl::StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
+  StatusOr<std::vector<std::pair<Shape, std::shared_ptr<const Sharding>>>>
   Disassemble(const Shape& shape) const override;
-  absl::StatusOr<
-      std::vector<std::pair<DynamicShape, std::shared_ptr<const Sharding>>>>
-  Disassemble(const DynamicShape& dynamic_shape) const override;
 
-  absl::StatusOr<std::vector<IndexDomain>> IndexDomains(
+  StatusOr<std::vector<IndexDomain>> IndexDomains(
       const Shape& shape) const override;
 
   std::string DebugString() const override;

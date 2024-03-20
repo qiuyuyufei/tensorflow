@@ -91,7 +91,7 @@ Status InitConv2DParameters(const OpKernelConstruction* context,
   TF_RETURN_IF_ERROR(CheckValidPadding(
       params->padding, params->explicit_paddings, num_dims, data_format));
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status ComputeConv2DDimension(const Conv2DParameters& params,
@@ -210,7 +210,7 @@ Status ComputeConv2DDimension(const Conv2DParameters& params,
   dimensions->pad_cols_before = pad_cols_before;
   dimensions->pad_cols_after = pad_cols_after;
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 #undef TF_REQUIRES

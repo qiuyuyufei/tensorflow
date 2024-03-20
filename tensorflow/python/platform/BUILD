@@ -91,6 +91,8 @@ py_strict_library(
         "@absl_py//absl:app",
         "@absl_py//absl/testing:absltest",
         "//tensorflow/python/framework:errors",
+        "//tensorflow/python/lib/io:lib",
+        "//tensorflow/python/util:tf_decorator",
         "//tensorflow/python/util:tf_inspect",
     ]),
 )
@@ -224,7 +226,6 @@ py_strict_library(
         "//tensorflow_models:__subpackages__",
         "//third_party/cloud_tpu/convergence_tools:__subpackages__",
         "//third_party/mlperf:__subpackages__",
-        "//third_party/proto_splitter:__subpackages__",  # TODO(b/277279227): remove this dep from proto_splitter
         "//third_party/py/tf_slim:__subpackages__",
     ],
     deps = [
@@ -325,9 +326,8 @@ py_strict_library(
 py_strict_library(
     name = "flags",
     srcs = ["flags.py"],
-    visibility = ["//visibility:public"],
     deps = [
-        "//tensorflow/python/util:tf_decorator_py",
+        "//tensorflow/python/util:tf_decorator",
         "@absl_py//absl/flags",
     ],
 )
@@ -347,7 +347,10 @@ py_strict_library(
 tf_py_strict_test(
     name = "build_info_test",
     size = "small",
-    srcs = ["build_info_test.py"],
+    srcs = [
+        "build_info.py",
+        "build_info_test.py",
+    ],
     main = "build_info_test.py",
     python_version = "PY3",
     tags = [
@@ -364,16 +367,26 @@ tf_py_strict_test(
 tf_py_strict_test(
     name = "benchmark_test",
     size = "small",
-    srcs = ["benchmark_test.py"],
+    srcs = [
+        "benchmark.py",
+        "benchmark_test.py",
+    ],
     main = "benchmark_test.py",
     python_version = "PY3",
     tags = [
         "no_pip",
     ],
     deps = [
-        ":benchmark",
         ":client_testlib",
+        ":gfile",
+        ":tf_logging",
         "//tensorflow/core:protos_all_py",
+        "//tensorflow/python/client",
+        "//tensorflow/python/client:timeline",
+        "//tensorflow/python/framework:ops",
+        "//tensorflow/python/util:tf_export",
+        "//tensorflow/python/util:tf_inspect",
+        "@absl_py//absl:app",
     ],
 )
 

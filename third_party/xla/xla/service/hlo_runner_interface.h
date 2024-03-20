@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -90,38 +90,37 @@ class HloRunnerInterface {
 
   // Converts an HloModule from the given hlo textual IR string (in
   // HloModule::ToString format).
-  static absl::StatusOr<std::unique_ptr<HloModule>> CreateModuleFromString(
+  static StatusOr<std::unique_ptr<HloModule>> CreateModuleFromString(
       const absl::string_view hlo_string, const DebugOptions& debug_options);
 
   // Reads the proto file in xla.HloProto format, creates and returns the
   // HloModule.
-  static absl::StatusOr<std::unique_ptr<HloModule>>
-  ReadModuleFromBinaryProtoFile(const std::string& filename,
-                                const DebugOptions& debug_options);
-  static absl::StatusOr<std::unique_ptr<HloModule>> ReadModuleFromTextProtoFile(
+  static StatusOr<std::unique_ptr<HloModule>> ReadModuleFromBinaryProtoFile(
+      const std::string& filename, const DebugOptions& debug_options);
+  static StatusOr<std::unique_ptr<HloModule>> ReadModuleFromTextProtoFile(
       const std::string& filename, const DebugOptions& debug_options);
 
   // Reads the proto file in xla.HloModule format, creates and returns the
   // HloModule.
-  static absl::StatusOr<std::unique_ptr<HloModule>>
+  static StatusOr<std::unique_ptr<HloModule>>
   ReadModuleFromModuleBinaryProtofile(const std::string& filename,
                                       const DebugOptions& debug_options);
 
   // Reads the hlo text dump file in HloModule::ToString format, creates and
   // returns the HloModule.
-  static absl::StatusOr<std::unique_ptr<HloModule>> ReadModuleFromHloTextFile(
+  static StatusOr<std::unique_ptr<HloModule>> ReadModuleFromHloTextFile(
       const std::string& filename, const DebugOptions& debug_options);
 
   // Creates an executable object given an HLO module. If run_hlo_passes is
   // true, the HLO passes will be run as part of compilation.
-  virtual absl::StatusOr<std::unique_ptr<Executable>> CreateExecutable(
+  virtual StatusOr<std::unique_ptr<Executable>> CreateExecutable(
       std::unique_ptr<HloModule> module, bool run_hlo_passes) = 0;
 
   // Same as above, except it takes buffer assignment as input.
   // Note: The default implementation of the API here does not utilize the given
   // buffer assignment. A derived runner interface is expected to override the
   // following method to achieve this functionality.
-  virtual absl::StatusOr<std::unique_ptr<Executable>>
+  virtual StatusOr<std::unique_ptr<Executable>>
   CreateExecutableWithBufferAssignment(
       std::unique_ptr<HloModule> module,
       const BufferAssignmentProto* /*buffer_assignment_proto*/,
@@ -135,24 +134,24 @@ class HloRunnerInterface {
   //
   // If run_hlo_passes is false, the module will be executed without Hlo
   // optimization
-  absl::StatusOr<Literal> Execute(std::unique_ptr<HloModule> module,
-                                  absl::Span<const Literal* const> arguments,
-                                  bool run_hlo_passes = true) {
+  StatusOr<Literal> Execute(std::unique_ptr<HloModule> module,
+                            absl::Span<const Literal* const> arguments,
+                            bool run_hlo_passes = true) {
     return Execute(std::move(module), arguments, run_hlo_passes, nullptr);
   }
 
-  absl::StatusOr<Literal> Execute(std::unique_ptr<HloModule> module,
-                                  absl::Span<const Literal> arguments,
-                                  bool run_hlo_passes = true,
-                                  ExecutionProfile* profile = nullptr);
+  StatusOr<Literal> Execute(std::unique_ptr<HloModule> module,
+                            absl::Span<const Literal> arguments,
+                            bool run_hlo_passes = true,
+                            ExecutionProfile* profile = nullptr);
 
-  virtual absl::StatusOr<Literal> Execute(
-      std::unique_ptr<HloModule> module,
-      absl::Span<const Literal* const> arguments, bool run_hlo_passes,
-      ExecutionProfile* profile) = 0;
+  virtual StatusOr<Literal> Execute(std::unique_ptr<HloModule> module,
+                                    absl::Span<const Literal* const> arguments,
+                                    bool run_hlo_passes,
+                                    ExecutionProfile* profile) = 0;
 
   // Same as above 3 methods, but with buffer assignment specified.
-  absl::StatusOr<Literal> ExecuteWithBufferAssignment(
+  StatusOr<Literal> ExecuteWithBufferAssignment(
       std::unique_ptr<HloModule> module,
       const BufferAssignmentProto* buffer_assignment_proto,
       absl::Span<const Literal* const> arguments, bool run_hlo_passes = true) {
@@ -161,7 +160,7 @@ class HloRunnerInterface {
                                        run_hlo_passes, nullptr);
   }
 
-  absl::StatusOr<Literal> ExecuteWithBufferAssignment(
+  StatusOr<Literal> ExecuteWithBufferAssignment(
       std::unique_ptr<HloModule> module,
       const BufferAssignmentProto* buffer_assignment_proto,
       absl::Span<const Literal> arguments, bool run_hlo_passes = true,
@@ -170,7 +169,7 @@ class HloRunnerInterface {
   // Note: The default implementation of the API here does not utilize the given
   // buffer assignment. A derived runner interface is expected to override the
   // following method to achieve this functionality.
-  virtual absl::StatusOr<Literal> ExecuteWithBufferAssignment(
+  virtual StatusOr<Literal> ExecuteWithBufferAssignment(
       std::unique_ptr<HloModule> module,
       const BufferAssignmentProto* /*buffer_assignment_proto*/,
       absl::Span<const Literal* const> arguments, bool run_hlo_passes,
@@ -180,16 +179,16 @@ class HloRunnerInterface {
   }
 
   // Same as 3 Execute methods above, but with Executable as input.
-  absl::StatusOr<Literal> ExecuteWithExecutable(
-      Executable* executable, absl::Span<const Literal> arguments,
-      ExecutionProfile* profile = nullptr);
+  StatusOr<Literal> ExecuteWithExecutable(Executable* executable,
+                                          absl::Span<const Literal> arguments,
+                                          ExecutionProfile* profile = nullptr);
 
-  absl::StatusOr<Literal> ExecuteWithExecutable(
+  StatusOr<Literal> ExecuteWithExecutable(
       Executable* executable, absl::Span<const Literal* const> arguments) {
     return ExecuteWithExecutable(executable, arguments, nullptr);
   }
 
-  virtual absl::StatusOr<Literal> ExecuteWithExecutable(
+  virtual StatusOr<Literal> ExecuteWithExecutable(
       Executable* executable, absl::Span<const Literal* const> arguments,
       ExecutionProfile* profile) = 0;
 
@@ -197,17 +196,17 @@ class HloRunnerInterface {
   // with the replica number as key, and the corresponding returned literal as
   // value.
   // TODO(b/172931928): change to non-virtual function.
-  virtual absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  virtual StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::unique_ptr<HloModule> module,
       const ReplicatedExecuteOptions& options) = 0;
 
   // Same as above, but with specified device assignment.
-  virtual absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  virtual StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::unique_ptr<HloModule> module,
       const ReplicatedExecuteOptions& options,
       DeviceAssignment* device_assignment) = 0;
 
-  virtual absl::StatusOr<std::vector<Literal>> ExecuteReplicated(
+  virtual StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::function<Executable*(int64_t)> executable_provider,
       std::function<int64_t(int64_t)> argument_count_provider,
       std::function<const Literal*(int64_t, int64_t)> argument_provider,

@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -129,9 +129,6 @@ std::optional<MovableCluster> FindMovableClusterAtBodyRoot(
       }
     }
   }
-  if (cluster.collective_permute == nullptr) {
-    return std::nullopt;
-  }
   return cluster;
 }
 
@@ -151,8 +148,8 @@ absl::flat_hash_set<int64_t> FindIndicesUnusedAfterLoop(HloInstruction* loop) {
   return indices;
 }
 
-absl::StatusOr<bool> MoveCollectivePermutes(HloComputation* computation,
-                                            HloInstruction* loop) {
+StatusOr<bool> MoveCollectivePermutes(HloComputation* computation,
+                                      HloInstruction* loop) {
   HloComputation* body = loop->while_body();
   HloInstruction* root = body->root_instruction();
   if (root->opcode() != HloOpcode::kTuple ||
@@ -298,7 +295,7 @@ absl::StatusOr<bool> MoveCollectivePermutes(HloComputation* computation,
   return changed;
 }
 
-absl::StatusOr<bool> CollectivePermuteMotion::Run(
+StatusOr<bool> CollectivePermuteMotion::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

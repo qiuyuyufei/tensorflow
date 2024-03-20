@@ -44,7 +44,7 @@ class PyRecordReader {
     auto tmp = new PyRecordReader(filename, compression_type);
     TF_RETURN_IF_ERROR(tmp->Reopen());
     *out = tmp;
-    return absl::OkStatus();
+    return ::tensorflow::OkStatus();
   }
 
   PyRecordReader() = delete;
@@ -80,7 +80,7 @@ class PyRecordReader {
         tensorflow::Env::Default()->NewRandomAccessFile(filename_, &file_));
     reader_ =
         std::make_unique<tensorflow::io::RecordReader>(file_.get(), options_);
-    return absl::OkStatus();
+    return ::tensorflow::OkStatus();
   }
 
  private:
@@ -126,7 +126,7 @@ class PyRecordRandomReader {
     auto reader =
         std::make_unique<tensorflow::io::RecordReader>(file.get(), options);
     *out = new PyRecordRandomReader(std::move(file), std::move(reader));
-    return absl::OkStatus();
+    return ::tensorflow::OkStatus();
   }
 
   PyRecordRandomReader() = delete;
@@ -174,7 +174,7 @@ class PyRecordWriter {
     auto writer =
         std::make_unique<tensorflow::io::RecordWriter>(file.get(), options);
     *out = new PyRecordWriter(std::move(file), std::move(writer));
-    return absl::OkStatus();
+    return ::tensorflow::OkStatus();
   }
 
   PyRecordWriter() = delete;
@@ -214,7 +214,7 @@ class PyRecordWriter {
       file_ = nullptr;
       if (!status.ok()) return status;
     }
-    return absl::OkStatus();
+    return ::tensorflow::OkStatus();
   }
 
  private:

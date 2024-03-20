@@ -1,44 +1,30 @@
-load("//xla:lit.bzl", "enforce_glob", "lit_test_suite")
+load("@local_tsl//tsl:tsl.default.bzl", "filegroup")
+load("//xla:glob_lit_test.bzl", "glob_lit_tests")
 
 package(
+    default_visibility = ["//visibility:public"],
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
 
-lit_test_suite(
+glob_lit_tests(
     name = "all_tests",
-    srcs = enforce_glob(
-        [
-            "bool_compare.hlotxt",
-            "case_conditional.hlotxt",
-            "custom_call.hlotxt",
-            "dynamic_param.hlo",
-            "entry_computation_layout.hlotxt",
-            "frontend_attributes.hlotxt",
-            "fully_connected_reference_model.hlotxt",
-            "fusion.hlotxt",
-            "if_conditional.hlotxt",
-            "import.hlotxt",
-            "import_async.hlotxt",
-            "layouts_and_names.hlotxt",
-            "location.hlotxt",
-            "module_attributes.hlo",
-            "send_recv.hlotxt",
-            "simple.hlo",
-            "spmd_module_sharding.hlo",
-            "stacktrace_to_location.hlo",
-            "types.hlotxt",
-            "while.hlotxt",
-        ],
-        include = [
-            "*.hlotxt",
-            "*.hlo",
-        ],
-    ),
-    cfg = "//xla:lit.cfg.py",
-    tools = [
+    data = [":test_utilities"],
+    driver = "@llvm-project//mlir:run_lit.sh",
+    test_file_exts = [
+        "hlo",
+        "hlotxt",
+    ],
+)
+
+# Bundle together all of the test utilities that are used by tests.
+filegroup(
+    name = "test_utilities",
+    testonly = True,
+    data = [
         "//xla/translate:xla-translate",
         "@llvm-project//llvm:FileCheck",
         "@llvm-project//llvm:not",
     ],
+    visibility = ["//visibility:public"],
 )

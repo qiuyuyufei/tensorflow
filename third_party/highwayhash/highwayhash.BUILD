@@ -286,7 +286,6 @@ cc_library(
         ":hh_portable",
         ":hh_types",
     ] + select({
-        ":cpu_ppc": [":hh_vsx"],
         ":cpu_aarch64": [":hh_neon"],
         "//conditions:default": [
             ":hh_avx2",

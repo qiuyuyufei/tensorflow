@@ -247,14 +247,11 @@ OpMetricsDb ConvertDeviceTraceXPlaneToOpMetricsDb(const XPlane& device_trace) {
 
       absl::string_view tf_op_full_name;
       bool is_eager = false;
-      int64_t program_id = 0;
       event.ForEachStat([&](const XStatVisitor& stat) {
         if (stat.Type() == StatType::kTfOp) {
           tf_op_full_name = stat.StrOrRefValue();
         } else if (stat.Type() == StatType::kIsEager) {
           is_eager = stat.IntValue();
-        } else if (stat.Type() == StatType::kProgramId) {
-          program_id = stat.IntOrUintValue();
         }
       });
       if (tf_op_full_name.empty()) return;
@@ -265,9 +262,8 @@ OpMetricsDb ConvertDeviceTraceXPlaneToOpMetricsDb(const XPlane& device_trace) {
         costs = op_level_cost_estimator.Predict(event);
       }
       device_op_metrics_db_builder.EnterOp(
-          /*program_id=*/program_id,
-          absl::StrCat(tf_op.name, "/", event.Name()), tf_op.type,
-          tf_op_full_name, is_eager,
+          /*program_id=*/0, absl::StrCat(tf_op.name, "/", event.Name()),
+          tf_op.type, tf_op_full_name, is_eager,
           /*occurrences=*/1, event.DurationPs(),
           /*children_time_ps=*/0, costs.flops, costs.bytes_accessed);
     });

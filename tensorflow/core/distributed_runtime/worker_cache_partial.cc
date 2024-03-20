@@ -51,7 +51,7 @@ void WorkerCachePartial::GetDeviceLocalityAsync(const string& device_name,
     });
     return;
   }
-  done(absl::OkStatus());
+  done(OkStatus());
 }
 
 Status WorkerCachePartial::RefreshDeviceStatus(const string& device_name) {

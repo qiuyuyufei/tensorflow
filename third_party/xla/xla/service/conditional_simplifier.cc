@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ bool ComputationIsEmptyWithArrayRoot(const HloComputation* computation) {
   return empty_operations && contains_array;
 }
 
-absl::StatusOr<bool> TryRemoveUnusedConditionalOperands(
+StatusOr<bool> TryRemoveUnusedConditionalOperands(
     HloComputation* computation,
     const absl::flat_hash_set<HloInstruction*>& calling_conditionals) {
   HloInstruction* param = computation->parameter_instruction(0);
@@ -439,7 +439,7 @@ bool MergeDuplicateTupleElements(HloInstruction* conditional) {
 // inline that computation.
 //
 // Returns true if it made a change to the graph.
-absl::StatusOr<bool> ConditionalSimplifier::TryRemoveConditional(
+StatusOr<bool> ConditionalSimplifier::TryRemoveConditional(
     HloInstruction* conditional) {
   CHECK_EQ(conditional->opcode(), HloOpcode::kConditional);
   // Do not remove conditionals that contain side-effecting instructions or
@@ -601,7 +601,7 @@ static bool InstructionCallsChannelInstructions(
   return false;
 }
 
-absl::StatusOr<bool> ConditionalSimplifier::Run(
+StatusOr<bool> ConditionalSimplifier::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   XLA_VLOG_LINES(

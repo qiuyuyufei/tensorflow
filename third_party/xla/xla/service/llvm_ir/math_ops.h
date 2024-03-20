@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,14 +23,8 @@ namespace xla {
 namespace llvm_ir {
 
 // Emits an approximation of tanh. The implementation uses the same rational
-// interpolant as implemented in Eigen3. 'with_fma' should be set to true if FMA
-// instructions are available.
-llvm::Value* EmitFastTanh(llvm::IRBuilder<>* b, llvm::Value* input,
-                          bool with_fma = false);
-
-// Emits an approximation of erf. The implementation uses the same rational
 // interpolant as implemented in Eigen3.
-llvm::Value* EmitErfF32(llvm::IRBuilder<>* b, llvm::Value* x);
+llvm::Value* EmitFastTanh(llvm::IRBuilder<>* b, llvm::Value* input);
 
 }  // namespace llvm_ir
 }  // namespace xla

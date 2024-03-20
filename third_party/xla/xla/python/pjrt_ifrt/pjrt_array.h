@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,14 +19,12 @@ limitations under the License.
 #include <memory>
 #include <optional>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "absl/container/inlined_vector.h"
 #include "llvm/Support/ExtensibleRTTI.h"
 #include "xla/python/ifrt/array.h"
 #include "xla/python/ifrt/client.h"
-#include "xla/python/ifrt/shape.h"
 #include "xla/python/pjrt_ifrt/pjrt_client.h"
 #include "tsl/concurrency/ref_count.h"
 
@@ -34,10 +32,10 @@ namespace xla {
 namespace ifrt {
 
 // Converts IFRT `DType` into `xla::PrimitiveType`.
-absl::StatusOr<xla::PrimitiveType> ToPrimitiveType(DType dtype);
+StatusOr<xla::PrimitiveType> ToPrimitiveType(DType dtype);
 
 // Converts `xla::PrimitiveType` into IFRT `DType`.
-absl::StatusOr<DType> ToDType(xla::PrimitiveType primitive_type);
+StatusOr<DType> ToDType(xla::PrimitiveType primitive_type);
 
 // Creates IFRT `MemoryKind` from an XLA `PjRtBuffer`.
 MemoryKind MakeMemoryKindFromPjRtBuffer(PjRtBuffer* pjrt_buffer);
@@ -48,7 +46,7 @@ class PjRtCompatibleArray
  public:
   // APIs that allow direct access to `PjRtBuffer` for PjRt-only operations.
   virtual absl::Span<const std::shared_ptr<PjRtBuffer>> pjrt_buffers() = 0;
-  virtual absl::StatusOr<absl::Span<std::shared_ptr<PjRtBuffer>>>
+  virtual StatusOr<absl::Span<std::shared_ptr<PjRtBuffer>>>
   mutable_pjrt_buffers() = 0;
 
   static char ID;  // NOLINT
@@ -62,31 +60,20 @@ class PjRtArray final
   using PjRtBuffers =
       absl::InlinedVector<std::shared_ptr<PjRtBuffer>, kPjRtBufferInlineSize>;
 
-  // General array construction (with static shape).
-  static absl::StatusOr<tsl::RCReference<PjRtArray>> Create(
+  // General array construction.
+  static StatusOr<tsl::RCReference<PjRtArray>> Create(
       PjRtCompatibleClient* client, DType dtype, Shape shape,
       std::shared_ptr<const Sharding> sharding, PjRtBuffers pjrt_buffers);
 
-  // General array construction (with dynamic shape).
-  static absl::StatusOr<tsl::RCReference<PjRtArray>> Create(
-      PjRtCompatibleClient* client, DType dtype, DynamicShape dynamic_shape,
-      std::shared_ptr<const Sharding> sharding, PjRtBuffers pjrt_buffers);
-
   // Shorthand for a single-shard array construction.
-  static absl::StatusOr<tsl::RCReference<PjRtArray>> Create(
+  static StatusOr<tsl::RCReference<PjRtArray>> Create(
       PjRtCompatibleClient* client, std::shared_ptr<PjRtBuffer> pjrt_buffer);
 
   // Shorthand for a multi-shard array construction using ConcreteSharding.
   // TODO(hyeontaek): Remove this once IFRT Sharding and JAX Sharding is unified
   // so that ConcreteSharding can be replaced with a real Sharding.
-  static absl::StatusOr<tsl::RCReference<PjRtArray>> Create(
+  static StatusOr<tsl::RCReference<PjRtArray>> Create(
       PjRtCompatibleClient* client, Shape shape, PjRtBuffers pjrt_buffers);
-
-  // Shorthand for a multi-shard array construction using ConcreteSharding with
-  // DynamicShape.
-  static absl::StatusOr<tsl::RCReference<PjRtArray>> Create(
-      PjRtCompatibleClient* client, DynamicShape dynamic_shape,
-      PjRtBuffers pjrt_buffers);
 
   // PjRtCompatibleArray implementation.
 
@@ -94,13 +81,13 @@ class PjRtArray final
     DCHECK(this);
     return pjrt_buffers_;
   }
-  absl::StatusOr<absl::Span<std::shared_ptr<PjRtBuffer>>> mutable_pjrt_buffers()
+  StatusOr<absl::Span<std::shared_ptr<PjRtBuffer>>> mutable_pjrt_buffers()
       override {
     DCHECK(this);
     return absl::MakeSpan(pjrt_buffers_);
   }
 
-  absl::StatusOr<tsl::RCReference<Array>> FullyReplicatedShard(
+  StatusOr<tsl::RCReference<Array>> FullyReplicatedShard(
       ArrayCopySemantics semantics) override;
 
   // Array implementation.
@@ -116,27 +103,10 @@ class PjRtArray final
     DCHECK(this);
     return dtype_;
   }
-
-  bool has_dynamic_shape() const {
-    DCHECK(this);
-    return std::holds_alternative<DynamicShape>(shape_);
-  }
-
-  bool has_static_shape() const {
-    DCHECK(this);
-    return std::holds_alternative<Shape>(shape_);
-  }
-
   const Shape& shape() const override {
-    DCHECK(has_static_shape());
-    return std::get<Shape>(shape_);
+    DCHECK(this);
+    return shape_;
   }
-
-  const DynamicShape& dynamic_shape() const {
-    DCHECK(has_dynamic_shape());
-    return std::get<DynamicShape>(shape_);
-  }
-
   const Sharding& sharding() const override {
     DCHECK(this);
     return *sharding_;
@@ -146,7 +116,7 @@ class PjRtArray final
     return sharding_;
   }
 
-  absl::StatusOr<std::vector<tsl::RCReference<Array>>>
+  StatusOr<std::vector<tsl::RCReference<Array>>>
   DisassembleIntoSingleDeviceArrays(ArrayCopySemantics semantics) override;
 
   ABSL_MUST_USE_RESULT
@@ -154,7 +124,7 @@ class PjRtArray final
       void* data, std::optional<absl::Span<const int64_t>> byte_strides,
       ArrayCopySemantics semantics) override;
 
-  absl::StatusOr<tsl::RCReference<Array>> Reshard(
+  StatusOr<tsl::RCReference<Array>> Reshard(
       std::shared_ptr<const Sharding> new_sharding,
       ArrayCopySemantics semantics) override;
 
@@ -174,16 +144,12 @@ class PjRtArray final
   PjRtArray(PjRtCompatibleClient* client, DType dtype, Shape shape,
             std::shared_ptr<const Sharding> sharding, PjRtBuffers pjrt_buffers);
 
-  PjRtArray(PjRtCompatibleClient* client, DType dtype,
-            DynamicShape dynamic_shape,
-            std::shared_ptr<const Sharding> sharding, PjRtBuffers pjrt_buffers);
-
   template <typename T, typename... Args>
   friend tsl::RCReference<T> tsl::MakeRef(Args&&... args);
 
   PjRtCompatibleClient* client_;
   DType dtype_;
-  std::variant<Shape, DynamicShape> shape_;
+  Shape shape_;
   std::shared_ptr<const Sharding> sharding_;
   PjRtBuffers pjrt_buffers_;
 };

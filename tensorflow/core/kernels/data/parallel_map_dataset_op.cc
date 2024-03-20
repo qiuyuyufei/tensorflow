@@ -21,7 +21,6 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "absl/status/status.h"
 #include "tensorflow/core/common_runtime/function.h"
 #include "tensorflow/core/common_runtime/input_colocation_exemption_registry.h"
 #include "tensorflow/core/data/dataset_utils.h"
@@ -106,10 +105,6 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
         captured_func_(std::move(captured_func)),
         op_version_(op_version) {
     input_->Ref();
-    random_indexing_compatible_ = absl::OkStatus();
-    if (input_ != nullptr) {
-      random_indexing_compatible_ = input_->RandomIndexingCompatible();
-    }
   }
 
   ~Dataset() override { input_->Unref(); }
@@ -158,16 +153,12 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
 
   Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
     inputs->push_back(input_);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status CheckExternalState() const override {
     TF_RETURN_IF_ERROR(captured_func_->CheckExternalState());
     return input_->CheckExternalState();
-  }
-
-  absl::Status RandomIndexingCompatible() const override {
-    return random_indexing_compatible_;
   }
 
  protected:
@@ -234,7 +225,7 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
          std::make_pair(2, num_parallel_calls)},  // Single tensor inputs.
         {std::make_pair(1, other_arguments)},     // Tensor list inputs.
         attrs, output));
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -283,7 +274,7 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
       if (ctx->warm_start() && !ctx->is_restoring()) {
         EnsureThreadsStarted(ctx);
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status GetNextInternal(IteratorContext* ctx,
@@ -327,7 +318,7 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
       TF_RETURN_IF_ERROR(ctx->HandleCheckExternalStateStatus(
           dataset()->captured_func_->CheckExternalState()));
       if (ctx->symbolic_checkpoint()) {
-        return absl::OkStatus();
+        return OkStatus();
       }
       mutex_lock l(*mu_);
       // Wait for all in-flight calls to complete.
@@ -359,20 +350,16 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
             writer->WriteScalar(element_prefix, kEndOfInput,
                                 static_cast<int64_t>(result.end_of_input)));
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status RestoreInternal(IteratorContext* ctx,
                            IteratorStateReader* reader) override {
-      if (ctx->restored_element_count().has_value()) {
-        return RestoreInput(ctx, reader, input_impl_);
-      }
-
       mutex_lock l(*mu_);
       TF_RETURN_IF_ERROR(RestoreInput(ctx, reader, input_impl_));
       DCHECK(invocation_results_.empty());
       if (ctx->symbolic_checkpoint()) {
-        return absl::OkStatus();
+        return OkStatus();
       }
       int64_t invocation_results_size;
       TF_RETURN_IF_ERROR(reader->ReadScalar(
@@ -410,7 +397,7 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
         RecordBufferEnqueue(ctx, result.return_values);
         result.notification.Notify();
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     TraceMeMetadata GetTraceMeMetadata() const override {
@@ -504,9 +491,7 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
       }
 
       auto done = [this, ctx, result](Status status) {
-        if (!status.ok()) {
-          result->status = AddErrorContext(status);
-        }
+        result->status.Update(status);
         RecordBufferEnqueue(ctx.get(), result->return_values);
         CallCompleted(ctx, result);
       };
@@ -554,7 +539,7 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
         *out_tensors = std::move(result->return_values);
         RecordBufferDequeue(ctx, *out_tensors);
         *end_of_sequence = false;
-        return absl::OkStatus();
+        return OkStatus();
       }
       if (errors::IsOutOfRange(result->status)) {
         if (preserve_cardinality_) {
@@ -568,7 +553,7 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
           // `f` may deliberately raise `errors::OutOfRange` to indicate
           // that we should terminate the iteration early.
           *end_of_sequence = true;
-          return absl::OkStatus();
+          return OkStatus();
         }
       }
       *end_of_sequence = result->end_of_input;
@@ -687,7 +672,7 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
                                                absl::StrCat("_", kErrorMessage),
                                                std::string(status.message())));
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status ReadStatusLocked(IteratorStateReader* reader,
@@ -704,9 +689,9 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
             prefix, absl::StrCat("_", kErrorMessage), &error_message));
         *status = Status(code, error_message);
       } else {
-        *status = absl::OkStatus();
+        *status = OkStatus();
       }
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     // Used for coordination between the main thread and the runner thread.
@@ -759,7 +744,6 @@ class ParallelMapDatasetOp::Dataset : public DatasetBase {
   // This is used for random access provided by Get().
   mutable std::unique_ptr<InstantiatedCapturedFunction>
       instantiated_captured_func_;
-  absl::Status random_indexing_compatible_;
 };
 
 ParallelMapDatasetOp::ParallelMapDatasetOp(OpKernelConstruction* ctx)

@@ -240,7 +240,7 @@ class SGD(_Optimizer):
       clip_weight_min: Optional[float] = None,
       clip_weight_max: Optional[float] = None,
       weight_decay_factor: Optional[float] = None,
-      multiply_weight_decay_factor_by_learning_rate: Optional[bool] = None,
+      multiply_weight_decay_factor_by_learning_rate: bool = None,
       clipvalue: Optional[ClipValueType] = None,
       low_dimensional_packing_status: bool = False,
   ):
@@ -357,7 +357,7 @@ class Adagrad(_Optimizer):
       clip_weight_min: Optional[float] = None,
       clip_weight_max: Optional[float] = None,
       weight_decay_factor: Optional[float] = None,
-      multiply_weight_decay_factor_by_learning_rate: Optional[bool] = None,
+      multiply_weight_decay_factor_by_learning_rate: bool = None,
       slot_variable_creation_fn: Optional[SlotVarCreationFnType] = None,
       clipvalue: Optional[ClipValueType] = None,
       low_dimensional_packing_status: bool = False,
@@ -490,7 +490,7 @@ class AdagradMomentum(_Optimizer):
       clip_weight_min: Optional[float] = None,
       clip_weight_max: Optional[float] = None,
       weight_decay_factor: Optional[float] = None,
-      multiply_weight_decay_factor_by_learning_rate: Optional[bool] = None,
+      multiply_weight_decay_factor_by_learning_rate: bool = None,
       slot_variable_creation_fn: Optional[SlotVarCreationFnType] = None,
       clipvalue: Optional[ClipValueType] = None,
       low_dimensional_packing_status: bool = False,
@@ -640,7 +640,7 @@ class FTRL(_Optimizer):
       clip_weight_min: Optional[float] = None,
       clip_weight_max: Optional[float] = None,
       weight_decay_factor: Optional[float] = None,
-      multiply_weight_decay_factor_by_learning_rate: Optional[bool] = None,
+      multiply_weight_decay_factor_by_learning_rate: bool = None,
       slot_variable_creation_fn: Optional[SlotVarCreationFnType] = None,
       clipvalue: Optional[ClipValueType] = None,
       multiply_linear_by_learning_rate: bool = False,
@@ -815,7 +815,7 @@ class Adam(_Optimizer):
       clip_weight_min: Optional[float] = None,
       clip_weight_max: Optional[float] = None,
       weight_decay_factor: Optional[float] = None,
-      multiply_weight_decay_factor_by_learning_rate: Optional[bool] = None,
+      multiply_weight_decay_factor_by_learning_rate: bool = None,
       slot_variable_creation_fn: Optional[SlotVarCreationFnType] = None,
       clipvalue: Optional[ClipValueType] = None,
       low_dimensional_packing_status: bool = False,
@@ -1277,6 +1277,11 @@ class FeatureConfig:
       raise ValueError(
           f"Argument `max_sequence_length` must be an int and must be >= 0. "
           f"Received: {max_sequence_length}")
+    if name is None:
+      logging.warning(
+          "Name of the Feature config must be specified for running on"
+          " SparseCore. Different feature configs must have unique names."
+      )
 
     self.table = table
     self.max_sequence_length = max_sequence_length

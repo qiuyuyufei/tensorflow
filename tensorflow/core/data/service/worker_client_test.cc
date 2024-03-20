@@ -106,8 +106,7 @@ class WorkerClientTest : public ::testing::Test {
     DataTransferServerInfo info;
     info.set_address(GetWorkerAddress());
     info.set_protocol(data_transfer_protocol);
-    return CreateDataServiceWorkerClient(kProtocol, info,
-                                         /*allocator=*/nullptr);
+    return CreateDataServiceWorkerClient(kProtocol, info);
   }
 
   StatusOr<GetElementResult> GetElement(DataServiceWorkerClient& client,

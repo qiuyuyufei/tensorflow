@@ -148,7 +148,7 @@ Status CheckConvAttrs(const ConvOpAttrs& attrs) {
                                    attrs.dilations[input_dim]);
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Wrapper around ConvBackpropComputeDimensions that converts from XLA shapes
@@ -181,9 +181,8 @@ std::vector<DataType> GetXlaConvTypesForGpu() {
   return {DT_FLOAT, DT_BFLOAT16, DT_HALF, DT_DOUBLE};
 }
 
-absl::StatusOr<ConvOpAttrs> ConvOpAttrs::Create(int num_spatial_dims,
-                                                bool depthwise,
-                                                OpKernelConstruction* ctx) {
+StatusOr<ConvOpAttrs> ConvOpAttrs::Create(int num_spatial_dims, bool depthwise,
+                                          OpKernelConstruction* ctx) {
   ConvOpAttrs attrs;
   attrs.num_spatial_dims = num_spatial_dims;
   attrs.depthwise = depthwise;
@@ -208,7 +207,7 @@ absl::StatusOr<ConvOpAttrs> ConvOpAttrs::Create(int num_spatial_dims,
   return attrs;
 }
 
-absl::StatusOr<ConvNDOpAttrs> ConvNDOpAttrs::Create(OpKernelConstruction* ctx) {
+StatusOr<ConvNDOpAttrs> ConvNDOpAttrs::Create(OpKernelConstruction* ctx) {
   ConvNDOpAttrs attrs;
   TF_RETURN_IF_ERROR(ctx->GetAttr("groups", &attrs.groups));
   TF_RETURN_IF_ERROR(ctx->GetAttr("batch_dims", &attrs.batch_dims));
@@ -236,10 +235,10 @@ absl::StatusOr<ConvNDOpAttrs> ConvNDOpAttrs::Create(OpKernelConstruction* ctx) {
   return attrs;
 }
 
-absl::StatusOr<xla::XlaOp> MakeXlaForwardConvOp(StringPiece /*type_string*/,
-                                                xla::XlaOp conv_input,
-                                                xla::XlaOp filter,
-                                                const ConvOpAttrs& attrs) {
+StatusOr<xla::XlaOp> MakeXlaForwardConvOp(StringPiece /*type_string*/,
+                                          xla::XlaOp conv_input,
+                                          xla::XlaOp filter,
+                                          const ConvOpAttrs& attrs) {
   TF_RETURN_IF_ERROR(CheckConvAttrs(attrs));
 
   auto* builder = conv_input.builder();
@@ -345,10 +344,12 @@ absl::StatusOr<xla::XlaOp> MakeXlaForwardConvOp(StringPiece /*type_string*/,
       /*batch_group_count=*/1, &precision_config);
 }
 
-absl::StatusOr<xla::XlaOp> MakeXlaBackpropInputConvOp(
-    StringPiece type_string, const xla::Shape& input_shape, xla::XlaOp filter,
-    xla::XlaOp out_backprop, const ConvOpAttrs& attrs,
-    xla::XlaOp* input_sizes) {
+StatusOr<xla::XlaOp> MakeXlaBackpropInputConvOp(StringPiece type_string,
+                                                const xla::Shape& input_shape,
+                                                xla::XlaOp filter,
+                                                xla::XlaOp out_backprop,
+                                                const ConvOpAttrs& attrs,
+                                                xla::XlaOp* input_sizes) {
   TF_RETURN_IF_ERROR(CheckConvAttrs(attrs));
 
   int num_dims = attrs.num_spatial_dims + 2;
@@ -444,10 +445,11 @@ absl::StatusOr<xla::XlaOp> MakeXlaBackpropInputConvOp(
                                  /*batch_group_count=*/1, &precision_config);
 }
 
-absl::StatusOr<xla::XlaOp> MakeXlaBackpropFilterConvOp(
-    StringPiece type_string, xla::XlaOp activations,
-    const xla::Shape& filter_shape, xla::XlaOp gradients,
-    const ConvOpAttrs& attrs) {
+StatusOr<xla::XlaOp> MakeXlaBackpropFilterConvOp(StringPiece type_string,
+                                                 xla::XlaOp activations,
+                                                 const xla::Shape& filter_shape,
+                                                 xla::XlaOp gradients,
+                                                 const ConvOpAttrs& attrs) {
   TF_RETURN_IF_ERROR(CheckConvAttrs(attrs));
 
   auto* builder = activations.builder();

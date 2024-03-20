@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,9 +20,8 @@ limitations under the License.
 #include <string>
 
 // placeholder for index annotation headers
-#include "absl/functional/function_ref.h"
-#include "absl/status/status.h"
-#include "third_party/nanobind/include/nanobind/nanobind.h"
+#include "pybind11/pybind11.h"  // from @pybind11
+#include "xla/status.h"
 
 namespace jax {
 
@@ -76,23 +75,23 @@ enum class TransferGuardAction {
 // Guards a host-to-device transfer. formatter is called to describe the
 // transfer in a log message or error status.
 // REQUIRES: Python GIL.
-absl::Status ApplyTransferGuardToHostToDevice(
+xla::Status ApplyTransferGuardToHostToDevice(
     absl::FunctionRef<std::string()> formatter);
 
 // Guards a device-to-device transfer. formatter is called to describe the
 // transfer in a log message or error status.
 // REQUIRES: Python GIL.
-absl::Status ApplyTransferGuardToDeviceToDevice(
+xla::Status ApplyTransferGuardToDeviceToDevice(
     absl::FunctionRef<std::string()> formatter);
 
 // Guards a device-to-host transfer. formatter is called to describe the
 // transfer in a log message or error status.
 // REQUIRES: Python GIL.
-absl::Status ApplyTransferGuardToDeviceToHost(
+xla::Status ApplyTransferGuardToDeviceToHost(
     absl::FunctionRef<std::string()> formatter);
 
 // The function to call in `xla.cc` to add the bindings for this module.
-void BuildTransferGuardSubmodule(nanobind::module_& m);
+void BuildTransferGuardSubmodule(pybind11::module& m);
 
 }  // namespace jax
 

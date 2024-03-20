@@ -219,11 +219,11 @@ struct LaunchLRN<GPUDevice, T> {
     auto* stream = context->op_device_context()->stream();
     OP_REQUIRES(context, stream, errors::Internal("No GPU stream available."));
 
-    auto dnn = stream->parent()->AsDnn();
-    OP_REQUIRES(context, dnn != nullptr,
-                absl::InternalError("No DNN support for stream."));
-    bool status = dnn->DoNormalizeWithDimensions(
-        stream, normalize_desc, dimensions_desc, input_data, &output_data);
+    bool status =
+        stream
+            ->ThenNormalizeWithDimensions(normalize_desc, dimensions_desc,
+                                          input_data, &output_data)
+            .ok();
     OP_REQUIRES(context, status,
                 errors::Internal("NormalizeWithDimensions launch failed"));
 #elif TENSORFLOW_USE_ROCM
@@ -279,12 +279,12 @@ struct LaunchLRN<GPUDevice, T> {
 
     auto* stream = context->op_device_context()->stream();
     OP_REQUIRES(context, stream, errors::Internal("No GPU stream available."));
-    auto dnn = stream->parent()->AsDnn();
-    OP_REQUIRES(context, dnn != nullptr,
-                absl::InternalError("No DNN support for stream."));
 
-    bool status = dnn->DoNormalizeWithDimensions(
-        stream, normalize_desc, dimensions_desc, input_data, &output_data);
+    bool status =
+        stream
+            ->ThenNormalizeWithDimensions(normalize_desc, dimensions_desc,
+                                          input_data, &output_data)
+            .ok();
     OP_REQUIRES(context, status,
                 errors::Internal("NormalizeWithDimensions launch failed"));
 
@@ -517,13 +517,12 @@ struct LaunchLRNGrad<GPUDevice, T> {
     auto* stream = context->op_device_context()->stream();
     OP_REQUIRES(context, stream, errors::Internal("No GPU stream available."));
 
-    auto dnn = stream->parent()->AsDnn();
-    OP_REQUIRES(context, dnn != nullptr,
-                absl::InternalError("No DNN support for stream."));
-    bool status = dnn->DoNormalizeBackwardWithDimensions(
-        stream, normalize_desc, dimensions_desc, input_image_data,
-        output_image_data, input_grads_data, &output_grads_data,
-        /*workspace_allocator=*/nullptr);
+    bool status =
+        stream
+            ->ThenNormalizeBackwardWithDimensions(
+                normalize_desc, dimensions_desc, input_image_data,
+                output_image_data, input_grads_data, &output_grads_data)
+            .ok();
     OP_REQUIRES(
         context, status,
         errors::Internal("NormalizeBackwardWithDimensions launch failed"));
@@ -617,13 +616,12 @@ struct LaunchLRNGrad<GPUDevice, T> {
 
     DnnScratchAllocator scratch_allocator(NormalizeBackwardScratchSize,
                                           context);
-    auto dnn = stream->parent()->AsDnn();
-    OP_REQUIRES(context, dnn != nullptr,
-                absl::InternalError("No DNN support for stream."));
-    bool status = dnn->DoNormalizeBackwardWithDimensions(
-        stream, normalize_desc, dimensions_desc, input_image_data,
-        output_image_data, input_grads_data, &output_grads_data,
-        /*workspace_allocator=*/nullptr, &scratch_allocator);
+    bool status = stream
+                      ->ThenNormalizeBackwardWithDimensions(
+                          normalize_desc, dimensions_desc, input_image_data,
+                          output_image_data, input_grads_data,
+                          &output_grads_data, &scratch_allocator)
+                      .ok();
     OP_REQUIRES(
         context, status,
         errors::Internal("NormalizeBackwardWithDimensions launch failed"));

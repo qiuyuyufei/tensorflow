@@ -51,7 +51,7 @@ Status TensorShapeFromTensor(const Tensor& t, PartialTensorShape* out) {
     if ((t.dtype() == DT_INT32 && t.scalar<int32>()() == -1) ||
         (t.dtype() == DT_INT64 && t.scalar<int64_t>()() == -1)) {
       *out = PartialTensorShape();
-      return absl::OkStatus();
+      return OkStatus();
     }
     return errors::InvalidArgument(
         "The only valid scalar shape tensor is the fully unknown shape "
@@ -80,7 +80,7 @@ Status GetElementShapeFromInput(OpKernelContext* c,
   // compatible and store the merged shape in `element_shape`.
   PartialTensorShape tmp = *element_shape;
   TF_RETURN_IF_ERROR(tmp.MergeWith(tensor_list.element_shape, element_shape));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status GetInputList(OpKernelContext* c, int index, const TensorList** list) {
@@ -95,7 +95,7 @@ Status GetInputList(OpKernelContext* c, int index, const TensorList** list) {
         c->input(index).scalar<Variant>()().DebugString(), "'");
   }
   *list = l;
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status ForwardInputOrCreateNewList(OpKernelContext* c, int32_t input_index,
@@ -120,7 +120,7 @@ Status ForwardInputOrCreateNewList(OpKernelContext* c, int32_t input_index,
       // Woohoo, forwarding succeeded!
       c->set_output(output_index, *output_tensor);
       *output_list = tmp_out;
-      return absl::OkStatus();
+      return OkStatus();
     }
   }
 
@@ -133,7 +133,7 @@ Status ForwardInputOrCreateNewList(OpKernelContext* c, int32_t input_index,
   output_tensor->scalar<Variant>()() = input_list.Copy();
 
   *output_list = output_tensor->scalar<Variant>()().get<TensorList>();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 class EmptyTensorList : public OpKernel {
@@ -710,7 +710,7 @@ static Status TensorListDeviceCopy(
       TF_RETURN_IF_ERROR(copy(t, &to->tensors().back()));
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 #define REGISTER_LIST_COPY(DIRECTION)                                         \

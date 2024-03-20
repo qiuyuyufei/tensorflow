@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@ namespace xla {
 // Example:
 //   input: indices = tensor<4x2x3xi32>, index_vector_dim = 1
 //   output: tensor<12x2xi32>
-absl::StatusOr<HloInstruction*> TransformStartIndices(HloInstruction* indices,
-                                                      int64_t index_vector_dim);
+StatusOr<HloInstruction*> TransformStartIndices(HloInstruction* indices,
+                                                int64_t index_vector_dim);
 
 // Given a map from index vector positions to dimension numbers, returns a pair
 // of permutations that when applied to the operand, let you replace the map
@@ -40,18 +40,17 @@ absl::StatusOr<HloInstruction*> TransformStartIndices(HloInstruction* indices,
 std::pair<std::vector<int64_t>, std::vector<int64_t>>
 MakeOperandStartIndexPermutations(absl::Span<const int64_t>, int operand_rank);
 
-absl::StatusOr<HloInstruction*> MaybeTranspose(
-    HloInstruction* operand, absl::Span<const int64_t> permutation);
+StatusOr<HloInstruction*> MaybeTranspose(HloInstruction* operand,
+                                         absl::Span<const int64_t> permutation);
 
-absl::StatusOr<std::vector<HloInstruction*>> MaybeTranspose(
+StatusOr<std::vector<HloInstruction*>> MaybeTranspose(
     absl::Span<HloInstruction* const> operands,
     const std::vector<int64_t>& operand_permutation);
 
 // Moves the given dimension to the last dimension.
 // Example: MoveDimensionToEnd(tensor<1x2x3xi1>, 0): tensor<2x3x1xi1>.
-absl::StatusOr<HloInstruction*> MoveDimensionToEnd(HloInstruction* operand,
-                                                   size_t dimension,
-                                                   size_t rank);
+StatusOr<HloInstruction*> MoveDimensionToEnd(HloInstruction* operand,
+                                             size_t dimension, size_t rank);
 
 }  // namespace xla
 

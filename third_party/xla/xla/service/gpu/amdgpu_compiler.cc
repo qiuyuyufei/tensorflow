@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,54 +14,70 @@ limitations under the License.
 ==============================================================================*/
 #include "xla/service/gpu/amdgpu_compiler.h"
 
-#include <cstdint>
-#include <utility>
+#include <memory>
+#include <optional>
 #include <vector>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "llvm/IR/Module.h"
-#include "xla/hlo/ir/hlo_computation.h"
-#include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/algebraic_simplifier.h"
 #include "xla/service/call_inliner.h"
-#include "xla/service/convert_mover.h"
-#include "xla/service/dot_dimension_merger.h"
-#include "xla/service/gpu/autotuner_util.h"
 #include "xla/service/gpu/conv_algorithm_picker.h"
-#include "xla/service/gpu/cublas_pad_for_gemms.h"
-#include "xla/service/gpu/cublas_padding_requirements.h"
 #include "xla/service/gpu/cusolver_rewriter.h"
-#include "xla/service/gpu/gemm_algorithm_picker.h"
-#include "xla/service/gpu/gpu_compiler.h"
+#include "xla/service/gpu/gemm_rewriter.h"
 #include "xla/service/gpu/gpu_conv_padding_legalization.h"
 #include "xla/service/gpu/gpu_conv_rewriter.h"
-#include "xla/service/gpu/gpu_sort_rewriter.h"
+#include "xla/service/gpu/gpu_layout_assignment.h"
 #include "xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h"
+#include "xla/service/gpu/reduction_degenerate_dim_remover.h"
+#include "xla/service/gpu/reduction_dimension_grouper.h"
+#include "xla/service/gpu/reduction_layout_normalizer.h"
 #include "xla/service/gpu/target_constants.h"
+#include "xla/service/gpu/tree_reduction_rewriter.h"
 #include "xla/service/gpu/triangular_solve_rewriter.h"
 #include "xla/service/hlo_constant_folding.h"
-#include "xla/service/hlo_module_config.h"
+#include "xla/service/hlo_cse.h"
 #include "xla/service/hlo_pass_fix.h"
 #include "xla/service/hlo_pass_pipeline.h"
 #include "xla/service/hlo_verifier.h"
-#include "xla/service/reshape_mover.h"
+#include "xla/service/llvm_ir/llvm_util.h"
 #include "xla/service/tuple_simplifier.h"
-#include "xla/stream_executor/device_description.h"
-#include "xla/stream_executor/device_memory_allocator.h"
-#include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/rocm/rocm_platform_id.h"
-#include "xla/stream_executor/stream_executor_pimpl.h"
-#include "xla/util.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/statusor.h"
-#include "tsl/platform/threadpool.h"
+#include "tsl/platform/rocm_rocdl_path.h"
 
 namespace xla {
 namespace gpu {
 
-absl::Status AMDGPUCompiler::OptimizeHloConvolutionCanonicalization(
+namespace {
+
+// Returns the directory containing ROCm-Device-Libs files. This function is
+// called in AMDGPUCompiler's constructor, so can't return an error. But
+// AMDGPUCompiler::Compile will return an error when the wanted rocdl file
+// doesn't exist in the folder this function returns.
+std::string GetROCDLDir(const HloModuleConfig& config) {
+  std::vector<std::string> potential_rocdl_dirs;
+  const std::string datadir = config.debug_options().xla_gpu_cuda_data_dir();
+  if (!datadir.empty()) {
+    potential_rocdl_dirs.push_back(datadir);
+  }
+  potential_rocdl_dirs.push_back(tsl::RocdlRoot());
+
+  // Tries all potential ROCDL directories in the order they are inserted.
+  // Returns the first directory that exists in the file system.
+  for (const std::string& potential_rocdl_dir : potential_rocdl_dirs) {
+    if (tsl::Env::Default()->IsDirectory(potential_rocdl_dir).ok()) {
+      VLOG(2) << "Found ROCm-Device-Libs dir " << potential_rocdl_dir;
+      return potential_rocdl_dir;
+    }
+    VLOG(2) << "Unable to find potential ROCm-Device-Libs dir "
+            << potential_rocdl_dir;
+  }
+
+  // Last resort: maybe in the current folder.
+  return ".";
+}
+
+}  // namespace
+
+Status AMDGPUCompiler::OptimizeHloConvolutionCanonicalization(
     HloModule* hlo_module, se::GpuComputeCapability gpu_version,
     se::dnn::VersionInfo dnn_version,
     se::DeviceMemoryAllocator* device_allocator) {
@@ -84,67 +100,27 @@ absl::Status AMDGPUCompiler::OptimizeHloConvolutionCanonicalization(
   // tf2xla bridge, DepthwiseConvolutionConverter and GpuConvRewriter
   // introduces reshapes and transposes that can be eliminated using
   // AlgebraicSimplifier  We run algsimp to a fixed point.
-  AlgebraicSimplifierOptions options =
-      GetAlgebraicSimplifierOptions(hlo_module->config());
+  AlgebraicSimplifierOptions options;
   options.set_enable_conv_operand_swap(false);
   options.set_enable_unconditional_reduce_of_concat_replacement(false);
   pipeline.AddPass<HloPassFix<AlgebraicSimplifier>>(options);
 
-  // tf2xla bridge, DepthwiseConvolutionConverter, GpuConvRewriter, and
-  // CudnnSimplifyPadding introduce reshapes and transposes.  Run ReshapeMover
-  // to a fixed point.  Include algsimp because ReshapeMover relies on it.
-  [&, &pipeline = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-          "reshape_mover_after_conv_canonicalization")] {
-    ReshapeMoverOptions reshape_mover_options;
-    reshape_mover_options.reshape_of_1d_broadcast_is_cheap = true;
-    pipeline.AddPass<HloPassFix<ReshapeMover>>(reshape_mover_options);
-    pipeline.AddPass<AlgebraicSimplifier>(options);
-  }();
-
-  // The reshapes and transposes can possibly be eliminated using
-  // AlgebraicSimplifier. ConvertMover and ReshapeMover fight with each other.
-  // ConvertMover wants to move some converts down the graph, but ReshapeMover
-  // wants to move them up the graph. We run ConvertMover and algsimp to a fixed
-  // point.
-  [&, &pipeline = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-          "simplify_after_conv_canonicalization")] {
-    pipeline.AddPass<ConvertMover>();
-    pipeline.AddPass<AlgebraicSimplifier>(options);
-  }();
-
-  // GpuConvRewriter, GpuConvPaddingLegalization and
-  // CudnnConvPadForTensorCores may add instructions which can be simplified
-  // by constant folding.
   pipeline.AddPass<HloConstantFolding>();
   TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::Status AMDGPUCompiler::OptimizeHloPostLayoutAssignment(
+Status AMDGPUCompiler::OptimizeHloPostLayoutAssignment(
     HloModule* hlo_module, se::StreamExecutor* stream_exec,
-    const CompileOptions& options, const TargetConfig& gpu_target_config,
+    const CompileOptions& options, const GpuTargetConfig& gpu_target_config,
+    const AutotuneResults* autotune_results,
     tsl::thread::ThreadPool* thread_pool) {
-  HloPassPipeline pre_pipeline("AMDGPU post-layout_assignment part 1");
-
-  auto rocm_compute_capability = std::get<se::RocmComputeCapability>(
-      gpu_target_config.device_description.gpu_compute_capability());
-
-  pre_pipeline.AddPass<DotDimensionMerger>();
-
-  for (const auto& req : HipblasPaddingRequirements) {
-    pre_pipeline.AddPass<CublasPadForGemms>(rocm_compute_capability,
-                                            req.data_type, req.multiple_of);
-  }
-  // Padding a gemm operand that's a constant results in pad(constant).  Run
-  // constant-folding to simplify this into a new constant.
-  pre_pipeline.AddPass<HloConstantFolding>();
-  TF_RETURN_IF_ERROR(pre_pipeline.Run(hlo_module).status());
-
   TF_RETURN_IF_ERROR(GpuCompiler::OptimizeHloPostLayoutAssignment(
-      hlo_module, stream_exec, options, gpu_target_config, thread_pool));
+      hlo_module, stream_exec, options, gpu_target_config, autotune_results,
+      thread_pool));
 
-  HloPassPipeline post_pipeline("AMDGPU post-layout_assignment part 2");
+  HloPassPipeline post_pipeline("AMDGPU post-layout_assignment");
 
   // Transform TriangularSolve ops into custom-calls, so we can add temp
   // memory.
@@ -152,7 +128,7 @@ absl::Status AMDGPUCompiler::OptimizeHloPostLayoutAssignment(
 
   TF_RETURN_IF_ERROR(post_pipeline.Run(hlo_module).status());
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Linearize collective schedule under if online autotuning of convolutions is
@@ -173,35 +149,33 @@ bool AMDGPUCompiler::RequiresCollectiveScheduleLinearizer(
   return false;
 }
 
-absl::Status AMDGPUCompiler::AddConvAndGemmAutotuningPasses(
+Status AMDGPUCompiler::AddConvAndGemmAutotuningPasses(
     HloPassPipeline* pipeline, HloModule* hlo_module,
     AutotuneConfig& autotune_config, tsl::thread::ThreadPool* thread_pool) {
   if (GpuConvAlgorithmPicker::IsEnabled(hlo_module)) {
     pipeline->AddPass<GpuConvAlgorithmPicker>(autotune_config);
   }
-  pipeline->AddPass<GemmAlgorithmPicker>(autotune_config);
-  return absl::OkStatus();
-}
-
-absl::Status AMDGPUCompiler::AddCustomKernelReplacementPasses(
-    HloPassPipeline* pipeline, const DebugOptions& debug_options) {
-  if (debug_options.xla_gpu_enable_cub_radix_sort()) {
-    pipeline->AddPass<GpuSortRewriter>();
-  }
-  return absl::OkStatus();
+  // TODO:
+  // pipeline->AddPass<GemmAlgorithmPicker>(autotune_config);
+  return OkStatus();
 }
 
 AMDGPUCompiler::AMDGPUCompiler()
     : GpuCompiler(stream_executor::rocm::kROCmPlatformId,
                   amdgpu::TargetTriple(), amdgpu::DataLayout()) {}
 
-absl::StatusOr<GpuCompiler::BackendCompileResult>
+StatusOr<std::pair<std::string, std::vector<uint8_t>>>
 AMDGPUCompiler::CompileTargetBinary(const HloModuleConfig& module_config,
                                     llvm::Module* llvm_module,
                                     se::GpuComputeCapability gpu_version,
                                     bool relocatable,
                                     const HloModule* debug_module,
                                     const CompileOptions& options) {
+  if (rocdl_dir_.empty()) {
+    // Compute rocdl_dir_ just once and cache it in this member.
+    rocdl_dir_ = GetROCDLDir(module_config);
+  }
+
   if (relocatable) {
     return Unimplemented("relocatable target binary is not implemented");
   }
@@ -215,11 +189,11 @@ AMDGPUCompiler::CompileTargetBinary(const HloModuleConfig& module_config,
         !options.is_autotuning_compilation);
     TF_ASSIGN_OR_RETURN(
         hsaco, amdgpu::CompileToHsaco(llvm_module, gpu_version,
-                                      module_config.debug_options(),
+                                      module_config.debug_options(), rocdl_dir_,
                                       module_config.compilation_cache_key()));
   }
 
-  return BackendCompileResult{"", std::move(hsaco)};
+  return std::pair<std::string, std::vector<uint8_t>>("", std::move(hsaco));
 }
 
 }  // namespace gpu

@@ -90,7 +90,7 @@ Status ToBool(gtl::ArraySlice<Tensor> t, bool* v) {
   } else {
     *v = t[0].NumElements() > 0;
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Sets "rets" to be the output of "ctx". Validates rets' types based
@@ -109,7 +109,7 @@ Status SetOutputs(const OpKernel* kernel, OpKernelContext* ctx,
     }
     ctx->set_output(i, rets[i]);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void SetRunOptions(OpKernelContext* ctx, FunctionLibraryRuntime::Options* opts,
@@ -263,7 +263,7 @@ class IfOp : public AsyncOpKernel {
                            tsl::core::WeakPtr<FunctionLibraryRuntime>(lib));
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 };
 
@@ -349,7 +349,7 @@ class CaseOp : public AsyncOpKernel {
       }
     }
     branch_handles.assign(handles.begin(), handles.end());
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   class State {
@@ -556,7 +556,7 @@ class WhileOp : public AsyncOpKernel {
     Status GetArg(int index, const Tensor** val) override {
       if (index < args_->size()) {
         *val = &(*args_)[index];
-        return absl::OkStatus();
+        return OkStatus();
       } else {
         return errors::InvalidArgument("Argument ", index, " is out of range.");
       }
@@ -586,7 +586,7 @@ class WhileOp : public AsyncOpKernel {
                                        DataTypeString(val.dtype()), ".");
       }
       (*retvals_)[index] = val;
-      return absl::OkStatus();
+      return OkStatus();
     }
 
    private:
@@ -665,7 +665,7 @@ class WhileOp : public AsyncOpKernel {
       }
 
       if (!cond) {
-        return Finish(absl::OkStatus());
+        return Finish(OkStatus());
       }
       rets_.clear();
       rets_.resize(args_.size());
@@ -790,7 +790,7 @@ class WhileOp : public AsyncOpKernel {
                            tsl::core::WeakPtr<FunctionLibraryRuntime>(lib));
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 };
 // TODO(drpng): remove these.
@@ -825,7 +825,7 @@ Status GetScalar(OpKernelContext* ctx, int index, int32* value,
                                    t.shape().DebugString());
   }
   *value = t.scalar<int32>()();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 class ForOp : public AsyncOpKernel {
@@ -895,7 +895,7 @@ class ForOp : public AsyncOpKernel {
             *body_handle, tsl::core::WeakPtr<FunctionLibraryRuntime>(lib));
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   class State {
@@ -953,7 +953,7 @@ class ForOp : public AsyncOpKernel {
           (delta_ < 0 && *iter_ >= limit_) ||
           (delta_ == 0 && *iter_ == limit_)) {
         RunNext();
-        return absl::OkStatus();
+        return OkStatus();
       } else {
         return errors::InvalidArgument("Invalid start/limit/delta: ", *iter_,
                                        " ", limit_, " ", delta_);
@@ -968,7 +968,7 @@ class ForOp : public AsyncOpKernel {
         done_loop = *iter_ <= limit_;
       }
       if (done_loop) {
-        Finish(absl::OkStatus());
+        Finish(OkStatus());
         return;
       }
 

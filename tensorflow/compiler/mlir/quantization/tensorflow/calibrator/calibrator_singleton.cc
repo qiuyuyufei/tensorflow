@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/mlir/quantization/tensorflow/calibrator/calibrator_singleton.h"
 
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -25,7 +24,6 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
-#include "tensorflow/compiler/mlir/quantization/stablehlo/quantization_config.pb.h"
 #include "tensorflow/compiler/mlir/quantization/tensorflow/calibrator/calibration_statistics.pb.h"
 #include "tensorflow/compiler/mlir/quantization/tensorflow/calibrator/calibration_statistics_collector_average_min_max.h"
 #include "tensorflow/compiler/mlir/quantization/tensorflow/calibrator/calibration_statistics_collector_histogram.h"
@@ -34,8 +32,6 @@ limitations under the License.
 
 namespace tensorflow {
 namespace calibrator {
-
-using ::stablehlo::quantization::CalibrationOptions;
 
 ABSL_CONST_INIT absl::Mutex CalibratorSingleton::lock_(absl::kConstInit);
 
@@ -109,11 +105,6 @@ std::optional<CalibrationStatistics> CalibratorSingleton::GetStatistics(
   }
 
   return instance.id_to_collector_[id_str]->GetStatistics();
-}
-
-int64_t CalibratorSingleton::IssueNewId() {
-  CalibratorSingleton& instance = GetInstance();
-  return instance.next_id_++;
 }
 
 void CalibratorSingleton::AssignIfNotExists(

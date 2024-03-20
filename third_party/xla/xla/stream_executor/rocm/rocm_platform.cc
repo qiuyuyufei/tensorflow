@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -72,7 +72,7 @@ int ROCmPlatform::DeviceToBus(int device_ordinal) {
   return exec->GetDeviceDescription().numa_node() - min_numa_node_;
 }
 
-absl::StatusOr<StreamExecutor*> ROCmPlatform::FirstExecutorForBus(
+tsl::StatusOr<StreamExecutor*> ROCmPlatform::FirstExecutorForBus(
     int bus_ordinal) {
   InspectNumaNodes();
   CHECK_LT(bus_ordinal, BusCount()) << "bus ordinal out of available range";
@@ -84,7 +84,7 @@ absl::StatusOr<StreamExecutor*> ROCmPlatform::FirstExecutorForBus(
     }
   }
 
-  return absl::Status{
+  return tsl::Status{
       absl::StatusCode::kNotFound,
       absl::StrFormat("Executor for bus %d not found.", bus_ordinal)};
 }
@@ -104,18 +104,19 @@ int ROCmPlatform::VisibleDeviceCount() const {
 
 const string& ROCmPlatform::Name() const { return name_; }
 
-absl::StatusOr<std::unique_ptr<DeviceDescription>>
+tsl::StatusOr<std::unique_ptr<DeviceDescription>>
 ROCmPlatform::DescriptionForDevice(int ordinal) const {
   return GpuExecutor::CreateDeviceDescription(ordinal);
 }
 
-absl::StatusOr<StreamExecutor*> ROCmPlatform::ExecutorForDevice(int ordinal) {
+tsl::StatusOr<StreamExecutor*> ROCmPlatform::ExecutorForDevice(int ordinal) {
   StreamExecutorConfig config;
   config.ordinal = ordinal;
+  config.device_options = DeviceOptions::Default();
   return GetExecutor(config);
 }
 
-absl::StatusOr<StreamExecutor*> ROCmPlatform::GetExecutor(
+tsl::StatusOr<StreamExecutor*> ROCmPlatform::GetExecutor(
     const StreamExecutorConfig& config) {
   if (config.gpu_stream) {
     // If the GPU stream was provided, it's not possible to get-or-create a
@@ -127,13 +128,13 @@ absl::StatusOr<StreamExecutor*> ROCmPlatform::GetExecutor(
       config, [&]() { return GetUncachedExecutor(config); });
 }
 
-absl::StatusOr<std::unique_ptr<StreamExecutor>>
+tsl::StatusOr<std::unique_ptr<StreamExecutor>>
 ROCmPlatform::GetUncachedExecutor(const StreamExecutorConfig& config) {
   auto executor = std::make_unique<StreamExecutor>(
       this, std::make_unique<GpuExecutor>(), config.ordinal);
-  auto init_status = executor->Init();
+  auto init_status = executor->Init(config.device_options);
   if (!init_status.ok()) {
-    return absl::Status{
+    return tsl::Status{
         absl::StatusCode::kInternal,
         absl::StrFormat(
             "failed initializing StreamExecutor for ROCM device ordinal %d: %s",
@@ -146,16 +147,21 @@ ROCmPlatform::GetUncachedExecutor(const StreamExecutorConfig& config) {
 }  // namespace gpu
 
 static void InitializeROCmPlatform() {
-  // Disabling leak checking, PlatformManager does not destroy its
+  // Disabling leak checking, MultiPlatformManager does not destroy its
   // registered platforms.
-  auto status = PlatformManager::PlatformWithName("ROCM");
+  auto status = MultiPlatformManager::PlatformWithName("ROCM");
   if (!status.ok()) {
     std::unique_ptr<gpu::ROCmPlatform> platform(new gpu::ROCmPlatform);
-    TF_CHECK_OK(PlatformManager::RegisterPlatform(std::move(platform)));
+    TF_CHECK_OK(MultiPlatformManager::RegisterPlatform(std::move(platform)));
   }
 }
 
 }  // namespace stream_executor
 
-STREAM_EXECUTOR_REGISTER_MODULE_INITIALIZER(
-    rocm_platform, stream_executor::InitializeROCmPlatform());
+REGISTER_MODULE_INITIALIZER(rocm_platform,
+                            stream_executor::InitializeROCmPlatform());
+
+DECLARE_MODULE_INITIALIZER(multi_platform_manager);
+// Note that module initialization sequencing is not supported in the
+// open-source project, so this will be a no-op there.
+REGISTER_MODULE_INITIALIZER_SEQUENCE(rocm_platform, multi_platform_manager);

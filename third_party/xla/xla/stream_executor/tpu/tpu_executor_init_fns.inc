@@ -1,7 +1,6 @@
 namespace {
 
-absl::Status SetExecutorStructFn(
-    void* library_handle) {  // TENSORFLOW_STATUS_OK
+tsl::Status SetExecutorStructFn(void* library_handle) {  // TENSORFLOW_STATUS_OK
   auto* executor_fn = stream_executor::tpu::ExecutorApiFn();
 
   TFTPU_SET_FN(executor_fn, TpuPlatform_New);
@@ -71,6 +70,8 @@ absl::Status SetExecutorStructFn(
   TFTPU_SET_FN(executor_fn, TpuDeviceDescription_Free);
 
   TFTPU_SET_FN(executor_fn, TpuExecutor_CreateDeviceDescription);
+  TFTPU_SET_FN(executor_fn, TpuExecutor_NewDeviceOptions);
+  TFTPU_SET_FN(executor_fn, TpuExecutor_FreeDeviceOptions);
   TFTPU_SET_FN(executor_fn, TpuExecutor_HostCallback);
 
   TFTPU_SET_FN(executor_fn, TpuTransferManager_New);
@@ -148,7 +149,7 @@ absl::Status SetExecutorStructFn(
   TFTPU_SET_FN(executor_fn, TpuAsyncCollectiveOffloadHelper_Init);
   TFTPU_SET_FN(executor_fn, TpuAsyncCollectiveOffloadHelper_Shutdown);
 
-  return absl::OkStatus();
+  return tsl::OkStatus();
 }
 
 }  // namespace

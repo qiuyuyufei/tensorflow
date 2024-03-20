@@ -65,10 +65,8 @@ class Gauge {
             std::is_same<ValueType, bool>::value ||
             std::is_same<ValueType, std::function<int64()> >::value ||
             std::is_same<ValueType, std::function<std::string()> >::value ||
-            std::is_same<ValueType, std::function<bool()> >::value ||
-            std::is_same<ValueType, std::function<double()> >::value ||
-            std::is_same<ValueType, double>::value,
-        "Gauge only allows bool, int64, double and string types.");
+            std::is_same<ValueType, std::function<bool()> >::value,
+        "Gauge only allows bool, int64, and string types.");
     return new Gauge();
   }
 
@@ -298,10 +296,8 @@ Gauge<ValueType, NumLabels>* Gauge<ValueType, NumLabels>::New(
           std::is_same<ValueType, bool>::value ||
           std::is_same<ValueType, std::function<int64_t()> >::value ||
           std::is_same<ValueType, std::function<std::string()> >::value ||
-          std::is_same<ValueType, std::function<bool()> >::value ||
-          std::is_same<ValueType, std::function<double()> >::value ||
-          std::is_same<ValueType, double>::value,
-      "Gauge only allows bool, int64, double, and string types.");
+          std::is_same<ValueType, std::function<bool()> >::value,
+      "Gauge only allows bool, int64, and string types.");
   return new Gauge<ValueType, NumLabels>(
       MetricDef<MetricKind::kGauge, ValueType, NumLabels>(
           std::forward<MetricDefArgs>(metric_def_args)...));

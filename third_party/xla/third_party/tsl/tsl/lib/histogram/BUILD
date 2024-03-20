@@ -1,15 +1,15 @@
-load("//tsl:tsl.bzl", "internal_visibility")
 load("//tsl:tsl.default.bzl", "filegroup")
 load(
     "//tsl/platform:build_config.bzl",
     "tsl_cc_test",
 )
 load(
-    "@local_tsl//tsl/platform:rules_cc.bzl",
+    "//tsl/platform:rules_cc.bzl",
     "cc_library",
 )
 
 package(
+    default_visibility = ["//visibility:public"],
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
@@ -18,11 +18,7 @@ cc_library(
     name = "histogram",
     srcs = ["histogram.cc"],
     hdrs = ["histogram.h"],
-    visibility = internal_visibility([
-        "//learning/brain/google/monitoring:__pkg__",
-        "//tensorflow/core/lib/histogram:__pkg__",
-        "//tsl/lib/monitoring:__pkg__",
-    ]),
+    visibility = ["//visibility:public"],
     deps = [
         "//tsl/platform:logging",
         "//tsl/platform:macros",
@@ -41,7 +37,7 @@ filegroup(
         "histogram.cc",
         "histogram.h",
     ],
-    visibility = internal_visibility(["//tensorflow/core/lib/histogram:__pkg__"]),
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -49,7 +45,7 @@ filegroup(
     srcs = [
         "histogram.h",
     ],
-    visibility = internal_visibility(["//tensorflow/core/lib/histogram:__pkg__"]),
+    visibility = ["//visibility:public"],
 )
 
 tsl_cc_test(
@@ -57,6 +53,7 @@ tsl_cc_test(
     srcs = [
         "histogram_test.cc",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":histogram",
         "//tsl/platform:logging",

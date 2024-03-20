@@ -3,6 +3,7 @@
 load("//tsl:tsl.default.bzl", "filegroup")
 
 package(
+    default_visibility = ["//visibility:public"],
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
@@ -12,7 +13,7 @@ filegroup(
     srcs = [
         "application_default_credentials.json",
     ],
-    visibility = ["//tsl/platform/cloud:__pkg__"],
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -20,7 +21,7 @@ filegroup(
     srcs = [
         "service_account_credentials.json",
     ],
-    visibility = ["//tsl/platform/cloud:__pkg__"],
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -28,5 +29,5 @@ filegroup(
     srcs = [
         "service_account_public_key.txt",
     ],
-    visibility = ["//tsl/platform/cloud:__pkg__"],
+    visibility = ["//visibility:public"],
 )

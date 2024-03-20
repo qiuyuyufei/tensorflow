@@ -86,9 +86,7 @@ class ConstantFoldingTest : public GrapplerTest {
       GrapplerItem item;
       TF_CHECK_OK(s.ToGraphDef(&item.graph));
       item.fetch = {"mul1", "mul2", "add1", "add2"};
-      // Use aggressive mode to force optimization of zero multiplication.
-      ConstantFolding optimizer(RewriterConfig::AGGRESSIVE,
-                                /*cpu_device=*/nullptr);
+      ConstantFolding optimizer(/*cpu_device=*/nullptr);
       GraphDef output;
       Status status = optimizer.Optimize(/*cluster=*/nullptr, item, &output);
       TF_EXPECT_OK(status);
@@ -831,9 +829,7 @@ TEST_F(ConstantFoldingTest, NeutralElement) {
     item.fetch = {"stack",      "matmul3",    "matmul4",   "mul1_bcast",
                   "mul2_bcast", "add1_bcast", "add2_bcast"};
 
-    // Use aggressive mode to force optimization of zero multiplication.
-    ConstantFolding optimizer(RewriterConfig::AGGRESSIVE,
-                              /*cpu_device=*/nullptr);
+    ConstantFolding optimizer(/*cpu_device=*/nullptr);
     GraphDef output;
     Status status = optimizer.Optimize(/*cluster=*/nullptr, item, &output);
     TF_EXPECT_OK(status);
@@ -1108,8 +1104,7 @@ TEST_F(ConstantFoldingTest, NeutralElement_PartialShape_UnknownOutputShape) {
   GrapplerItem item;
   TF_CHECK_OK(s.ToGraphDef(&item.graph));
 
-  // Use aggressive mode to force optimization of zero multiplication.
-  ConstantFolding optimizer(RewriterConfig::AGGRESSIVE, /*cpu_device=*/nullptr);
+  ConstantFolding optimizer(/*cpu_device=*/nullptr);
   GraphDef output;
   Status status = optimizer.Optimize(/*cluster=*/nullptr, item, &output);
   TF_EXPECT_OK(status);
@@ -1181,8 +1176,7 @@ TEST_F(ConstantFoldingTest, NeutralElement_PartialShape_KnownOutputShape) {
   GrapplerItem item;
   TF_CHECK_OK(s.ToGraphDef(&item.graph));
 
-  // Use aggressive mode to force optimization of zero multiplication.
-  ConstantFolding optimizer(RewriterConfig::AGGRESSIVE, /*cpu_device=*/nullptr);
+  ConstantFolding optimizer(/*cpu_device=*/nullptr);
   GraphDef output;
   Status status = optimizer.Optimize(/*cluster=*/nullptr, item, &output);
   TF_EXPECT_OK(status);

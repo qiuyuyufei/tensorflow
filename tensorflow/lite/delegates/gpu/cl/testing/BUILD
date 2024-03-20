@@ -1,5 +1,3 @@
-load("//tensorflow/lite/delegates/gpu:build_defs.bzl", "gtest_main_no_heapcheck_deps")
-
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:public"],
@@ -37,7 +35,8 @@ cc_test(
         "//tensorflow/lite/delegates/gpu/cl/kernels:cl_test",
         "//tensorflow/lite/delegates/gpu/common:gpu_model_test_util",
         "//tensorflow/lite/delegates/gpu/common:status",
-    ] + gtest_main_no_heapcheck_deps(),  # constant buffers leak on nvidia
+        "@com_google_googletest//:gtest_main_no_heapcheck",  # constant buffers leak on nvidia
+    ],
 )
 
 cc_binary(
@@ -86,20 +85,13 @@ cc_binary(
 cc_binary(
     name = "performance_profiling",
     srcs = ["performance_profiling.cc"],
-    copts = [
-        "-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1",
-    ],
     deps = [
         "//tensorflow/lite/core/kernels:builtin_ops",
         "//tensorflow/lite/delegates/gpu/cl:environment",
         "//tensorflow/lite/delegates/gpu/cl:inference_context",
-        "//tensorflow/lite/delegates/gpu/cl:opencl_wrapper",
         "//tensorflow/lite/delegates/gpu/common:model",
         "//tensorflow/lite/delegates/gpu/common:model_builder",
         "//tensorflow/lite/delegates/gpu/common:status",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/time",
-        "@opencl_headers",
     ],
 )

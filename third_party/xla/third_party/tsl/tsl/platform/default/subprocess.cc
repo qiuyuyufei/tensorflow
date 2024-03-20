@@ -30,11 +30,7 @@ limitations under the License.
 #include "tsl/platform/logging.h"
 
 // Android versions older than 28 do not have posix_spawn().
-#if !defined(__ANDROID_API__) || __ANDROID_API__ >= 28
-#define USE_POSIX_SPAWN 1
-#else  // defined(__ANDROID_API__) && __ANDROID_API__ < 28
-#define USE_POSIX_SPAWN 0
-#endif  // !defined(__ANDROID_API__) || __ANDROID_API__ >= 28
+#define USE_POSIX_SPAWN !defined(__ANDROID_API__) || __ANDROID_API__ >= 28
 
 // 1) FYI from m3b@ about fork():
 // A danger of calling fork() (as opposed to clone() or vfork()) is that if

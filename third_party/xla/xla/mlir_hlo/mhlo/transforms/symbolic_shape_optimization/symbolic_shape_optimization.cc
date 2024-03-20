@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ limitations under the License.
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace mlir {
@@ -114,8 +113,8 @@ struct SimplifyBroadcasts : public mlir::OpRewritePattern<shape::BroadcastOp> {
         llvm::map_range(symResult, [&](const auto &symResultDim) {
           // If we know the dimension statically, use a constant.
           if (!symResultDim) return findOrCreateConstant(1);
-          if (auto cexpr =
-                  dyn_cast<AffineConstantExpr>(symResultDim->expr.expr)) {
+          if (auto cexpr = symResultDim->expr.expr
+                               .template dyn_cast<AffineConstantExpr>()) {
             return findOrCreateConstant(cexpr.getValue());
           }
 
@@ -209,12 +208,12 @@ struct AnnotateExpandingDimensionsInDynamicBroadcastInDim
     }
 
     // Annotate op in place.
-    rewriter.startOpModification(op);
+    rewriter.startRootUpdate(op);
     op.setKnownExpandingDimensionsAttr(
         rewriter.getI64TensorAttr(knownExpandingDims.takeVector()));
     op.setKnownNonexpandingDimensionsAttr(
         rewriter.getI64TensorAttr(knownNonexpandingDims.takeVector()));
-    rewriter.finalizeOpModification(op);
+    rewriter.finalizeRootUpdate(op);
     return success();
   }
 };
@@ -244,16 +243,16 @@ struct RemoveComputeReshapeShape final
 bool isProduct(AffineExpr expr,
                llvm::function_ref<void(AffineConstantExpr)> cbkConstantFactor,
                llvm::function_ref<void(AffineSymbolExpr)> cbkSymbolicFactor) {
-  auto binExpr = dyn_cast<AffineBinaryOpExpr>(expr);
+  auto binExpr = expr.dyn_cast<AffineBinaryOpExpr>();
   if (binExpr && binExpr.getKind() == AffineExprKind::Mul) {
     return isProduct(binExpr.getLHS(), cbkConstantFactor, cbkSymbolicFactor) &&
            isProduct(binExpr.getRHS(), cbkConstantFactor, cbkSymbolicFactor);
   }
-  if (auto symExpr = dyn_cast<AffineSymbolExpr>(expr)) {
+  if (auto symExpr = expr.dyn_cast<AffineSymbolExpr>()) {
     cbkSymbolicFactor(symExpr);
     return true;
   }
-  if (auto constExpr = dyn_cast<AffineConstantExpr>(expr)) {
+  if (auto constExpr = expr.dyn_cast<AffineConstantExpr>()) {
     cbkConstantFactor(constExpr);
     return true;
   }
@@ -631,7 +630,7 @@ SmallVector<int64_t> concretizeOperandShape(
   for (auto it : llvm::zip(operandShape, operandShapeInfo)) {
     auto dimSize = std::get<0>(it);
     auto sExpr = std::get<1>(it);
-    if (auto cexpr = dyn_cast<AffineConstantExpr>(sExpr.expr)) {
+    if (auto cexpr = sExpr.expr.dyn_cast<AffineConstantExpr>()) {
       int64_t alsoDimSize = cexpr.getValue();
       assert((ShapedType::isDynamic(dimSize) || dimSize == alsoDimSize) &&
              "expect shape analysis result to be compatible with type");

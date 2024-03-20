@@ -17,7 +17,7 @@ py_strict_library(
     name = "public_api",
     srcs = ["public_api.py"],
     srcs_version = "PY3",
-    deps = ["//tensorflow/python/util:tf_inspect"],
+    deps = ["//tensorflow/python/util:tf_decorator"],
 )
 
 py_strict_test(
@@ -32,7 +32,6 @@ py_strict_test(
     srcs_version = "PY3",
     deps = [
         ":public_api",
-        # copybara:uncomment "//third_party/py/google/protobuf:use_fast_cpp_protos",
         "//tensorflow/python/platform:test",
     ],
 )
@@ -41,7 +40,7 @@ py_strict_library(
     name = "traverse",
     srcs = ["traverse.py"],
     srcs_version = "PY3",
-    deps = ["//tensorflow/python/util:tf_inspect"],
+    deps = ["//tensorflow/python/util:tf_decorator"],
 )
 
 py_strict_test(
@@ -58,7 +57,6 @@ py_strict_test(
         ":test_module1",
         ":test_module2",
         ":traverse",
-        # copybara:uncomment "//third_party/py/google/protobuf:use_fast_cpp_protos",
         "//tensorflow/python/platform:test",
     ],
 )

@@ -288,8 +288,7 @@ class DispatcherState {
   // If the dispatcher config specifies worker addresses, `GetWorkerIndex`
   // returns the worker index according to the list. This is useful for
   // deterministically sharding a dataset among a fixed set of workers.
-  absl::StatusOr<int64_t> GetWorkerIndex(
-      absl::string_view worker_address) const;
+  StatusOr<int64_t> GetWorkerIndex(absl::string_view worker_address) const;
 
   // Returns the paths of all snapshots initiated during the lifetime of this
   // journal.

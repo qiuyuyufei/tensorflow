@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,24 +15,13 @@ limitations under the License.
 
 #ifndef XLA_SERVICE_GPU_COMPILATION_ENVIRONMENT_H_
 #define XLA_SERVICE_GPU_COMPILATION_ENVIRONMENT_H_
-#include <string>
-#include <vector>
+#include <memory>
 
-#include "xla/statusor.h"
 #include "xla/xla.pb.h"
 
 namespace xla {
 
-absl::StatusOr<GpuCompilationEnvironment> CreateGpuCompEnvFromFlagStrings(
-    std::vector<std::string>& flags, bool strict);
-
-absl::StatusOr<GpuCompilationEnvironment> CreateGpuCompEnvFromEnvVar();
-
-GpuCompilationEnvironment CreateGpuCompEnvWithDefaultValues();
-
-// Returns non-OK status if XLA_FLAGS env var has malformed values or
-// if it has conflict with the GpuCompilationEnvironment proto
-Status InitializeMissingFieldsFromXLAFlags(GpuCompilationEnvironment& env);
+std::unique_ptr<GpuCompilationEnvironment> CreateDefaultGpuCompEnv();
 
 }  // namespace xla
 #endif  // XLA_SERVICE_GPU_COMPILATION_ENVIRONMENT_H_

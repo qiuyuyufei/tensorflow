@@ -62,7 +62,7 @@ Status GenerateKey(Tensor seed, random::PhiloxRandom::Key* out_key,
   (*out_counter)[0] = (*out_counter)[1] = 0;
   (*out_counter)[2] = mix[2];
   (*out_counter)[3] = mix[3];
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 StatelessRandomOpBase::StatelessRandomOpBase(OpKernelConstruction* context)

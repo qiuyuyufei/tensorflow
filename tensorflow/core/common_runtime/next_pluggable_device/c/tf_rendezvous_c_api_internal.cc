@@ -113,7 +113,7 @@ DoneCallbackParamDeleter MakeDoneCallbackParamDeleter() {
   };
 }
 
-absl::StatusOr<DoneCallbackParamPtr> DoneCallbackParamsToC(
+StatusOr<DoneCallbackParamPtr> DoneCallbackParamsToC(
     const Status& status, const RendezvousInterface::Args& sender_args,
     const RendezvousInterface::Args& recver_args, const Tensor& tensor,
     const bool is_dead) {

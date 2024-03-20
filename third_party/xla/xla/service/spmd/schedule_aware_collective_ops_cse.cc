@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -85,8 +85,8 @@ HloInstruction* MayConsiderCollective(HloInstruction* hlo, bool for_replicas) {
   return nullptr;
 }
 
-absl::StatusOr<bool> RunOnComputation(HloComputation* comp, bool for_replicas,
-                                      int64_t distance_threshold) {
+StatusOr<bool> RunOnComputation(HloComputation* comp, bool for_replicas,
+                                int64_t distance_threshold) {
   // We consider estimate the live ranges of all-gathers by comparing their
   // users' distance to the root, e.g., height.
   bool changed = false;
@@ -156,7 +156,7 @@ absl::StatusOr<bool> RunOnComputation(HloComputation* comp, bool for_replicas,
 
 }  // namespace
 
-absl::StatusOr<bool> ScheduleAwareCollectiveOpsCSE::Run(
+StatusOr<bool> ScheduleAwareCollectiveOpsCSE::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

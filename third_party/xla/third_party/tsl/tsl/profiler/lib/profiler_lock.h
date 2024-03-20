@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <utility>
 
-#include "absl/strings/string_view.h"
 #include "tsl/platform/statusor.h"
 
 namespace tsl {

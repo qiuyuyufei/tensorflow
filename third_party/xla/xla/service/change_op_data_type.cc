@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ std::optional<PrimitiveType> GetUniformOperandType(
 }
 }  // namespace
 
-absl::StatusOr<bool> ChangeOpDataType::Run(
+StatusOr<bool> ChangeOpDataType::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

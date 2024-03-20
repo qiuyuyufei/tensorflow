@@ -319,7 +319,7 @@ Status SparseTensorDenseMatMulImpl(
     }
 #undef LOOP_NNZ
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 }  // namespace
 

@@ -1,4 +1,4 @@
-/* Copyright 2016 The OpenXLA Authors.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,32 +15,22 @@ limitations under the License.
 
 #include "xla/service/gpu/fusion_merger.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/log/check.h"
-#include "absl/log/log.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
-#include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/gpu/gpu_fusible.h"
 #include "xla/service/gpu/model/gpu_hlo_cost_analysis.h"
 #include "xla/service/gpu/model/gpu_performance_model.h"
-#include "xla/service/gpu/model/gpu_performance_model_base.h"
-#include "xla/service/hlo_cost_analysis.h"
 #include "xla/service/hlo_graph_dumper.h"
-#include "xla/service/instruction_fusion.h"
 #include "xla/shape_util.h"
-#include "xla/stream_executor/device_description.h"
 #include "xla/util.h"
 #include "tsl/platform/errors.h"
-#include "tsl/platform/status.h"
 
 namespace xla {
 namespace gpu {
@@ -60,13 +50,13 @@ class FusionInstructionMerger {
                                        .debug_options()
                                        .xla_dump_fusion_visualization()) {}
 
-  absl::Status Run();
+  Status Run();
 
   bool changed() const { return changed_; }
 
  private:
   FusionDecision ShouldFuse(HloInstruction* producer);
-  absl::Status FuseIntoAllUsers(HloInstruction* producer);
+  Status FuseIntoAllUsers(HloInstruction* producer);
 
   HloComputation* computation_;
   HloCostAnalysis::ShapeSizeFunction shape_size_function_;
@@ -93,8 +83,7 @@ class FusionInstructionMerger {
   FusionInstructionMerger& operator=(const FusionInstructionMerger&) = delete;
 };
 
-absl::Status FusionInstructionMerger::FuseIntoAllUsers(
-    HloInstruction* producer) {
+Status FusionInstructionMerger::FuseIntoAllUsers(HloInstruction* producer) {
   // Merge fused instructions from 'fusion' into each user.
   std::vector<HloInstruction*> users = producer->users();
   for (HloInstruction* user : users) {
@@ -142,10 +131,10 @@ absl::Status FusionInstructionMerger::FuseIntoAllUsers(
                              absl::StrAppend(out, user->name());
                            })
           << " }";
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::Status FusionInstructionMerger::Run() {
+Status FusionInstructionMerger::Run() {
   for (HloInstruction* producer : computation_->MakeInstructionPostOrder()) {
     if (producer->opcode() != HloOpcode::kFusion) {
       continue;
@@ -182,7 +171,7 @@ absl::Status FusionInstructionMerger::Run() {
           << num_fail_inefficient_fusion_emitter_
           << " slower_if_fused: " << num_fail_slower_if_fused_
           << " fusion_too_large: " << num_fail_fusion_too_large_ << " }";
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 bool TransposesMostData(const HloInstruction& fusion) {
@@ -230,10 +219,6 @@ FusionDecision FusionInstructionMerger::ShouldFuse(HloInstruction* producer) {
     if (user->opcode() == HloOpcode::kBitcast) {
       ++num_fail_merge_all_users_;
       return "not fusing bitcast ops";
-    }
-    if (user->IsCustomFusion()) {
-      ++num_fail_merge_all_users_;
-      return "not fusing custom fusions";
     }
     auto consumer_hero = GetRealHeroForMultiOutputFusion(*user);
     if (auto compatible =
@@ -290,8 +275,7 @@ FusionDecision FusionInstructionMerger::ShouldFuse(HloInstruction* producer) {
   }
 
   GpuPerformanceModel::RunTimes t = GpuPerformanceModel::EstimateRunTimes(
-      producer, &*cost_analysis_, GpuPerformanceModelOptions::Default(),
-      producer->users());
+      producer, &*cost_analysis_, producer->users());
   if (t.time_fused > t.time_unfused) {
     ++num_fail_slower_if_fused_;
     return "will execute slower if fused";
@@ -300,7 +284,7 @@ FusionDecision FusionInstructionMerger::ShouldFuse(HloInstruction* producer) {
   return {};
 }
 
-absl::StatusOr<bool> FusionMerger::Run(
+StatusOr<bool> FusionMerger::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

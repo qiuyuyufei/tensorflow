@@ -50,7 +50,7 @@ Status RemapVectorToMap(
                           ", which is not supported."));
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 }  // anonymous namespace
 

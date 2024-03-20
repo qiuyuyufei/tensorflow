@@ -15,55 +15,48 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.h"
 
 #include <optional>
+#include <ostream>
 #include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include "absl/log/log.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/OwningOpRef.h"  // from @llvm-project
-#include "mlir/IR/Visitors.h"  // from @llvm-project
-#include "mlir/Pass/PassManager.h"  // from @llvm-project
+#include "mlir/IR/MLIRContext.h"  // from @llvm-project
+#include "mlir/Pass/Pass.h"  // from @llvm-project
 #include "mlir/Support/FileUtilities.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
-#include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "mlir/Transforms/ViewOpGraph.h"  // from @llvm-project
-#include "tensorflow/cc/saved_model/loader.h"
 #include "tensorflow/compiler/mlir/lite/common/tfl_pass_config.h"
+#include "tensorflow/compiler/mlir/lite/tf_tfl_passes.h"
 #include "tensorflow/compiler/mlir/lite/tf_to_tfl_flatbuffer.h"
 #include "tensorflow/compiler/mlir/lite/transforms/passes.h"
-#include "tensorflow/compiler/mlir/quantization/common/quantization_lib/quantization_config.h"
-#include "tensorflow/compiler/mlir/quantization/tensorflow/python/py_function_lib.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops_n_z.h"
+#include "tensorflow/compiler/mlir/tensorflow/translate/import_model.h"
+#include "tensorflow/compiler/mlir/tensorflow/translate/mlir_roundtrip_flags.h"
+#include "tensorflow/compiler/mlir/tensorflow/utils/dump_mlir_util.h"
 #include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/graph_debug_info.pb.h"
-#include "tensorflow/core/framework/op.h"
-#include "tensorflow/core/framework/op_def_builder.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/public/session.h"
+#include "tensorflow/core/platform/status.h"
 #include "tensorflow/lite/toco/model_flags.pb.h"
 #include "tensorflow/lite/toco/toco_flags.pb.h"
 #include "tensorflow/lite/toco/types.pb.h"
 #include "tensorflow/lite/tools/optimize/reduced_precision_support.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/protobuf.h"  // IWYU pragma: keep
 #include "tsl/platform/statusor.h"
+
+using tsl::StatusOr;
 
 namespace tensorflow {
 namespace internal {
 namespace {
 
-using ::tensorflow::quantization::PyFunctionLibrary;
-using ::tflite::optimize::ReducedPrecisionSupport;
+using ::mlir::quant::ReducedPrecisionSupport;
 
 // Op def string for TFLite_Detection_PostProcess Op.
-constexpr mlir::StringRef kDetectionPostProcessOp =
+const char kDetectionPostProcessOp[] =
     "name: 'TFLite_Detection_PostProcess' input_arg: { name: "
     "'raw_outputs/box_encodings' type: DT_FLOAT } input_arg: { name: "
     "'raw_outputs/class_predictions' type: DT_FLOAT } input_arg: { name: "
@@ -81,7 +74,7 @@ constexpr mlir::StringRef kDetectionPostProcessOp =
     "'detections_per_class' type: 'int' default_value { i : 100 }} attr { "
     "name: 'use_regular_nms' type: 'bool' default_value { b : false }}";
 
-constexpr mlir::StringRef kUnidirectionalSequenceLstmOp =
+const char kUnidirectionalSequenceLstmOp[] =
     "name: 'UnidirectionalSequenceLstm' input_arg: {name: 'Input' type: "
     "DT_FLOAT} input_arg: { name: 'InputToInputWeights' type: DT_FLOAT } "
     "input_arg: { name: 'InputToForgetWeights' type: DT_FLOAT } input_arg: { "
@@ -105,7 +98,7 @@ constexpr mlir::StringRef kUnidirectionalSequenceLstmOp =
     "'LastState' type: DT_FLOAT } output_arg: { name: 'Output' type: DT_FLOAT} "
     "attr : { name: '_tflite_input_indices' type: 'list(int)'}";
 
-constexpr mlir::StringRef kUnidirectionalSequenceRnnOp =
+const char kUnidirectionalSequenceRnnOp[] =
     "name: 'UnidirectionalSequenceRnn' input_arg: {name: 'Input' type: "
     "DT_FLOAT} input_arg: { name: 'Weights' type: DT_FLOAT } "
     "input_arg: { name: 'RecurrentWeights' type: DT_FLOAT } input_arg: { "
@@ -165,9 +158,8 @@ DataType ConvertIODataTypeToDataType(toco::IODataType dtype) {
   }
 }
 
-absl::StatusOr<std::pair<double, double>> InputStatsToMinMax(double mean,
-                                                             double std,
-                                                             DataType type) {
+StatusOr<std::pair<double, double>> InputStatsToMinMax(double mean, double std,
+                                                       DataType type) {
   // Only qint8 and quint8 are considered here.
   double qmin, qmax;
   if (type == DT_QUINT8) {
@@ -177,59 +169,58 @@ absl::StatusOr<std::pair<double, double>> InputStatsToMinMax(double mean,
     qmin = -128.0;
     qmax = 127.0;
   } else {
-    return absl::InvalidArgumentError("Only int8 and uint8 are considered.");
+    return errors::InvalidArgument("Only int8 and uint8 are considered.");
   }
   return std::make_pair((qmin - mean) / std, (qmax - mean) / std);
 }
 
-absl::Status RegisterCustomBuiltinOps(
-    const std::vector<std::string> extra_tf_opdefs) {
+Status RegisterCustomBuiltinOps(const std::vector<string> extra_tf_opdefs) {
   for (const auto& tf_opdefs_string : extra_tf_opdefs) {
-    OpDef opdef;
-    // NOLINTNEXTLINE: Use tsl::protobuf to be compatible with OSS.
-    if (!tsl::protobuf::TextFormat::ParseFromString(tf_opdefs_string, &opdef)) {
+    tensorflow::OpDef opdef;
+    if (!tensorflow::protobuf::TextFormat::ParseFromString(tf_opdefs_string,
+                                                           &opdef)) {
       return errors::InvalidArgument("fail to parse extra OpDef");
     }
     // Make sure the op is not already registered. If registered continue.
     const OpRegistrationData* op_reg =
-        OpRegistry::Global()->LookUp(opdef.name());
+        tensorflow::OpRegistry::Global()->LookUp(opdef.name());
     if (op_reg) continue;
 
-    OpRegistry::Global()->Register(
-        [opdef](OpRegistrationData* op_reg_data) -> absl::Status {
-          *op_reg_data = OpRegistrationData(opdef);
-          return absl::OkStatus();
+    tensorflow::OpRegistry::Global()->Register(
+        [opdef](tensorflow::OpRegistrationData* op_reg_data) -> Status {
+          *op_reg_data = tensorflow::OpRegistrationData(opdef);
+          return OkStatus();
         });
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
 
-absl::Status RegisterAllCustomOps(const toco::TocoFlags& toco_flags) {
+Status RegisterAllCustomOps(const toco::TocoFlags& toco_flags) {
   // Register any custom OpDefs.
-  std::vector<std::string> extra_tf_opdefs(toco_flags.custom_opdefs().begin(),
-                                           toco_flags.custom_opdefs().end());
-  extra_tf_opdefs.push_back(kDetectionPostProcessOp.str());
-  extra_tf_opdefs.push_back(kUnidirectionalSequenceLstmOp.str());
-  extra_tf_opdefs.push_back(kUnidirectionalSequenceRnnOp.str());
+  std::vector<string> extra_tf_opdefs(toco_flags.custom_opdefs().begin(),
+                                      toco_flags.custom_opdefs().end());
+  extra_tf_opdefs.push_back(kDetectionPostProcessOp);
+  extra_tf_opdefs.push_back(kUnidirectionalSequenceLstmOp);
+  extra_tf_opdefs.push_back(kUnidirectionalSequenceRnnOp);
   return RegisterCustomBuiltinOps(extra_tf_opdefs);
 }
 
-absl::Status PopulateQuantizationSpecs(
-    const toco::ModelFlags& model_flags, toco::TocoFlags& toco_flags,
+Status PopulateQuantizationSpecs(
+    const toco::ModelFlags& model_flags, const toco::TocoFlags& toco_flags,
     mlir::quant::QuantizationSpecs* quant_specs,
-    std::vector<std::string>* node_names, std::vector<std::string>* node_dtypes,
+    std::vector<string>* node_names, std::vector<string>* node_dtypes,
     std::vector<std::optional<std::vector<int>>>* node_shapes,
     std::vector<std::optional<double>>* node_mins,
     std::vector<std::optional<double>>* node_maxs) {
   quant_specs->inference_input_type =
       ConvertIODataTypeToDataType(toco_flags.inference_input_type());
-  DataType inference_type =
+  tensorflow::DataType inference_type =
       ConvertIODataTypeToDataType(toco_flags.inference_type());
   // Use non-float flag `inference_input_type` to override the `inference_type`
   // because we have to apply quantization to satisfy that.
-  if (quant_specs->inference_input_type != DT_FLOAT) {
+  if (quant_specs->inference_input_type != tensorflow::DT_FLOAT) {
     inference_type = quant_specs->inference_input_type;
   }
 
@@ -279,11 +270,11 @@ absl::Status PopulateQuantizationSpecs(
     quant_specs->disable_per_channel =
         toco_flags.disable_per_channel_quantization();
     if (toco_flags.quantize_to_float16()) {
-      quant_specs->inference_type = DT_HALF;
-      quant_specs->inference_input_type = DT_HALF;
+      quant_specs->inference_type = tensorflow::DT_HALF;
+      quant_specs->inference_input_type = tensorflow::DT_HALF;
     } else {
-      quant_specs->inference_type = DT_QINT8;
-      quant_specs->inference_input_type = DT_QINT8;
+      quant_specs->inference_type = tensorflow::DT_QINT8;
+      quant_specs->inference_input_type = tensorflow::DT_QINT8;
     }
   } else {
     // These flags are incompatible with post_training_quantize() as only
@@ -322,14 +313,11 @@ absl::Status PopulateQuantizationSpecs(
       toco_flags.enable_mlir_dynamic_range_quantizer();
   quant_specs->enable_mlir_variable_quantization =
       toco_flags.enable_mlir_variable_quantization();
-  quant_specs->disable_per_channel_for_dense_layers =
-      toco_flags.disable_per_channel_quantization_for_dense_layers();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Dumps the op graph of the `module` to `filename` in DOT format.
-absl::Status DumpOpGraphToFile(mlir::ModuleOp module,
-                               const std::string& filename) {
+Status DumpOpGraphToFile(mlir::ModuleOp module, const std::string& filename) {
   std::string error_message;
   auto output = mlir::openOutputFile(filename, &error_message);
   if (!error_message.empty()) {
@@ -341,16 +329,15 @@ absl::Status DumpOpGraphToFile(mlir::ModuleOp module,
     return errors::Unknown("Failed to dump Op Graph from MLIR module.");
   }
   output->keep();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::Status ConvertMLIRToTFLiteFlatBuffer(
-    const toco::ModelFlags& model_flags, toco::TocoFlags& toco_flags,
+Status ConvertMLIRToTFLiteFlatBuffer(
+    const toco::ModelFlags& model_flags, const toco::TocoFlags& toco_flags,
     mlir::OwningOpRef<mlir::ModuleOp> module,
     const mlir::TFL::PassConfig& pass_config,
-    const std::unordered_set<std::string>& saved_model_tags,
-    std::string* result, SavedModelBundle* saved_model_bundle,
-    const PyFunctionLibrary* quantization_py_function_lib) {
+    const std::unordered_set<std::string>& saved_model_tags, string* result,
+    std::optional<tensorflow::Session*> session) {
   if (toco_flags.has_dump_graphviz_dir()) {
     TF_RETURN_IF_ERROR(DumpOpGraphToFile(
         module.get(),
@@ -374,8 +361,7 @@ absl::Status ConvertMLIRToTFLiteFlatBuffer(
 
   auto status = ConvertTFExecutorToTFLOrFlatbuffer(
       module.get(), /*export_to_mlir=*/false, toco_flags, pass_config_copy,
-      saved_model_tags, model_flags.saved_model_dir(), saved_model_bundle,
-      result, /*serialize_stablehlo_ops=*/false, quantization_py_function_lib);
+      saved_model_tags, model_flags.saved_model_dir(), session, result);
   if (toco_flags.has_dump_graphviz_dir()) {
     TF_RETURN_IF_ERROR(DumpOpGraphToFile(
         // rename once we enable the new converter feature flag.

@@ -60,7 +60,7 @@ class CSRSparseMatrixConjFunctor {
     functor::UnaryFunctor<Device, functor::conj<T>> func;
     func(d, b->values().flat<T>() /*out*/, a.values().flat<T>() /*in*/);
 
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:

@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -808,7 +808,7 @@ struct Decode<internal::UserData<T>, checks> {
     if (auto decoded = DecodeUserData<UserDataT, checks>(ctx.user_data);
         LLVM_LIKELY(succeeded(decoded)))
       return decoded;
-    return ctx.diagnostic->EmitError(Internal(
+    return ctx.diagnostic->EmitError(InternalError(
         "failed to decode UserData of type %s", typeid(T).name()));
   }
 };

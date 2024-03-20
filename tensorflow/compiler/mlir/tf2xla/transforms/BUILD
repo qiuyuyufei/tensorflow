@@ -270,9 +270,7 @@ cc_library(
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core/util/quantization:uniform_quant_ops_params",
-        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
@@ -468,7 +466,6 @@ cc_library(
     hdrs = ["legalization_op_config.h"],
     visibility = [
         "//tensorflow/compiler/mlir/tensorflow/transforms:__pkg__",
-        "//tensorflow/compiler/mlir/tf2xla/internal:__subpackages__",
     ],
     deps = [
         "//tensorflow/compiler/mlir/tensorflow",

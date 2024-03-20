@@ -107,9 +107,6 @@ class SavedModel {
     // TODO(b/216379787): Remove this option once b/279197040 is unblocked.
     bool lazy_loading_use_graph_executor = false;
 
-    // True if and only if SavedModel is being loaded to generate AOT results.
-    bool aot_generation = false;
-
     GraphExecutionOptions graph_execution_options;
   };
 

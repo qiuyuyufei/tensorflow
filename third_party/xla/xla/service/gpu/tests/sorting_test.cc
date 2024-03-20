@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include <gtest/gtest.h>
 #include "absl/log/check.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
@@ -68,7 +69,7 @@ ENTRY TestComputation {
 }
 
 // Size of the radix sort tests.
-static constexpr int kRadixSortTestSize = 100000;
+static constexpr int kRadixSortTestSize = 100;
 
 template <typename T>
 bool CheckOrder(T lhs, T rhs, bool asc, int pos) {
@@ -105,9 +106,9 @@ HloModule TestModule
 
 ENTRY %main {
   %input = $0[$1] parameter(0)
-  %sort = ($0[$1], u8[$2]) custom-call(%input),
+  %sort = ($0[$1], u8[1000]) custom-call(%input),
       custom_call_target="__cub$$DeviceRadixSort",
-      backend_config="{\"descending\": $3}"
+      backend_config="{\"descending\": $2}"
   ROOT %gte = get-tuple-element(%sort), index=0
 }
 )";
@@ -116,9 +117,7 @@ ENTRY %main {
   std::string hlo = absl::Substitute(
       kHloTemplate,
       GetTypeName(std::get<0>(GetParam())->shape().element_type()),
-      kRadixSortTestSize,
-      kRadixSortTestSize * 10,  // added scratch buffer size
-      ascending ? "false" : "true");
+      kRadixSortTestSize, ascending ? "false" : "true");
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));
   std::vector<Literal*> literals = {std::get<0>(GetParam()).get()};
@@ -144,9 +143,9 @@ HloModule TestModule
 ENTRY %main {
   %keys = $0[$2] parameter(0)
   %values = $1[$2] convert(%keys)
-  ROOT %sort = ($0[$2], $1[$2], u8[$3]) custom-call(%keys, %values),
+  ROOT %sort = ($0[$2], $1[$2], u8[1000]) custom-call(%keys, %values),
       custom_call_target="__cub$$DeviceRadixSort",
-      backend_config="{\"descending\": $4}"
+      backend_config="{\"descending\": $3}"
 }
 )";
 
@@ -155,7 +154,6 @@ ENTRY %main {
       kHloTemplate,
       GetTypeName(std::get<0>(GetParam())->shape().element_type()),
       GetTypeName(std::get<1>(GetParam())), kRadixSortTestSize,
-      kRadixSortTestSize * 20,  // added scratch buffer size
       ascending ? "false" : "true");
 
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo));

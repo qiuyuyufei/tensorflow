@@ -16,15 +16,10 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/lower_while_op.h"
 
 #include "tensorflow/core/common_runtime/inline_function_utils.h"
-#include "tensorflow/core/config/flag_defs.h"
 #include "tensorflow/core/framework/node_def_builder.h"
-#include "tensorflow/core/framework/node_def_util.h"
-#include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/graph/node_builder.h"
-#include "tensorflow/core/platform/status.h"
-#include "tsl/platform/errors.h"
 
 namespace tensorflow {
 
@@ -180,10 +175,6 @@ class LowerWhileHelper {
   // in which case the mapping contains -1.
   std::vector<int> op_input_output_to_lowered_node_;
 
-  // Indicates whether to propagate colocation key attribute during the
-  // lowering.
-  bool propagate_colocation_key_;
-
   size_t num_loop_inputs_;
 };
 
@@ -220,9 +211,6 @@ LowerWhileHelper::LowerWhileHelper(Node* while_op, const NameAttrList& cond_fn,
   exit_nodes_.reserve(num_loop_inputs_);
   next_iterations_nodes_.reserve(num_loop_inputs_);
   op_input_output_to_lowered_node_.resize(num_loop_inputs_, -1);
-  propagate_colocation_key_ =
-      flags::Global()
-          .enable_colocation_key_propagation_in_while_op_lowering.value();
 }
 
 Status LowerWhileHelper::RunInternal() {
@@ -236,7 +224,7 @@ Status LowerWhileHelper::RunInternal() {
   TF_RETURN_IF_ERROR(CreateNextIterationNodes());
   TF_RETURN_IF_ERROR(UpdateMergeNodes());
   TF_RETURN_IF_ERROR(UpdateConsumers());
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void LowerWhileHelper::InitializeInputOutputToLoweredNodeMap() {
@@ -263,13 +251,6 @@ Status LowerWhileHelper::CreateEnterNodes() {
             .Attr("parallel_iterations", parallel_iterations_)
             .Device(edge->src()->requested_device())
             .AssignedDevice(edge->src()->assigned_device_name());
-    if (propagate_colocation_key_) {
-      auto colocation_attr = edge->src()->attrs().Find(kColocationAttrName);
-      if (colocation_attr) {
-        builder.Attr(kColocationAttrName, *colocation_attr);
-      }
-    }
-
     if (IsLoopCarriedResource(edge->dst_input())) {
       builder.Attr("is_constant", true);
     }
@@ -286,22 +267,16 @@ Status LowerWhileHelper::CreateEnterNodes() {
   }
   if (!control_inputs.empty()) {
     Node* incoming_control_node;
-    NodeBuilder builder = NodeBuilder(NewName("LoopControlInputs"), "NoOp",
-                                      flib_def_, &debug_info_)
-                              .ControlInputs(control_inputs)
-                              .Device(while_op_->requested_device());
-    if (propagate_colocation_key_) {
-      auto colocation_attr = while_op_->attrs().Find(kColocationAttrName);
-      if (colocation_attr) {
-        builder.Attr(kColocationAttrName, *colocation_attr);
-      }
-    }
-    TF_RETURN_IF_ERROR(builder.Finalize(graph_, &incoming_control_node));
+    TF_RETURN_IF_ERROR(NodeBuilder(NewName("LoopControlInputs"), "NoOp",
+                                   flib_def_, &debug_info_)
+                           .ControlInputs(control_inputs)
+                           .Device(while_op_->requested_device())
+                           .Finalize(graph_, &incoming_control_node));
     for (Node* n : enter_nodes_) {
       graph_->AddControlEdge(incoming_control_node, n);
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LowerWhileHelper::CreateMergeNodes() {
@@ -311,21 +286,15 @@ Status LowerWhileHelper::CreateMergeNodes() {
       continue;
     }
     Node* merge_node;
-    NodeBuilder builder =
+    TF_RETURN_IF_ERROR(
         NodeBuilder(NewName("merge"), "Merge", flib_def_, &debug_info_)
             .Input({NodeOut(enter_node, 0), NodeOut(enter_node, 0)})
             .Device(enter_node->requested_device())
-            .AssignedDevice(enter_node->assigned_device_name());
-    if (propagate_colocation_key_) {
-      auto colocation_attr = enter_node->attrs().Find(kColocationAttrName);
-      if (colocation_attr) {
-        builder.Attr(kColocationAttrName, *colocation_attr);
-      }
-    }
-    TF_RETURN_IF_ERROR(builder.Finalize(graph_, &merge_node));
+            .AssignedDevice(enter_node->assigned_device_name())
+            .Finalize(graph_, &merge_node));
     merge_nodes_.emplace_back(merge_node);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LowerWhileHelper::CreateCondFuncCallNode() {
@@ -343,18 +312,12 @@ Status LowerWhileHelper::CreateCondFuncCallNode() {
   // are in the same frame as the rest of the function, otherwise
   // `BuildControlFlowInfo` throws an error.
   graph_->AddControlEdge(merge_nodes_[0], cond_call_node_);
-  NodeBuilder builder =
+  TF_RETURN_IF_ERROR(
       NodeBuilder(NewName("LoopCond"), "LoopCond", flib_def_, &debug_info_)
           .Input(NodeOut(cond_call_node_, 0))
-          .Device(while_op_->requested_device());
-  if (propagate_colocation_key_) {
-    auto colocation_attr = while_op_->attrs().Find(kColocationAttrName);
-    if (colocation_attr) {
-      builder.Attr(kColocationAttrName, *colocation_attr);
-    }
-  }
-  TF_RETURN_IF_ERROR(builder.Finalize(graph_, &loop_cond_node_));
-  return absl::OkStatus();
+          .Device(while_op_->requested_device())
+          .Finalize(graph_, &loop_cond_node_));
+  return OkStatus();
 }
 
 Status LowerWhileHelper::CreateSwitchNodes() {
@@ -374,23 +337,16 @@ Status LowerWhileHelper::CreateSwitchNodes() {
     if (IsRefType(merge_node->output_type(0))) {
       op_type = "RefSwitch";
     }
-    NodeBuilder builder =
+    TF_RETURN_IF_ERROR(
         NodeBuilder(NewName(op_name), op_type, flib_def_, &debug_info_)
             .Input(NodeOut(merge_node, 0))
             .Input(NodeOut(loop_cond_node_, 0))
             .Device(merge_node->requested_device())
-            .AssignedDevice(merge_node->assigned_device_name());
-
-    if (propagate_colocation_key_) {
-      auto colocation_attr = merge_node->attrs().Find(kColocationAttrName);
-      if (colocation_attr) {
-        builder.Attr(kColocationAttrName, *colocation_attr);
-      }
-    }
-    TF_RETURN_IF_ERROR(builder.Finalize(graph_, &switch_node));
+            .AssignedDevice(merge_node->assigned_device_name())
+            .Finalize(graph_, &switch_node));
     switch_nodes_.emplace_back(switch_node);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LowerWhileHelper::CreateBodyFuncCallNode() {
@@ -416,19 +372,13 @@ Status LowerWhileHelper::CreateBodyFuncCallNode() {
   if (IsRefType(switch_nodes_[0]->output_type(1))) {
     op_type = "RefIdentity";
   }
-  NodeBuilder builder = NodeBuilder(NewName("loop_body_control"), op_type,
-                                    flib_def_, &debug_info_)
-                            .Input(NodeOut(switch_nodes_[0], 1))
-                            .Device(while_op_->requested_device());
-  if (propagate_colocation_key_) {
-    auto colocation_attr = while_op_->attrs().Find(kColocationAttrName);
-    if (colocation_attr) {
-      builder.Attr(kColocationAttrName, *colocation_attr);
-    }
-  }
-  TF_RETURN_IF_ERROR(builder.Finalize(graph_, &body_control_node_));
+  TF_RETURN_IF_ERROR(NodeBuilder(NewName("loop_body_control"), op_type,
+                                 flib_def_, &debug_info_)
+                         .Input(NodeOut(switch_nodes_[0], 1))
+                         .Device(while_op_->requested_device())
+                         .Finalize(graph_, &body_control_node_));
   graph_->AddControlEdge(body_control_node_, body_call_node_);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LowerWhileHelper::CreateExitNodes() {
@@ -443,24 +393,15 @@ Status LowerWhileHelper::CreateExitNodes() {
       outputs.emplace_back(resource_tensor);
     } else {
       Node* exit_node;
-      NodeBuilder builder =
+      TF_RETURN_IF_ERROR(
           NodeBuilder(NewName("exit"), "Exit", flib_def_, &debug_info_)
               .Input(NodeOut(switch_nodes_[op_input_output_to_lowered_node_[i]],
                              0))
               .Device(switch_nodes_[op_input_output_to_lowered_node_[i]]
                           ->requested_device())
               .AssignedDevice(switch_nodes_[op_input_output_to_lowered_node_[i]]
-                                  ->assigned_device_name());
-
-      if (propagate_colocation_key_) {
-        auto colocation_attr =
-            switch_nodes_[op_input_output_to_lowered_node_[i]]->attrs().Find(
-                kColocationAttrName);
-        if (colocation_attr) {
-          builder.Attr(kColocationAttrName, *colocation_attr);
-        }
-      }
-      TF_RETURN_IF_ERROR(builder.Finalize(graph_, &exit_node));
+                                  ->assigned_device_name())
+              .Finalize(graph_, &exit_node));
       exit_nodes_.emplace_back(exit_node);
       outputs.emplace_back(NodeOut(exit_node, 0));
     }
@@ -472,17 +413,11 @@ Status LowerWhileHelper::CreateExitNodes() {
 
   // Add a NoOp node that has control edges from all Exit nodes. This node is
   // used for rewriting control edges with the original while op as src.
-  NodeBuilder builder = NodeBuilder(NewName("LoopExecuted"), "NoOp",
-                                    OpRegistry::Global(), &debug_info_)
-                            .ControlInputs(exit_nodes_)
-                            .Device(while_op_->requested_device());
-  if (propagate_colocation_key_) {
-    auto colocation_attr = while_op_->attrs().Find(kColocationAttrName);
-    if (colocation_attr) {
-      builder.Attr(kColocationAttrName, *colocation_attr);
-    }
-  }
-  TF_RETURN_IF_ERROR(builder.Finalize(graph_, &lowered_while_executed_));
+  TF_RETURN_IF_ERROR(NodeBuilder(NewName("LoopExecuted"), "NoOp",
+                                 OpRegistry::Global(), &debug_info_)
+                         .ControlInputs(exit_nodes_)
+                         .Device(while_op_->requested_device())
+                         .Finalize(graph_, &lowered_while_executed_));
 
   if (keep_node_fetchable_) {
     // Add an IdentityN node that has the same outputs and same name as the
@@ -504,7 +439,7 @@ Status LowerWhileHelper::CreateExitNodes() {
             .Finalize(graph_, &lowered_while_output_));
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LowerWhileHelper::CreateNextIterationNodes() {
@@ -514,23 +449,16 @@ Status LowerWhileHelper::CreateNextIterationNodes() {
       continue;
     }
     Node* merge_node = merge_nodes_[op_input_output_to_lowered_node_[i]];
-    NodeBuilder builder =
-        NodeBuilder(NewName("next_iteration"), "NextIteration", flib_def_,
-                    &debug_info_)
-            .Input(NodeOut(body_call_node_, i))
-            .ControlInput(body_call_node_)
-            .Device(merge_node->requested_device())
-            .AssignedDevice(merge_node->assigned_device_name());
-    if (propagate_colocation_key_) {
-      auto colocation_attr = merge_node->attrs().Find(kColocationAttrName);
-      if (colocation_attr) {
-        builder.Attr(kColocationAttrName, *colocation_attr);
-      }
-    }
-    TF_RETURN_IF_ERROR(builder.Finalize(graph_, &next_iteration));
+    TF_RETURN_IF_ERROR(NodeBuilder(NewName("next_iteration"), "NextIteration",
+                                   flib_def_, &debug_info_)
+                           .Input(NodeOut(body_call_node_, i))
+                           .ControlInput(body_call_node_)
+                           .Device(merge_node->requested_device())
+                           .AssignedDevice(merge_node->assigned_device_name())
+                           .Finalize(graph_, &next_iteration));
     next_iterations_nodes_.emplace_back(next_iteration);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LowerWhileHelper::UpdateMergeNodes() {
@@ -538,7 +466,7 @@ Status LowerWhileHelper::UpdateMergeNodes() {
     TF_RETURN_IF_ERROR(
         graph_->UpdateEdge(next_iterations_nodes_[i], 0, merge_nodes_[i], 1));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status LowerWhileHelper::UpdateConsumers() {
@@ -565,7 +493,7 @@ Status LowerWhileHelper::UpdateConsumers() {
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 string LowerWhileHelper::NewName(const string& infix) {
@@ -615,7 +543,7 @@ Status RewriteWhileNode(Node* n, Graph* g,
       flib_def, keep_node_fetchable));
   g->RemoveNode(n);
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

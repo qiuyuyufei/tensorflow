@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -202,12 +202,6 @@ void populateChloBroadcastingPatterns(MLIRContext *context,
 // PopulateChloBroadcastingPatterns above.
 void populateDecomposeChloPatterns(MLIRContext *context,
                                    RewritePatternSet *patterns);
-
-// Adds pattern to decompose specific CHLO ops like ErfOp and TopKOp to their
-// basis set of operations. These ops have 1:1 corresponding MHLO ops, but for
-// certain backends, they need to be expanded.
-void populateChloLegalizeToHloBasisOpsPatterns(MLIRContext *context,
-                                               RewritePatternSet *patterns);
 
 }  // namespace chlo
 

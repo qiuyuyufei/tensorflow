@@ -39,8 +39,7 @@ PjrtClientFactoryRegistry::RegisterPjrtClientFactory(
   return {};
 }
 
-absl::StatusOr<std::unique_ptr<PjRtClient>>
-PjrtClientFactoryRegistry::GetPjrtClient(
+StatusOr<std::unique_ptr<PjRtClient>> PjrtClientFactoryRegistry::GetPjrtClient(
     const tsl::DeviceType& device_type,
     const PjrtClientFactoryOptions& options) {
   tensorflow::tf_shared_lock l(mu_);

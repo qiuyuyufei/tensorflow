@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,9 +25,6 @@ limitations under the License.
 
 namespace stream_executor {
 
-// The type of memory that the allocator will use.
-enum class MemoryType { kDevice = 0, kUnified, kCollective, kHost = 5 };
-
 // Suballocator for StreamExecutor-based device memory.
 class DeviceMemAllocator : public tsl::SubAllocator {
  public:
@@ -36,13 +33,13 @@ class DeviceMemAllocator : public tsl::SubAllocator {
   // Note: stream_exec cannot be null.
   explicit DeviceMemAllocator(StreamExecutor* stream_exec,
                               tsl::PlatformDeviceId device_id,
-                              MemoryType memory_type,
+                              bool use_unified_memory,
                               const std::vector<Visitor>& alloc_visitors,
                               const std::vector<Visitor>& free_visitors)
       : SubAllocator(alloc_visitors, free_visitors),
         stream_exec_(stream_exec),
         device_id_(device_id),
-        memory_type_(memory_type) {
+        use_unified_memory_(use_unified_memory) {
     CHECK(stream_exec_ != nullptr);
   }
 
@@ -55,17 +52,8 @@ class DeviceMemAllocator : public tsl::SubAllocator {
     void* ptr = nullptr;
     *bytes_received = num_bytes;
     if (num_bytes > 0) {
-      if (memory_type_ == MemoryType::kUnified) {
+      if (use_unified_memory_) {
         ptr = stream_exec_->UnifiedMemoryAllocate(num_bytes);
-      } else if (memory_type_ == MemoryType::kCollective) {
-        auto status_or = stream_exec_->CollectiveMemoryAllocate(num_bytes);
-        CHECK(status_or.ok()) << status_or.status().message();
-        ptr = status_or.value();
-      } else if (memory_type_ == MemoryType::kHost) {
-        // Convert size_t to long unsigned int
-        long unsigned int value = static_cast<long unsigned int>(num_bytes);
-        auto status_or = stream_exec_->HostMemoryAllocate(value);
-        CHECK(status_or.ok()) << status_or.status().message();
       } else {
         ptr = stream_exec_->AllocateArray<char>(num_bytes).opaque();
       }
@@ -79,13 +67,8 @@ class DeviceMemAllocator : public tsl::SubAllocator {
 
     if (ptr != nullptr) {
       VisitFree(ptr, device_id_.value(), num_bytes);
-      if (memory_type_ == MemoryType::kUnified) {
+      if (use_unified_memory_) {
         stream_exec_->UnifiedMemoryDeallocate(ptr);
-      } else if (memory_type_ == MemoryType::kCollective) {
-        auto status = stream_exec_->CollectiveMemoryDeallocate(ptr);
-        CHECK(status.ok()) << status.message();
-      } else if (memory_type_ == MemoryType::kHost) {
-        stream_exec_->HostMemoryDeallocate(ptr, num_bytes);
       } else {
         DeviceMemoryBase device_ptr(ptr);
         stream_exec_->Deallocate(&device_ptr);
@@ -102,7 +85,7 @@ class DeviceMemAllocator : public tsl::SubAllocator {
  private:
   StreamExecutor* stream_exec_;  // not owned, non-null
   const tsl::PlatformDeviceId device_id_;
-  const MemoryType memory_type_ = MemoryType::kDevice;
+  const bool use_unified_memory_ = false;
 
   DeviceMemAllocator(const DeviceMemAllocator&) = delete;
   void operator=(const DeviceMemAllocator&) = delete;

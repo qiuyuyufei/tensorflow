@@ -31,11 +31,7 @@ limitations under the License.
 #include "tensorflow/c/eager/immediate_execution_context.h"
 #include "tensorflow/c/eager/immediate_execution_operation.h"
 #include "tensorflow/c/eager/immediate_execution_tensor_handle.h"
-
-#if !defined(DISABLE_MLIR)
 #include "tensorflow/compiler/mlir/python/mlir.h"
-#endif
-
 #include "tensorflow/compiler/mlir/tensorflow/translate/export_graphdef.h"
 #include "tensorflow/compiler/mlir/tensorflow/translate/import_model.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/error_util.h"
@@ -89,7 +85,7 @@ EagerContext& GlobalPythonEagerContext() {
   return *ctx;
 }
 
-absl::StatusOr<FunctionDef> Runtime::GetFunctionProto(StringPiece name) {
+StatusOr<FunctionDef> Runtime::GetFunctionProto(StringPiece name) {
   EagerContext& ctx = this->eager_ctx_;
 
   const FunctionDef* f = ctx.FindFunctionDef(std::string(name));
@@ -170,7 +166,7 @@ Status Runtime::TransformFunction(StringPiece name, StringPiece pipeline_name,
           CreateFunction(reinterpret_cast<OpaqueTfgGraphFuncOp*>(&fn)),
           absl::StrCat("updating function ", fn.getName().str()));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   if (dialect == Dialect::TF) {
@@ -196,7 +192,7 @@ Status Runtime::TransformFunction(StringPiece name, StringPiece pipeline_name,
           CreateFunction(reinterpret_cast<OpaqueTfFuncOp*>(&fn)),
           absl::StrCat("updating function ", fn.getName().str()));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   return Status(
@@ -205,7 +201,7 @@ Status Runtime::TransformFunction(StringPiece name, StringPiece pipeline_name,
                    ". Supported dialects are Dialect::TFG and Dialect::TF."));
 }
 
-absl::StatusOr<ReturnValues> Runtime::CallFunction(
+StatusOr<ReturnValues> Runtime::CallFunction(
     StringPiece name, absl::Span<AbstractTensorHandle* const> args) {
   EagerContext& ctx = this->eager_ctx_;
 

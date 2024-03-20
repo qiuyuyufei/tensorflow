@@ -81,7 +81,7 @@ Status AnonymousMemoryCacheHandleOp::CreateResource(
     std::unique_ptr<ProcessFunctionLibraryRuntime> pflr,
     FunctionLibraryRuntime* lib, MemoryCacheManager** manager) {
   *manager = new MemoryCacheManager();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void DeleteMemoryCacheOp::Compute(OpKernelContext* ctx) {

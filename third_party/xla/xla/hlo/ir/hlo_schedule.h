@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -78,14 +78,6 @@ class HloInstructionSequence {
     *id_it = new_instruction->unique_id();
   }
 
-  // Adds the instruction to the sequence at a specified index,
-  void insert_instruction(HloInstruction* instruction, int64_t index) {
-    CHECK(0 <= index && index < size()) << "Index out of bounds";
-    instruction_sequence_.insert(instruction_sequence_.begin() + index,
-                                 instruction);
-    id_sequence_.insert(id_sequence_.begin() + index, instruction->unique_id());
-  }
-
   // Clears the sequence of all instructions.
   void clear() {
     instruction_sequence_.clear();
@@ -159,8 +151,7 @@ class HloSchedule {
   // Removes the computation from the sequences.
   void remove_computation(const HloComputation* computation) {
     auto it = sequences_.find(computation->unique_id());
-    // The computation is not scheduled. Nothing to remove.
-    if (it == sequences_.end()) return;
+    CHECK(it != sequences_.end());
     sequences_.erase(it);
     execution_threads_.erase(computation->unique_id());
   }

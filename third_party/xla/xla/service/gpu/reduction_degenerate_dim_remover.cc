@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,31 +15,27 @@ limitations under the License.
 
 #include "xla/service/gpu/reduction_degenerate_dim_remover.h"
 
-#include <cstdint>
-#include <memory>
-#include <utility>
-#include <vector>
+#include <algorithm>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/container/inlined_vector.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
+#include "absl/strings/str_join.h"
 #include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
-#include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
-#include "xla/shape.h"
+#include "xla/hlo/ir/hlo_opcode.h"
+#include "xla/service/gpu/ir_emission_utils.h"
+#include "xla/service/pattern_matcher.h"
 #include "xla/shape_util.h"
-#include "tsl/platform/statusor.h"
+#include "xla/status_macros.h"
+#include "xla/statusor.h"
+#include "tsl/platform/errors.h"
 
 namespace xla {
 namespace gpu {
 
 class ReductionDegenerateDimRemoverVisitor : public DfsHloRewriteVisitor {
  public:
-  absl::Status HandleReduce(HloInstruction *hlo) override {
+  Status HandleReduce(HloInstruction *hlo) override {
     auto instr = Cast<HloReduceInstruction>(hlo);
     absl::InlinedVector<HloInstruction *, 2> input_reshapes;
     absl::InlinedVector<Shape, 2> canonical_reduce_shapes;
@@ -54,7 +50,7 @@ class ReductionDegenerateDimRemoverVisitor : public DfsHloRewriteVisitor {
                                       : instr->shape();
 
       if (!ShapeUtil::HasDegenerateDimensions(reduced_op->shape())) {
-        return absl::OkStatus();
+        return OkStatus();
       }
       Shape canonical_input_shape =
           ShapeUtil::DropDegenerateDimensions(input_shape);
@@ -117,7 +113,7 @@ class ReductionDegenerateDimRemoverVisitor : public DfsHloRewriteVisitor {
   }
 };
 
-absl::StatusOr<bool> ReductionDegenerateDimRemover::Run(
+StatusOr<bool> ReductionDegenerateDimRemover::Run(
     HloModule *module,
     const absl::flat_hash_set<absl::string_view> &execution_threads) {
   TF_ASSIGN_OR_RETURN(bool changed,

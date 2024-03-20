@@ -31,7 +31,6 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/types/optional.h"
 #include "tensorflow/core/framework/cancellation.h"
 #include "tensorflow/core/framework/metrics.h"
 #include "tensorflow/core/framework/model.pb.h"
@@ -235,13 +234,6 @@ class RamBudgetManager {
     mutex_lock l(mu_);
     budget_ = budget;
     VLOG(2) << "Updated ram budget to " << budget;
-  }
-
-  std::string DebugString() {
-    mutex_lock l(mu_);
-    return absl::StrCat("RamBudgetManager: budget_: ", budget_,
-                        " prefetch allocated: ", legacy_prefetch_allocated_,
-                        " model allocated: ", model_allocated_);
   }
 
  private:
@@ -520,7 +512,7 @@ class Node {
   virtual double ComputeSelfTime() const;
 
   // Returns the parameter value if it exists, not ok status otherwise.
-  absl::StatusOr<double> ParameterValue(const std::string& parameter_name) const
+  StatusOr<double> ParameterValue(const std::string& parameter_name) const
       TF_LOCKS_EXCLUDED(mu_) {
     tf_shared_lock l(mu_);
     if (parameters_.contains(parameter_name)) {
@@ -625,10 +617,6 @@ class Node {
     tf_shared_lock l(mu_);
     return AverageBufferedElementSizeLocked();
   }
-
-  // Copies node's parameter state value to parameter value if the parameter
-  // name matches `parameter_name`.
-  void SyncStateValuesToParameterValues(const std::string& parameter_name);
 
  protected:
   // Used for (incrementally) recording metrics. The class is thread-safe.
@@ -920,8 +908,7 @@ class Model {
   using NodeValues = Node::NodeValues;
   using ParameterGradients = Node::ParameterGradients;
 
-  explicit Model(std::optional<std::string> dataset_name);
-  explicit Model() : Model(std::nullopt) {}
+  Model();
   ~Model();
 
   // Returns a pointer to the model's output node.
@@ -1043,7 +1030,7 @@ class Model {
   // nodes, the parameter state values are not tuned by Autotune and hence the
   // parameter values can be stale. We do not sync all parameters because it may
   // increase mutex contention with `GetNext()`.
-  void MaybeSyncStateValuesToValues(std::shared_ptr<Node> snapshot);
+  void MaybeSyncStateValuesToValues(ModelParameters* parameters);
 
   // Downsizes buffers that are too large for all nodes rooted at `snapshot`.
   // Returns true if any buffer is downsized.
@@ -1156,7 +1143,6 @@ class Model {
   // buffers were full.
   double TotalMaximumBufferedBytes(std::shared_ptr<Node> node);
 
-  std::optional<std::string> dataset_name_;
   // Used for coordination between different input pipeline threads. Exclusive
   // access is required only when adding or removing nodes. Concurrent access to
   // existing nodes is protected by a node mutex.
@@ -1182,11 +1168,11 @@ class Model {
   };
   std::shared_ptr<GuardedBool> safe_to_collect_metrics_;
 
-  // Time use for rate limiting the recomputation of human-readable string
-  // representation of the model.
+  // Time use for rate limitting the recomputation of human-readable string
+  // represention of the model.
   absl::Time cache_until_ = absl::InfinitePast();
   // Cached result of the `DebugString()` invocation used to implement rate
-  // limiting of the computation.
+  // limitting of the computation.
   std::string cached_debug_string_ = "";
   // Used to coordinate gap time updates between different threads. Gap time is
   // the time between the completion of the previous `GetNext()` and the start
@@ -1200,8 +1186,6 @@ class Model {
   std::shared_ptr<Node> snapshot_ TF_GUARDED_BY(mu_);
   // Stores the optimization parameters used by autotune.
   OptimizationParams optimization_params_ TF_GUARDED_BY(mu_);
-  // Stores the model id in the string format
-  std::string model_id_;
 };
 
 // Class to compute timing information for a model.

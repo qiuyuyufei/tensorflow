@@ -53,7 +53,7 @@ void Worker::GetStatusAsync(CallOptions* opts, const GetStatusRequest* request,
   for (auto& d : devices) {
     response->add_device_attributes()->Swap(&d);
   }
-  done(absl::OkStatus());
+  done(OkStatus());
 }
 
 void Worker::CreateWorkerSessionAsync(const CreateWorkerSessionRequest* request,
@@ -142,7 +142,7 @@ Status Worker::PrepareRunGraph(RunGraphRequestWrapper* req,
   for (size_t i = 0; i < req->num_recvs(); ++i) {
     out->insert({req->recv_key(i), empty_tensor});
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void Worker::RunGraphAsync(CallOptions* opts, RunGraphRequestWrapper* request,
@@ -151,7 +151,7 @@ void Worker::RunGraphAsync(CallOptions* opts, RunGraphRequestWrapper* request,
   if (request->store_errors_in_response_body()) {
     done = [response, done](const Status& status) {
       response->set_status(status);
-      done(absl::OkStatus());
+      done(OkStatus());
     };
   }
   if (request->is_partial()) {
@@ -371,7 +371,7 @@ void Worker::CleanupGraphAsync(const CleanupGraphRequest* request,
       sam->Cleanup(step_id);
     }
   }
-  done(absl::OkStatus());
+  done(OkStatus());
 }
 
 void Worker::CleanupAllAsync(const CleanupAllRequest* request,
@@ -380,7 +380,7 @@ void Worker::CleanupAllAsync(const CleanupAllRequest* request,
   std::vector<string> containers;
   for (const auto& c : request->container()) containers.push_back(c);
   env_->device_mgr->ClearContainers(containers);
-  done(absl::OkStatus());
+  done(OkStatus());
 }
 
 void Worker::LoggingAsync(const LoggingRequest* request,
@@ -489,7 +489,7 @@ Status Worker::PrepareRecvTensor(const Rendezvous::ParsedKey& parsed,
           distributed_runtime::WorkerPossiblyRestarted().SerializeAsString()}});
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void Worker::RecvTensorAsync(CallOptions* opts,

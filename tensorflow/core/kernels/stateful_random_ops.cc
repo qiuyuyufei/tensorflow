@@ -65,7 +65,7 @@ Status CheckState(const Tensor& state) {
     return errors::InvalidArgument(
         "RNG state must have one and only one dimension, not ", state.dims());
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status CheckPhiloxState(const Tensor& state, int64_t alg_tag_skip = 0) {
@@ -80,7 +80,7 @@ Status CheckPhiloxState(const Tensor& state, int64_t alg_tag_skip = 0) {
         " must be at least ",
         min_size, "; got ", state.NumElements());
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 template <typename AlgEnumType>
@@ -91,7 +91,7 @@ StatusOr<AlgEnumType> GetAlgId(OpKernelContext* ctx, int input_idx) {
 }
 
 template <typename AlgEnumType>
-absl::StatusOr<ConcreteRngAlgorithm> ResolveAlg(AlgEnumType alg_id) {
+StatusOr<ConcreteRngAlgorithm> ResolveAlg(AlgEnumType alg_id) {
   switch (alg_id) {
     case RNG_ALG_PHILOX:
       return ConcreteRngAlgorithm::RNG_ALG_PHILOX;
@@ -106,8 +106,7 @@ absl::StatusOr<ConcreteRngAlgorithm> ResolveAlg(AlgEnumType alg_id) {
 }
 
 template <typename AlgEnumType>
-absl::StatusOr<ConcreteRngAlgorithm> GetAlg(OpKernelContext* ctx,
-                                            int input_idx) {
+StatusOr<ConcreteRngAlgorithm> GetAlg(OpKernelContext* ctx, int input_idx) {
   TF_ASSIGN_OR_RETURN(auto alg_id, GetAlgId<AlgEnumType>(ctx, input_idx));
   return ResolveAlg(alg_id);
 }
@@ -150,7 +149,7 @@ Status UpdateVariableAndFill(
       arg.state_tensor = var_tensor;
       functor::UpdateVariableAndFill_Philox<Device, Distribution>()(
           ctx, ctx->eigen_device<Device>(), dist, &arg, output_data);
-      return absl::OkStatus();
+      return OkStatus();
     case ConcreteRngAlgorithm::RNG_ALG_THREEFRY:
       return errors::Unimplemented(
           "Non-XLA devices don't support the ThreeFry algorithm.");
@@ -203,7 +202,7 @@ Status GetScalar(const Tensor& tensor, int input_idx, T* result) {
                                    ", not ", DataTypeString(tensor.dtype()));
   }
   *result = tensor.flat<T>()(0);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 template <typename Device, class Distribution>

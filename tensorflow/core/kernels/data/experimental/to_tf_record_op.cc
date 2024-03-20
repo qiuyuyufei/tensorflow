@@ -45,7 +45,7 @@ class ToTFRecordOp : public AsyncOpKernel {
       return errors::InvalidArgument(argument_name, " must be a scalar");
     }
     *output = argument_t->scalar<T>()();
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override {
@@ -119,7 +119,7 @@ class ToTFRecordOp : public AsyncOpKernel {
       }
       components.clear();
     } while (!end_of_sequence);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   BackgroundWorker background_worker_;

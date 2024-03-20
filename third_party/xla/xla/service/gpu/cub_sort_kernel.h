@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,20 +19,18 @@ limitations under the License.
 #include <cstddef>
 #include <cstdint>
 
+#include "absl/status/status.h"
+
 namespace xla {
 namespace gpu {
 
-// Returns nullptr if no error, otherwise the error message as a null-terminated
-// string (cudaGetErrorString or similar).
-#define XLA_CUB_DECLARE_SORT_KEYS(suffix)                                    \
-  const char* CubSortKeys_##suffix(void* d_temp_storage, size_t& temp_bytes, \
-                                   const void* d_keys_in, void* d_keys_out,  \
-                                   size_t num_items, bool descending);
+#define XLA_CUB_DECLARE_SORT_KEYS(suffix)                                     \
+  absl::Status CubSortKeys_##suffix(void* d_temp_storage, size_t& temp_bytes, \
+                                    const void* d_keys_in, void* d_keys_out,  \
+                                    size_t num_items, bool descending);
 
-// Returns nullptr if no error, otherwise the error message as a null-terminated
-// string (cudaGetErrorString or similar).
 #define XLA_CUB_DECLARE_SORT_PAIRS(suffix)                             \
-  const char* CubSortPairs_##suffix(                                   \
+  absl::Status CubSortPairs_##suffix(                                  \
       void* d_temp_storage, size_t& temp_bytes, const void* d_keys_in, \
       void* d_keys_out, const void* d_values_in, void* d_values_out,   \
       size_t num_items, bool descending);

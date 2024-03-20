@@ -3,7 +3,10 @@
 # TensorRT open source repository.
 load("@local_config_cuda//cuda:build_defs.bzl", "cuda_default_copts", "cuda_library")
 
-exports_files(["LICENSE"])
+exports_files(
+    ["LICENSE"],
+    visibility = ["//visibility:public"],
+)
 
 cuda_library(
     name = "plugin_common",
@@ -16,6 +19,7 @@ cuda_library(
         "plugin/common/plugin.h",
     ],
     strip_include_prefix = "plugin/common",
+    visibility = ["//visibility:public"],
     deps = [
         "@local_config_tensorrt//:tensorrt",
         "@local_config_tensorrt//:tensorrt_headers",
@@ -29,6 +33,7 @@ cc_library(
         "plugin/efficientNMSPlugin/efficientNMSParameters.h",
         "plugin/efficientNMSPlugin/efficientNMSPlugin.h",
     ],
+    visibility = ["//visibility:public"],
 )
 
 cuda_library(

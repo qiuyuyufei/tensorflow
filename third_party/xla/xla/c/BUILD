@@ -1,12 +1,7 @@
-load("@local_tsl//tsl:tsl.bzl", "internal_visibility")
 load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = internal_visibility([
-        "//learning/brain/tfrt/tpu_plugin:__subpackages__",
-        "//tensorflow/core/common_runtime/next_pluggable_device:__subpackages__",
-    ]),
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -15,6 +10,7 @@ cc_library(
     hdrs = [
         "c_api_decl.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
     ],
 )

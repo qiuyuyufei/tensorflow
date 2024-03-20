@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "xla/service/generic_transfer_manager.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <utility>
@@ -31,7 +30,6 @@ limitations under the License.
 #include "xla/shape_tree.h"
 #include "xla/shape_util.h"
 #include "xla/stream_executor/host/host_platform_id.h"
-#include "xla/stream_executor/platform_manager.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/tests/literal_test_util.h"
 #include "xla/types.h"
@@ -59,9 +57,11 @@ class GenericTransferManagerTest : public ::testing::Test {
   void SetUp() override {
     TF_ASSERT_OK_AND_ASSIGN(
         se::Platform * platform,
-        se::PlatformManager::PlatformWithId(se::host::kHostPlatformId));
+        se::MultiPlatformManager::PlatformWithId(se::host::kHostPlatformId));
     TF_ASSERT_OK_AND_ASSIGN(stream_executor_, platform->ExecutorForDevice(0));
-    TF_ASSERT_OK_AND_ASSIGN(stream_, stream_executor_->CreateStream());
+    stream_.emplace(stream_executor_);
+    stream_->Init();
+    ASSERT_TRUE(stream_->ok());
   }
 
   ScopedShapedBuffer AllocateBuffer(const Shape& shape) {
@@ -73,36 +73,19 @@ class GenericTransferManagerTest : public ::testing::Test {
 
   PackingTransferManager transfer_manager_;
   se::StreamExecutor* stream_executor_;
-  std::unique_ptr<se::Stream> stream_;
+  std::optional<se::Stream> stream_;
 };
 
 TEST_F(GenericTransferManagerTest, TransferLiteralToDevice) {
   ScopedShapedBuffer buffer = AllocateBuffer(ShapeUtil::MakeShape(U16, {2, 2}));
   Literal literal = LiteralUtil::CreateR2<uint16_t>({{1, 2}, {3, 4}});
-  TF_ASSERT_OK(transfer_manager_.TransferLiteralToDevice(stream_.get(), literal,
-                                                         buffer));
+  TF_ASSERT_OK(transfer_manager_.TransferLiteralToDevice(&stream_.value(),
+                                                         literal, buffer));
 
   se::DeviceMemoryBase device_mem = buffer.buffers().element({});
   uint16_t* device_ptr = static_cast<uint16_t*>(device_mem.opaque());
   std::vector<uint16_t> expected = {1, 2, 3, 4};
   EXPECT_EQ(absl::Span<uint16_t>(device_ptr, expected.size()), expected);
-}
-
-MATCHER_P2(MaskedValuesEqual, mask, expected, "") {
-  if (arg.size() != expected.size()) {
-    *result_listener << "argument sizes do not match";
-    return false;
-  }
-  for (size_t i = 0; i < expected.size(); ++i) {
-    const auto v1 = arg[i] & mask;
-    const auto v2 = expected[i] & mask;
-    if (v1 != v2) {
-      *result_listener << "mismatch at position " << i << ", " << v1 << " vs "
-                       << v2;
-      return false;
-    }
-  }
-  return true;
 }
 
 TEST_F(GenericTransferManagerTest, TransferLiteralToDeviceInt4) {
@@ -113,7 +96,7 @@ TEST_F(GenericTransferManagerTest, TransferLiteralToDeviceInt4) {
     transfer_manager_.pack_subbyte_types_ = pack;
     ScopedShapedBuffer buffer =
         AllocateBuffer(ShapeUtil::MakeShape(S4, {2, 2}));
-    TF_ASSERT_OK(transfer_manager_.TransferLiteralToDevice(stream_.get(),
+    TF_ASSERT_OK(transfer_manager_.TransferLiteralToDevice(&stream_.value(),
                                                            literal, buffer));
     se::DeviceMemoryBase device_mem = buffer.buffers().element({});
     ASSERT_EQ(device_mem.size(), pack ? 2 : 4);
@@ -121,10 +104,8 @@ TEST_F(GenericTransferManagerTest, TransferLiteralToDeviceInt4) {
     std::vector<int8_t> expected =
         pack ? std::vector<int8_t>{static_cast<int8_t>(0x1e),
                                    static_cast<int8_t>(0xd4)}
-             : std::vector<int8_t>{1, -2, -3, 4};
-    // Ignore high bits in equality comparisons.
-    EXPECT_THAT(absl::Span<int8_t>(device_ptr, expected.size()),
-                MaskedValuesEqual(pack ? 0xFF : 0x0F, expected));
+             : std::vector<int8_t>{1, (-2) & 0xf, (-3) & 0xf, 4};
+    EXPECT_EQ(absl::Span<int8_t>(device_ptr, expected.size()), expected);
   }
 }
 
@@ -140,7 +121,7 @@ TEST_F(GenericTransferManagerTest, TransferLiteralFromDevice) {
   TF_ASSERT_OK_AND_ASSIGN(
       Literal literal,
       transfer_manager_.TransferManager::TransferLiteralFromDevice(
-          stream_.get(), buffer));
+          &stream_.value(), buffer));
   EXPECT_TRUE(LiteralTestUtil::Equal(
       literal, LiteralUtil::CreateR2<uint16_t>({{1, 2}, {3, 4}})));
 }
@@ -169,7 +150,7 @@ TEST_F(GenericTransferManagerTest, TransferLiteralFromDeviceInt4) {
     TF_ASSERT_OK_AND_ASSIGN(
         Literal literal,
         transfer_manager_.TransferManager::TransferLiteralFromDevice(
-            stream_.get(), buffer));
+            &stream_.value(), buffer));
     EXPECT_TRUE(LiteralTestUtil::Equal(
         literal,
         LiteralUtil::CreateR2<s4>({{s4{1}, s4{-2}}, {s4{-3}, s4{4}}})));

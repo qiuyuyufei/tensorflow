@@ -90,10 +90,10 @@ class RaggedTensorToTensorBaseOp : public OpKernel {
     switch (GetRowPartitionTypeByDimension(dimension - 1)) {
       case RowPartitionType::VALUE_ROWIDS:
         *result = GetMaxWidthValueRowID(row_partition_tensor);
-        return absl::OkStatus();
+        return OkStatus();
       case RowPartitionType::ROW_SPLITS:
         *result = GetMaxWidthRowSplit(row_partition_tensor);
-        return absl::OkStatus();
+        return OkStatus();
       default:
         return errors::InvalidArgument(
             "Cannot handle partition type ",
@@ -176,7 +176,7 @@ class RaggedTensorToTensorBaseOp : public OpKernel {
         TF_RETURN_IF_ERROR(GetMaxWidth(c, i, &(*result)[i]));
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   /**
@@ -236,7 +236,7 @@ class RaggedTensorToTensorBaseOp : public OpKernel {
       return errors::InvalidArgument("Invalid row split size.");
     }
 
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Calculate the output index of the first element of a list.
@@ -268,7 +268,7 @@ class RaggedTensorToTensorBaseOp : public OpKernel {
     const INDEX_TYPE index_size = value_rowids.size();
     result->reserve(index_size);
     if (index_size == 0) {
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     INDEX_TYPE current_output_column = 0;
@@ -312,7 +312,7 @@ class RaggedTensorToTensorBaseOp : public OpKernel {
       return errors::InvalidArgument("Invalid row ids.");
     }
 
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status CalculateOutputIndex(OpKernelContext* context, int dimension,
@@ -355,13 +355,13 @@ class RaggedTensorToTensorBaseOp : public OpKernel {
     switch (first_partition_type) {
       case RowPartitionType::FIRST_DIM_SIZE:
         *result = first_partition_tensor.scalar<INDEX_TYPE>()();
-        return absl::OkStatus();
+        return OkStatus();
       case RowPartitionType::VALUE_ROWIDS:
         return errors::InvalidArgument(
             "Cannot handle VALUE_ROWIDS in first dimension.");
       case RowPartitionType::ROW_SPLITS:
         *result = first_partition_tensor.shape().dim_size(0) - 1;
-        return absl::OkStatus();
+        return OkStatus();
       default:
         return errors::InvalidArgument(
             "Cannot handle type ",

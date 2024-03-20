@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <string>
 
-#include "xla/stream_executor/platform_manager.h"
 #include "tensorflow/core/common_runtime/device_factory.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/strings/numbers.h"
@@ -31,11 +30,11 @@ limitations under the License.
 namespace tensorflow {
 
 Status ValidatePluggableDeviceMachineManager(const string& platform_name) {
-  return se::PlatformManager::PlatformWithName(platform_name).status();
+  return se::MultiPlatformManager::PlatformWithName(platform_name).status();
 }
 
 se::Platform* PluggableDeviceMachineManager(const string& platform_name) {
-  auto result = se::PlatformManager::PlatformWithName(platform_name);
+  auto result = se::MultiPlatformManager::PlatformWithName(platform_name);
   if (!result.ok()) {
     LOG(FATAL) << "Could not find platform with name "  // Crash OK
                << platform_name;

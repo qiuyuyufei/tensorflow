@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ absl::Status InvalidArgument(const absl::FormatSpec<Args...>& format,
 }
 
 template <typename... Args>
-absl::Status Internal(const absl::FormatSpec<Args...>& format,
+absl::Status InternalError(const absl::FormatSpec<Args...>& format,
                            const Args&... args) {
   return absl::InternalError(absl::StrFormat(format, args...));
 }

@@ -35,7 +35,6 @@ limitations under the License.
 #include "mlir/IR/Value.h"  // from @llvm-project
 #include "mlir/Pass/Pass.h"  // from @llvm-project
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
-#include "tensorflow/compiler/mlir/quantization/common/func.h"
 #include "tensorflow/compiler/mlir/quantization/tensorflow/passes/manipulate_model_attr.h"
 #include "tensorflow/compiler/mlir/quantization/tensorflow/passes/passes.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_executor.h"
@@ -107,6 +106,20 @@ class MergeInitializerFunctionOpsToMainPass
                 tf_saved_model::TensorFlowSavedModelDialect>();
   }
 };
+
+// Gets the "main" function from the module. Returns an empty op iff it doesn't
+// exist.
+func::FuncOp GetMainFunction(ModuleOp module_op) {
+  const auto main_func_id =
+      StringAttr::get(module_op.getContext(), kImportModelDefaultGraphFuncName);
+  auto func_ops = module_op.getOps<func::FuncOp>();
+  auto main_func_itr = absl::c_find_if(func_ops, [&main_func_id](auto func_op) {
+    return func_op.getName() == main_func_id;
+  });
+
+  if (main_func_itr == func_ops.end()) return {};
+  return *main_func_itr;
+}
 
 // Returns true iff func_op has either no Region or the body has no Blocks.
 bool IsFuncOpEmpty(func::FuncOp func_op) {
@@ -323,7 +336,7 @@ void MergeInitializerFunctionOpsToMainPass::runOnOperation() {
   ModuleOp module_op = getOperation();
   MLIRContext* ctx = module_op.getContext();
 
-  func::FuncOp main_func_op = FindMainFuncOp(module_op);
+  func::FuncOp main_func_op = GetMainFunction(module_op);
   if (!main_func_op) {
     module_op.emitError("Main function op not found.");
     return signalPassFailure();

@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -40,13 +40,13 @@ void Despecializer::AddReduceWindowToReduceBroadcastDeconstruct() {
   pipeline_.AddPass<DeconstructReduceWindowToReduceBroadcast>();
 }
 
-absl::StatusOr<bool> Despecializer::Run(
+StatusOr<bool> Despecializer::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   return pipeline_.Run(module, execution_threads);
 }
 
-absl::StatusOr<bool> DeconstructReduceWindowToReduceBroadcast::Run(
+StatusOr<bool> DeconstructReduceWindowToReduceBroadcast::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

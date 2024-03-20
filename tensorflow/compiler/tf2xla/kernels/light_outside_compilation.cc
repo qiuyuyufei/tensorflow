@@ -53,8 +53,8 @@ limitations under the License.
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/status_macros.h"
+#include "xla/stream_executor/multi_platform_manager.h"
 #include "xla/stream_executor/platform.h"
-#include "xla/stream_executor/platform_manager.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/util.h"
 #include "tensorflow/core/common_runtime/gpu/gpu_process_state.h"
@@ -100,7 +100,7 @@ const char* const kTfCallbackCustomCall = "GenericTfCallbackGPU";
 // "check out" an element from the list, removing it.  When we're done, we add
 // it back.  If there are no available elements in the list, we create one.
 struct KernelInstantiation {
-  static absl::StatusOr<std::unique_ptr<KernelInstantiation>> Create(
+  static StatusOr<std::unique_ptr<KernelInstantiation>> Create(
       TfCallbackData callback_data) {
     auto instantiation = std::make_unique<KernelInstantiation>();
     instantiation->input_shapes.reserve(callback_data.inputs_size());
@@ -130,7 +130,7 @@ struct KernelInstantiation {
       devices_and_kernels ABSL_GUARDED_BY(mu);
 };
 
-absl::StatusOr<std::string> MakeOpaque(TfCallbackData callback_data) {
+StatusOr<std::string> MakeOpaque(TfCallbackData callback_data) {
   // Clear the `name` field in the callback_data, because this contains the full
   // TF op name scope.  We want ops with different names to map to the same
   // Instantiation (so that if the same op with the same shape appears 10 times
@@ -150,12 +150,12 @@ absl::StatusOr<std::string> MakeOpaque(TfCallbackData callback_data) {
       absl::Base64Escape(serialized_data), callback_data.op().op());
 }
 
-absl::StatusOr<KernelInstantiation*> GetInstantiation(
-    absl::string_view opaque) {
+StatusOr<KernelInstantiation*> GetInstantiation(absl::string_view opaque) {
   constexpr absl::string_view kFingerprintPrefix = "fingerprint128=";
   if (!absl::StartsWith(opaque, kFingerprintPrefix)) {
-    return xla::Internal("Invalid opaque; must start with '%s', but was '%s'",
-                         kFingerprintPrefix, opaque);
+    return xla::InternalError(
+        "Invalid opaque; must start with '%s', but was '%s'",
+        kFingerprintPrefix, opaque);
   }
   opaque.remove_prefix(kFingerprintPrefix.length());
 
@@ -165,8 +165,8 @@ absl::StatusOr<KernelInstantiation*> GetInstantiation(
   absl::string_view fingerprint_str = opaque.substr(0, kFingerprintLen);
   opaque.remove_prefix(kFingerprintLen);
   if (fingerprint_str.length() != kFingerprintLen) {
-    return xla::Internal("Invalid opaque; fingerprint is wrong length: '%s'",
-                         fingerprint_str);
+    return xla::InternalError(
+        "Invalid opaque; fingerprint is wrong length: '%s'", fingerprint_str);
   }
 
   static absl::Mutex mu{absl::kConstInit};
@@ -182,8 +182,9 @@ absl::StatusOr<KernelInstantiation*> GetInstantiation(
     // the serialized TfCallbackData from the opaque.
     constexpr absl::string_view kSerializedPrefix = " serialized=";
     if (!absl::StartsWith(opaque, kSerializedPrefix)) {
-      return xla::Internal("Invalid opaque; must start with '%s', but was '%s'",
-                           kSerializedPrefix, opaque);
+      return xla::InternalError(
+          "Invalid opaque; must start with '%s', but was '%s'",
+          kSerializedPrefix, opaque);
     }
     opaque.remove_prefix(kSerializedPrefix.length());
 
@@ -193,12 +194,12 @@ absl::StatusOr<KernelInstantiation*> GetInstantiation(
     // Unescape the base64 string, then parse the proto.
     std::string unescaped_opaque;
     if (!absl::Base64Unescape(opaque, &unescaped_opaque)) {
-      return xla::Internal("Failed to base64 decode opaque %s", opaque);
+      return xla::InternalError("Failed to base64 decode opaque %s", opaque);
     }
     TfCallbackData callback_data;
     if (!callback_data.ParseFromString(unescaped_opaque)) {
-      return xla::Internal("Failed to parse TfCallbackData from opaque %s",
-                           opaque);
+      return xla::InternalError("Failed to parse TfCallbackData from opaque %s",
+                                opaque);
     }
     TF_ASSIGN_OR_RETURN(instantiation,
                         KernelInstantiation::Create(std::move(callback_data)));
@@ -220,7 +221,7 @@ absl::StatusOr<KernelInstantiation*> GetInstantiation(
 
 }  // namespace
 
-static absl::StatusOr<Tensor> TensorFromProto(const TensorProto& proto) {
+static StatusOr<Tensor> TensorFromProto(const TensorProto& proto) {
   Tensor out;
   if (!out.FromProto(proto)) {
     return tsl::errors::Internal("Failed deserializing a TensorProto");
@@ -375,7 +376,7 @@ Status LightOutsideCompilationOp::CompileToCustomCallCallingTfKernel(
                    output_shape.IsTuple() ? xla::GetTupleElement(out, i) : out);
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 namespace {
@@ -549,11 +550,11 @@ Status PopulateMetadataBufferIfNeeded(OpKernelContext& ctx,
       void* location = static_cast<char*>(allocated->data()) +
                        xla::ShapeUtil::ByteSizeOf(xla_shape);
       se::DeviceMemoryBase m{location, num_dimensions * sizeof(int32_t)};
-      TF_RETURN_IF_ERROR(stream->Memcpy(&m, shape_info.data(),
-                                        num_dimensions * sizeof(int32_t)));
+      stream->ThenMemcpy(&m, shape_info.data(),
+                         num_dimensions * sizeof(int32_t));
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 class FakeDeviceContext : public DeviceContext {
@@ -570,8 +571,8 @@ Status CallTfKernel(void* stream_handle, void** buffers, const char* opaque,
   // Look up the platform only once, for a small performance gain.
   static Status* platform_status = nullptr;
   static se::Platform* platform = [&]() -> se::Platform* {
-    absl::StatusOr<se::Platform*> p =
-        se::PlatformManager::PlatformWithName("CUDA");
+    StatusOr<se::Platform*> p =
+        se::MultiPlatformManager::PlatformWithName("CUDA");
     if (!p.ok()) {
       platform_status = new Status(p.status());
       return nullptr;
@@ -586,7 +587,7 @@ Status CallTfKernel(void* stream_handle, void** buffers, const char* opaque,
                       platform->GetExecutor(config));
   se::Stream* stream = executor->FindAllocatedStream(stream_handle);
   if (!stream) {
-    return xla::Internal("Stream not found for %p", stream_handle);
+    return xla::InternalError("Stream not found for %p", stream_handle);
   }
 
   TF_ASSIGN_OR_RETURN(KernelInstantiation * instantiation,
@@ -709,7 +710,7 @@ Status CallTfKernel(void* stream_handle, void** buffers, const char* opaque,
   }
 
   TF_RETURN_IF_ERROR(ctx.status());
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void GenericTfCallback(void* stream_handle, void** buffers, const char* opaque,

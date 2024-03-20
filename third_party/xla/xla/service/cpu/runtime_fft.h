@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,10 +20,11 @@ limitations under the License.
 
 extern "C" {
 
-extern void __xla_cpu_runtime_DuccFft(
+extern void __xla_cpu_runtime_EigenFft(
     const void* /* xla::ExecutableRunOptions* */ run_options_ptr, void* out,
     void* operand, int32_t fft_type, int32_t double_precision, int32_t fft_rank,
-    const int64_t* input_shape, const int64_t* fft_length);
+    int64_t input_batch, int64_t fft_length0, int64_t fft_length1,
+    int64_t fft_length2);
 
 }  // extern "C"
 

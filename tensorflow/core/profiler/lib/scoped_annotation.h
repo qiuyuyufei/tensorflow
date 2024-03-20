@@ -27,7 +27,7 @@ limitations under the License.
 #include "tsl/profiler/lib/scoped_annotation.h"
 
 #if !defined(IS_MOBILE_PLATFORM)
-#include "tsl/profiler/backends/cpu/annotation_stack.h"
+#include "tensorflow/core/profiler/backends/cpu/annotation_stack.h"
 #endif
 
 namespace tensorflow {

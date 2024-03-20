@@ -50,17 +50,16 @@ cc_library(
 )
 
 cc_library(
-    name = "reduce",
+    name = "pad",
     srcs = [
-        "reduce.cc",
+        "pad.cc",
     ],
     hdrs = [
-        "reduce.h",
+        "pad.h",
     ],
     deps = [
-        "//tensorflow/compiler/mlir/lite/stablehlo:hlo_matchers",
+        ":util",
         "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TransformUtils",

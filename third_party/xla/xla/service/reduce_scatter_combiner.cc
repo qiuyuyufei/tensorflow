@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ limitations under the License.
 #include <cassert>
 #include <cstdint>
 #include <iterator>
-#include <limits>
 #include <memory>
 #include <numeric>
 #include <string>
@@ -49,26 +48,22 @@ limitations under the License.
 namespace xla {
 namespace {
 
-// Returns the most frequent scatter dim if it can be a valid scatter dim
-// for all shapes involved, else returns 0.
-int64_t FindMostFrequentScatterDim(
+int64_t FindMostFrequentGatherDim(
     absl::Span<HloInstruction* const> to_combine) {
   assert(!to_combine.empty());
 
   // Count frequencies.
-  int64_t min_rank = std::numeric_limits<int64_t>::max();
   std::vector<int64_t> frequency;
   for (const HloInstruction* it : to_combine) {
     int64_t dim = Cast<HloReduceScatterInstruction>(it)->scatter_dimension();
     frequency.resize(std::max(dim + 1, static_cast<int64_t>(frequency.size())),
                      0);
     frequency[dim]++;
-    min_rank = std::min(min_rank, it->shape().rank());
   }
 
   int64_t most_frequent_dim = std::distance(
       frequency.begin(), std::max_element(frequency.begin(), frequency.end()));
-  return most_frequent_dim < min_rank ? most_frequent_dim : 0;
+  return most_frequent_dim;
 }
 
 using ReduceScatterKey =
@@ -95,8 +90,8 @@ Status CombineReduceScatters(absl::Span<HloInstruction* const> to_combine) {
   std::vector<std::optional<std::vector<int64_t>>> operand_permutations;
   std::vector<Shape> output_shapes;
 
-  // Find the most frequent reduce-scatter dimension.
-  int64_t most_frequent_dim = FindMostFrequentScatterDim(to_combine);
+  // Find the most frequent all-gather dimension.
+  int64_t most_frequent_dim = FindMostFrequentGatherDim(to_combine);
 
   VLOG(1) << "Combining set";
   for (HloInstruction* hlo : to_combine) {
@@ -178,7 +173,7 @@ ReduceScatterCombiner::ReduceScatterCombiner(int64_t combine_threshold_in_bytes,
       combine_threshold_count_(combine_threshold_count),
       combine_by_dim_(combine_by_dim) {}
 
-absl::StatusOr<bool> ReduceScatterCombiner::Run(
+StatusOr<bool> ReduceScatterCombiner::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   VLOG(1) << "Running ReduceScatterCombiner with threshold of "

@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ limitations under the License.
 #include <cstdint>
 #include <iterator>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include "absl/algorithm/container.h"
@@ -25,7 +24,6 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_clone_context.h"
@@ -37,6 +35,7 @@ limitations under the License.
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/flatten_call_graph.h"
 #include "xla/status.h"
+#include "xla/statusor.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/errors.h"
@@ -54,8 +53,11 @@ void SetChannelIdForNewCollective(HloInstruction* new_instr,
   // have the same unique channel id.
   absl::flat_hash_map<int64_t, int64_t> old_to_new_channel_id_map;
   absl::flat_hash_map<int64_t, HloComputation*> channel_id_comp_map;
-  if (new_instr->IsAsynchronous() && hlo_query::IsCollectiveCommunicationOp(
-                                         new_instr->async_wrapped_opcode())) {
+  if (HloAsyncInstruction::ClassOf(new_instr) &&
+      hlo_query::IsCollectiveCommunicationOp(
+          DynCast<HloAsyncInstruction>(new_instr)
+              ->async_wrapped_instruction()
+              ->opcode())) {
     HloInstruction* wrapped_instr =
         DynCast<HloAsyncInstruction>(new_instr)->async_wrapped_instruction();
     int64_t old_channel_id = *wrapped_instr->channel_id();
@@ -71,20 +73,20 @@ void SetChannelIdForNewCollective(HloInstruction* new_instr,
 
     wrapped_instr->set_channel_id(new_channel_id);
     if (channel_id_comp_map.find(new_channel_id) == channel_id_comp_map.end()) {
-      channel_id_comp_map[new_channel_id] =
-          new_instr->async_wrapped_computation();
+      channel_id_comp_map[new_channel_id] = new_instr->called_computations()[0];
     } else {
-      channel_id_comp_map[new_channel_id]->AddAsyncStart(new_instr);
+      channel_id_comp_map[new_channel_id]->AddAsyncInstruction(*new_instr);
     }
   } else if (hlo_query::IsCollectiveCommunicationOp(new_instr->opcode()) ||
-             hlo_query::IsAsyncCollectiveStartOp(new_instr)) {
+             hlo_query::IsAsyncCollectiveStartOp(new_instr->opcode())) {
     new_instr->set_channel_id(hlo_query::NextChannelId(*module));
   }
 }
 
-absl::Status PeelInstructionsForOddTripCount(HloModule* module,
-                                             HloInstruction* while_instr) {
-  std::string suffix = "peeled_double_buffer";
+Status PeelInstructionsForOddTripCount(HloModule* module,
+                                       HloInstruction* while_instr) {
+  HloCloneContext context(module, "peeled_double_buffer");
+
   absl::flat_hash_map<HloInstruction*, HloInstruction*> old_to_new_map;
   HloComputation* while_body = while_instr->while_body();
   HloInstruction* input_parameter = while_body->parameter_instruction(0);
@@ -105,7 +107,7 @@ absl::Status PeelInstructionsForOddTripCount(HloModule* module,
     }
     HloInstruction* new_instr =
         parent_comp->AddInstruction(old_instr->CloneWithNewOperands(
-            old_instr->shape(), new_operands, suffix));
+            old_instr->shape(), new_operands, &context));
 
     SetChannelIdForNewCollective(new_instr, module);
     old_to_new_map[old_instr] = new_instr;
@@ -143,19 +145,18 @@ absl::Status PeelInstructionsForOddTripCount(HloModule* module,
       }
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 }  // namespace
 
-absl::StatusOr<bool> LoopDoubleBufferTransformer::Run(
+StatusOr<bool> LoopDoubleBufferTransformer::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;
   std::vector<HloInstruction*> while_instrs;
-  for (auto comp : module->MakeNonfusionComputations()) {
-    absl::c_copy_if(comp->instructions(), std::back_inserter(while_instrs),
-                    HloPredicateIsOp<HloOpcode::kWhile>);
-  }
+  absl::c_copy_if(module->entry_computation()->instructions(),
+                  std::back_inserter(while_instrs),
+                  HloPredicateIsOp<HloOpcode::kWhile>);
   VLOG(2) << "Processing " << while_instrs.size() << " while loops.";
 
   for (HloInstruction* while_instr : while_instrs) {
@@ -187,7 +188,7 @@ absl::StatusOr<bool> LoopDoubleBufferTransformer::Run(
       TF_RETURN_IF_ERROR(PeelInstructionsForOddTripCount(module, while_instr));
       exact_trip_count -= 1;
     }
-    std::string suffix = "double_buffer_clone";
+    HloCloneContext context(module, "double_buffer_clone");
     old_to_new_map[input_parameter] = while_body->root_instruction();
     for (HloInstruction* old_instr : while_body->MakeInstructionPostOrder()) {
       if (old_to_new_map.find(old_instr) != old_to_new_map.end()) {
@@ -200,7 +201,7 @@ absl::StatusOr<bool> LoopDoubleBufferTransformer::Run(
       }
       HloInstruction* new_instr =
           while_body->AddInstruction(old_instr->CloneWithNewOperands(
-              old_instr->shape(), new_operands, suffix));
+              old_instr->shape(), new_operands, &context));
 
       // If an elementwise instruction with constant operand is present, we
       // won't inject control dependency at the end to allow more constant

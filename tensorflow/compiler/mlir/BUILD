@@ -51,22 +51,22 @@ cc_library(
         "//tensorflow/compiler/mlir/lite:tensorflow_lite",
         "//tensorflow/compiler/mlir/lite:tf_tfl_passes",  # buildcleaner:keep
         "//tensorflow/compiler/mlir/quantization/stablehlo:bridge_passes",
+        "//tensorflow/compiler/mlir/tensorflow",
         "//tensorflow/compiler/mlir/tensorflow:mlir_roundtrip_pass_registration",
         "//tensorflow/compiler/mlir/tensorflow:mlprogram_util",
+        "//tensorflow/compiler/mlir/tensorflow/transforms:bridge_pass_test_pipeline_registration",
         "//tensorflow/compiler/mlir/tensorflow/transforms:tensorflow_passes",
         "//tensorflow/compiler/mlir/tensorflow/transforms:tensorflow_test_passes",
         "//tensorflow/compiler/mlir/tensorflow/transforms:tf_graph_optimization_pass",
         "//tensorflow/compiler/mlir/tensorflow/transforms:tf_saved_model_passes",  # buildcleaner:keep
         "//tensorflow/compiler/mlir/tensorflow/transforms/host_runtime:lower_cluster_to_runtime_ops",
-        "//tensorflow/compiler/mlir/tensorflow/transforms/host_runtime:runtime_passes",
         "//tensorflow/compiler/mlir/tf2xla:compile_mlir_util",
-        "//tensorflow/compiler/mlir/tf2xla/internal/passes:clustering_passes",
-        "//tensorflow/compiler/mlir/tf2xla/internal/passes:mlir_to_graph_passes",
         "//tensorflow/compiler/mlir/tf2xla/transforms:tf_xla_passes",
         "//tensorflow/compiler/mlir/tf2xla/transforms:xla_legalize_tf",
         "//tensorflow/compiler/mlir/tosa:tf_passes",
         "//tensorflow/compiler/mlir/tosa:tf_tfl_passes",
         "//tensorflow/compiler/mlir/tosa:tfl_passes",
+        "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",
         "@llvm-project//mlir:MlirOptLib",
         "@llvm-project//mlir:Transforms",
@@ -74,6 +74,7 @@ cc_library(
         "@local_xla//xla/mlir/framework/transforms:passes",
         "@local_xla//xla/mlir_hlo:all_passes",
         "@local_xla//xla/service/cpu:hlo_xla_runtime_pipeline",
+        "@local_xla//xla/translate/mhlo_to_lhlo_with_xla",
     ],
 )
 
@@ -203,6 +204,7 @@ cc_library(
         "@local_xla//xla/mlir/framework/ir:xla_framework",
         "@local_xla//xla/mlir_hlo:hlo_dialect_registration",
         "@local_xla//xla/service/cpu:hlo_xla_runtime_pipeline",
+        "@local_xla//xla/translate/mhlo_to_lhlo_with_xla",
         "@stablehlo//:register",
     ],
 )
@@ -237,6 +239,7 @@ tf_cc_binary(
         "@llvm-project//mlir:TranslateLib",
         "@local_xla//xla/translate/hlo_to_mhlo:translate_registration",
         "@local_xla//xla/translate/mhlo_to_hlo:translate_registration",
+        "@local_xla//xla/translate/mhlo_to_lhlo_with_xla:translate_registration",
     ],
 )
 

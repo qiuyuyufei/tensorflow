@@ -16,13 +16,12 @@
 
 import enum
 import functools
-from typing import Callable
 
 from tensorflow.core.protobuf import data_service_pb2
 from tensorflow.python import tf2
 from tensorflow.python.data.experimental.ops import compression_ops
 from tensorflow.python.data.experimental.service import _pywrap_server_lib
-from tensorflow.python.data.experimental.service import _pywrap_utils_exp
+from tensorflow.python.data.experimental.service import _pywrap_utils
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.ops import options as options_lib
 from tensorflow.python.data.ops import structured_function
@@ -428,7 +427,7 @@ def _parse_service(service) -> tuple[str, str]:
     protocol, address = parts
   elif len(parts) == 1:
     address = parts[0]
-    protocol = _pywrap_utils_exp.TF_DATA_DefaultProtocol()
+    protocol = _pywrap_utils.TF_DATA_DefaultProtocol()
   else:
     raise ValueError("Malformed `service` string has multiple '://': "
                      f"{service}.")
@@ -436,19 +435,17 @@ def _parse_service(service) -> tuple[str, str]:
   return (protocol, address)
 
 
-def _distribute(
-    processing_mode,
-    service,
-    job_name=None,
-    consumer_index=None,
-    num_consumers=None,
-    max_outstanding_requests=None,
-    task_refresh_interval_hint_ms=None,
-    data_transfer_protocol=None,
-    compression="AUTO",
-    cross_trainer_cache=None,
-    target_workers="AUTO",
-) -> Callable[dataset_ops.Dataset, dataset_ops.Dataset]:
+def _distribute(processing_mode,
+                service,
+                job_name=None,
+                consumer_index=None,
+                num_consumers=None,
+                max_outstanding_requests=None,
+                task_refresh_interval_hint_ms=None,
+                data_transfer_protocol=None,
+                compression="AUTO",
+                cross_trainer_cache=None,
+                target_workers="AUTO") -> dataset_ops.Dataset:
   """A transformation that moves dataset processing to the tf.data service.
 
   This transformation is similar to `distribute`, but supports additional
@@ -532,18 +529,16 @@ def _distribute(
 
 
 @tf_export("data.experimental.service.distribute")
-def distribute(
-    processing_mode,
-    service,
-    job_name=None,
-    consumer_index=None,
-    num_consumers=None,
-    max_outstanding_requests=None,
-    data_transfer_protocol=None,
-    compression="AUTO",
-    cross_trainer_cache=None,
-    target_workers="AUTO",
-) -> Callable[dataset_ops.Dataset, dataset_ops.Dataset]:
+def distribute(processing_mode,
+               service,
+               job_name=None,
+               consumer_index=None,
+               num_consumers=None,
+               max_outstanding_requests=None,
+               data_transfer_protocol=None,
+               compression="AUTO",
+               cross_trainer_cache=None,
+               target_workers="AUTO") -> dataset_ops.Dataset:
   """A transformation that moves dataset processing to the tf.data service.
 
   When you iterate over a dataset containing the `distribute` transformation,
@@ -809,7 +804,6 @@ def _register_dataset(
     A scalar string tensor representing the dataset ID.
   """
   _validate_compression(compression)
-
   if isinstance(service, tuple):
     protocol, address = service
   else:

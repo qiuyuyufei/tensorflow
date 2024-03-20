@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/hlo/utils/hlo_live_range.h"
 #include "xla/service/buffer_assignment.pb.h"
-#include "xla/service/heap_simulator/heap_simulator.h"
+#include "xla/service/heap_simulator.h"
 #include "xla/service/hlo.pb.h"
 #include "xla/service/hlo_alias_analysis.h"
 #include "xla/service/hlo_dataflow_analysis.h"
@@ -370,6 +370,14 @@ class BufferAssignment {
     return allocations_;
   }
 
+  // This is similar to copying Allocations(), but since it's moved out, it
+  // preserves the addresses. Since BufferAllocation::Slice keeps a
+  // BufferAllocation*, and some backends keep BufferAllocation::Slice in
+  // xla::Executables, migrating off the use of addresses can be hard.
+  std::vector<BufferAllocation> ReleaseAllocations() {
+    return std::move(allocations_);
+  }
+
   // Returns the total size allocation holding all temporary buffers.
   int64_t temp_allocation_total_size() const {
     return temp_allocation_total_size_;
@@ -421,16 +429,16 @@ class BufferAssignment {
   // Convenience function which returns the unique slice containing the buffer
   // at the given index of the given instruction. If a slice is not assigned or
   // the slice cannot be determined at compile time then an error is returned.
-  absl::StatusOr<BufferAllocation::Slice> GetUniqueSlice(
+  StatusOr<BufferAllocation::Slice> GetUniqueSlice(
       const HloInstruction* instruction, const ShapeIndex& index) const;
   // Like GetUniqueSlice but fixes the index to the top-level of the shape
   // (index = {}).
-  absl::StatusOr<BufferAllocation::Slice> GetUniqueTopLevelSlice(
+  StatusOr<BufferAllocation::Slice> GetUniqueTopLevelSlice(
       const HloInstruction* instruction) const;
   // Like GetUniqueTopLevelSlice but returns the slice for the output of the
   // entry computation of the HLO module (ie, the result of the XLA
   // computation).
-  absl::StatusOr<BufferAllocation::Slice> GetUniqueTopLevelOutputSlice() const;
+  StatusOr<BufferAllocation::Slice> GetUniqueTopLevelOutputSlice() const;
 
   // Returns the set BufferValues which may be the source of the value at the
   // given index and instruction.
@@ -480,7 +488,7 @@ class BufferAssignment {
 
   // Convert BufferAssignment to or from a proto.
   BufferAssignmentProto ToProto() const;
-  static absl::StatusOr<std::unique_ptr<BufferAssignment>> FromProto(
+  static StatusOr<std::unique_ptr<BufferAssignment>> FromProto(
       const BufferAssignmentProto& proto, const HloModule* module,
       BufferValue::SizeFunction buffer_size,
       HloDataflowAnalysis::CanShareBuffer can_share_buffer);
@@ -637,7 +645,7 @@ class BufferAssigner {
   // LogicalBuffer. If preset_assignments is provided, those pre-set assignment
   // offsets will be used. The caller guarantees that those assignments are
   // valid and they do not overwrite each other.
-  static absl::StatusOr<std::unique_ptr<BufferAssignment>> Run(
+  static StatusOr<std::unique_ptr<BufferAssignment>> Run(
       const HloModule* module, std::unique_ptr<HloOrdering> hlo_ordering,
       BufferValue::SizeFunction buffer_size,
       LogicalBuffer::AlignmentFunction color_alignment,
@@ -665,7 +673,7 @@ class BufferAssigner {
   virtual ~BufferAssigner() = default;
 
   // Create a buffer assignment.
-  absl::StatusOr<std::unique_ptr<BufferAssignment>> CreateAssignment(
+  StatusOr<std::unique_ptr<BufferAssignment>> CreateAssignment(
       const HloModule* module, std::unique_ptr<HloOrdering> hlo_ordering,
       BufferValue::SizeFunction buffer_size,
       LogicalBuffer::AlignmentFunction color_alignment,

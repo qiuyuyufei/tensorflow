@@ -27,11 +27,11 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "xla/stream_executor/device_id_utils.h"
 #include "tensorflow/core/common_runtime/device/device_event_mgr.h"
 #include "tensorflow/core/common_runtime/device/device_id.h"
 #include "tensorflow/core/common_runtime/device/device_id_manager.h"
 #include "tensorflow/core/common_runtime/device_factory.h"
-#include "tensorflow/core/common_runtime/device_id_utils.h"
 #include "tensorflow/core/common_runtime/local_device.h"
 #include "tensorflow/core/common_runtime/pluggable_device/pluggable_device_context.h"
 #include "tensorflow/core/common_runtime/pluggable_device/pluggable_device_factory.h"
@@ -85,41 +85,18 @@ class PluggableDevice::StreamGroupFactory {
     StreamGroup* group = &streams_[key_type(device_type, tf_device_id.value(),
                                             stream_group_within_device)];
     if (!group->compute) {
-      auto stream_or_status = executor->CreateStream();
-      if (!stream_or_status.ok()) {
-        LOG(ERROR) << "Failed to create stream for device "
-                   << tf_device_id.value()
-                   << " with status: " << stream_or_status.status();
-        return group;
-      }
-      group->compute = stream_or_status->get();
-      allocated_streams_.emplace_back(std::move(stream_or_status.value()));
+      group->compute = new se::Stream(executor);
+      group->compute->Init();
       VLOG(2) << "Created stream[" << stream_group_within_device
               << "] = " << group->compute;
 
-      stream_or_status = executor->CreateStream();
-      if (!stream_or_status.ok()) {
-        LOG(ERROR) << "Failed to create stream for device "
-                   << tf_device_id.value()
-                   << " with status: " << stream_or_status.status();
-        return group;
-      }
-      group->compute = stream_or_status->get();
-      group->host_to_device = stream_or_status->get();
-      allocated_streams_.emplace_back(std::move(stream_or_status.value()));
+      group->host_to_device = new se::Stream(executor);
+      group->host_to_device->Init();
       VLOG(2) << "Created host_to_device_stream[" << stream_group_within_device
               << "] = " << group->host_to_device;
 
-      stream_or_status = executor->CreateStream();
-      if (!stream_or_status.ok()) {
-        LOG(ERROR) << "Failed to create stream for device "
-                   << tf_device_id.value()
-                   << " with status: " << stream_or_status.status();
-        return group;
-      }
-      group->compute = stream_or_status->get();
-      group->device_to_host = stream_or_status->get();
-      allocated_streams_.emplace_back(std::move(stream_or_status.value()));
+      group->device_to_host = new se::Stream(executor);
+      group->device_to_host->Init();
       VLOG(2) << "Created device_to_host_stream[" << stream_group_within_device
               << "] = " << group->device_to_host;
 
@@ -133,16 +110,9 @@ class PluggableDevice::StreamGroupFactory {
         num_d2d_streams = 1;
       }
       for (int i = 0; i < num_d2d_streams; ++i) {
-        stream_or_status = executor->CreateStream();
-        if (!stream_or_status.ok()) {
-          LOG(ERROR) << "Failed to create stream for device "
-                     << tf_device_id.value()
-                     << " with status: " << stream_or_status.status();
-          return group;
-        }
-        group->compute = stream_or_status->get();
-        group->device_to_device.push_back(stream_or_status->get());
-        allocated_streams_.emplace_back(std::move(stream_or_status.value()));
+        se::Stream* stream = new se::Stream(executor);
+        stream->Init();
+        group->device_to_device.push_back(stream);
         VLOG(2) << "Created device_to_device_stream["
                 << stream_group_within_device
                 << "] = " << group->device_to_device.back();
@@ -162,7 +132,7 @@ class PluggableDevice::StreamGroupFactory {
   mutex lock_;
   using key_type = std::tuple<std::string, int, int>;
   std::map<key_type, StreamGroup> streams_;
-  std::vector<std::unique_ptr<se::Stream>> allocated_streams_;
+
   // StreamGroupFactory cannot be created directly; Call
   // StreamGroupFactory::Global to get the global instance.
   StreamGroupFactory() = default;
@@ -198,7 +168,7 @@ PluggableDevice::~PluggableDevice() {
 
 Status PluggableDevice::Init(const SessionOptions& options) {
   se::Platform* platform = PluggableDeviceMachineManager(platform_name_);
-  auto executor_status = DeviceIdUtil::ExecutorForTfDeviceId(
+  auto executor_status = se::DeviceIdUtil::ExecutorForTfDeviceId(
       DeviceType(device_type()), platform, tf_device_id_);
   if (!executor_status.status().ok()) {
     return errors::Internal("Failed to get StreamExecutor for device",
@@ -271,7 +241,7 @@ Status PluggableDevice::Init(const SessionOptions& options) {
     }
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Allocator* PluggableDevice::GetAllocator(AllocatorAttributes attr) {
@@ -356,8 +326,8 @@ Status PluggableDevice::MaybeCopyTensorToPluggableDevice(
     StatusCallback done) {
   if (alloc_attrs.on_host()) {
     *to = from;
-    done(absl::OkStatus());
-    return absl::OkStatus();
+    done(OkStatus());
+    return OkStatus();
   } else {
     if (!DMAHelper::CanUseDMA(&from)) {
       Status err = errors::Internal("PluggableDevice copy from non-DMA ",
@@ -389,7 +359,7 @@ Status PluggableDevice::MaybeCopyTensorToPluggableDevice(
 
     device_context_->CopyCPUTensorToDevice(
         &from, this, copy, std::move(wrapped_done), false /*sync_dst_compute*/);
-    return absl::OkStatus();
+    return OkStatus();
   }
 }
 

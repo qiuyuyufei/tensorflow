@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -49,7 +49,6 @@ std::unique_ptr<HloInstruction> CloneAllReduce(
     return inst->GetModule()->AddEmbeddedComputation(promoted.Build());
   }();
   new_inst->set_to_apply(to_apply_promoted);
-  to_apply_promoted->SetCollectiveCallInstruction(new_inst.get());
   return new_inst;
 }
 
@@ -61,7 +60,7 @@ AllReducePromotion::AllReducePromotion(
     absl::Span<std::pair<PrimitiveType, PrimitiveType> const> from_to_types)
     : pass_(from_to_types, IsAllReduce, CloneAllReduce) {}
 
-absl::StatusOr<bool> AllReducePromotion::Run(
+StatusOr<bool> AllReducePromotion::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   return pass_.Run(module, execution_threads);

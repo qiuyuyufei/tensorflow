@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ func.func @main(%arg0: tensor<2x3xf32>) -> tensor<2x3xf32> {
 }})";
 
 // Compiles an MLIR module on specified devices.
-absl::StatusOr<std::unique_ptr<LoadedExecutable>> CompileOnDevices(
+StatusOr<std::unique_ptr<LoadedExecutable>> CompileOnDevices(
     Client* client, Compiler* compiler, absl::string_view mlir_module_str,
     absl::Span<Device* const> devices, bool replicated) {
   mlir::MLIRContext context;

@@ -50,7 +50,7 @@ class FuncOpConverter : public OpConversionPattern<func::FuncOp> {
     rewriter.applySignatureConversion(&func.getBody(), conversion);
 
     // Update the signature of the function.
-    rewriter.modifyOpInPlace(func, [&] {
+    rewriter.updateRootInPlace(func, [&] {
       func.setType(rewriter.getFunctionType(conversion.getConvertedTypes(),
                                             func_type.getResults()));
     });

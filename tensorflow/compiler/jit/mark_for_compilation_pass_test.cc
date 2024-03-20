@@ -390,7 +390,7 @@ static Status GradForUnaryCwise(FunctionDef* g,
       {},
       // Nodes
       nodes);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // A gradient containing only supported operators
@@ -1816,7 +1816,7 @@ TEST(XlaCompilationTest, DeterministicClusterNames) {
           " rhs: ", rhs_cluster_name);
     }
 
-    return absl::OkStatus();
+    return OkStatus();
   };
 
   testing::ResetClusterSequenceNumber();

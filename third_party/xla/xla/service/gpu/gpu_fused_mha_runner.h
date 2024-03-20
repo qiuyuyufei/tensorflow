@@ -1,4 +1,4 @@
-/* Copyright 2023 The OpenXLA Authors.
+/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,23 +16,23 @@ limitations under the License.
 #ifndef XLA_SERVICE_GPU_GPU_FUSED_MHA_RUNNER_H_
 #define XLA_SERVICE_GPU_GPU_FUSED_MHA_RUNNER_H_
 
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
-#include "absl/container/inlined_vector.h"
-#include "absl/log/log.h"
+#include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
-#include "xla/shape.h"
 #include "xla/status.h"
-#include "xla/stream_executor/device_memory.h"
+#include "xla/statusor.h"
 #include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/lazy_op_runner.h"
 #include "xla/stream_executor/stream_executor.h"
+#include "xla/types.h"
 #include "xla/xla_data.pb.h"
 
 namespace xla {
@@ -46,14 +46,12 @@ namespace gpu {
 struct GpufMHADescriptor {
   CudnnfMHAKind kind;
   CudnnfMHABackendConfig backend_config;
-  bool is_flash_attention;
-  bool is_causal_mask;
   Shape lhs_bmm1_shape;
   Shape rhs_bmm1_shape;
   Shape rhs_bmm2_shape;
   Shape intermediate_lhs_bmm2_shape;
   // This will contain both output shape and activation shape
-  absl::InlinedVector<Shape, 2> output_shapes;
+  std::vector<Shape> output_shapes;
   DotDimensionNumbers bmm1_dnums;
   DotDimensionNumbers bmm2_dnums;
 
@@ -64,8 +62,6 @@ struct GpufMHADescriptor {
 struct GpufMHABackwardDescriptor {
   CudnnfMHAKind kind;
   CudnnfMHABackendConfig backend_config;
-  bool is_flash_attention;
-  bool is_causal_mask;
   Shape bmm1_grad_gemm1_rhs_shape;
   Shape bmm1_grad_gemm2_rhs_shape;
   Shape bmm2_grad_gemm1_lhs_shape;
@@ -79,16 +75,13 @@ struct GpufMHABackwardDescriptor {
   DotDimensionNumbers bmm2_grad_gemm1_dnums;
   DotDimensionNumbers bmm2_grad_gemm2_dnums;
 
-  std::optional<Shape> d_s_shape;
-  std::optional<Shape> fwd_output_shape;
   std::optional<Shape> mask_shape;
   std::optional<Shape> d_bias_shape;
-  std::optional<Shape> bias_shape;
 };
 // Structure to describe static properties of a GPU fused Multi-Headed
 // Attention.
 struct GpufMHAConfig {
-  static absl::StatusOr<GpufMHAConfig> For(const GpufMHADescriptor& fmha_desc);
+  static StatusOr<GpufMHAConfig> For(const GpufMHADescriptor& fmha_desc);
   PrimitiveType
       input_type;  // Capture the primitive type of one of the inputs of BMM1
   PrimitiveType output_type;
@@ -98,8 +91,7 @@ struct GpufMHAConfig {
   std::optional<int64_t> seed;
 
   se::dnn::AlgorithmDesc algorithm;
-  bool is_flash_attention;
-  bool is_causal_mask;
+
   // bias -> [1, num_attn_heads, q_seq_len, kv_seq_len]
   // mask -> [batch_size, 1, q_seq_len, kv_seq_len]
   se::dnn::MatmulTensorDescriptor lhs_bmm1;
@@ -116,7 +108,7 @@ struct GpufMHAConfig {
 // Structure to describe static properties of a GPU fused Multi-Headed
 // Attention backward.
 struct GpufMHABackwardConfig {
-  static absl::StatusOr<GpufMHABackwardConfig> For(
+  static StatusOr<GpufMHABackwardConfig> For(
       const GpufMHABackwardDescriptor& fmha_desc);
   PrimitiveType
       input_type;  // Capture the primitive type of one of the inputs of BMM1
@@ -127,8 +119,7 @@ struct GpufMHABackwardConfig {
   std::optional<int64_t> seed;
 
   se::dnn::AlgorithmDesc algorithm;
-  bool is_flash_attention;
-  bool is_causal_mask;
+
   // mask -> [batch_size, 1, q_seq_len, kv_seq_len]
   // d_bias -> [1, num_heads, q_seq_len, kv_seq_len]
   se::dnn::MatmulTensorDescriptor bmm1_grad_gemm1_rhs;
@@ -139,24 +130,20 @@ struct GpufMHABackwardConfig {
   se::dnn::TensorDescriptor d_bmm1_lhs;
   se::dnn::TensorDescriptor d_bmm1_rhs;
   se::dnn::TensorDescriptor d_bmm2_rhs;
-  std::optional<se::dnn::TensorDescriptor> d_s;
-  std::optional<se::dnn::TensorDescriptor> mask;
+  se::dnn::TensorDescriptor d_s;
   std::optional<se::dnn::TensorDescriptor> d_bias;
-  std::optional<se::dnn::TensorDescriptor> fwd_output;
-  std::optional<se::dnn::TensorDescriptor> bias;
+  std::optional<se::dnn::TensorDescriptor> mask;
 };
 
 // Implementation struct exposed for debugging and log analysis.
 struct GpufMHAParams {
-  static absl::StatusOr<GpufMHAParams> For(
+  static StatusOr<GpufMHAParams> For(
       const GpufMHAConfig& config, se::DeviceMemoryBase lhs_bmm1_buffer,
       se::DeviceMemoryBase rhs_bmm1_buffer,
       se::DeviceMemoryBase rhs_bmm2_buffer, se::DeviceMemoryBase output_buffer,
       std::optional<se::DeviceMemoryBase> mask_buffer,
       std::optional<se::DeviceMemoryBase> bias_buffer,
-      std::optional<se::DeviceMemoryBase> activation_buffer,
-      std::optional<se::DeviceMemoryBase> seqlen_q_buffer,
-      std::optional<se::DeviceMemoryBase> seqlen_k_buffer);
+      std::optional<se::DeviceMemoryBase> activation_buffer);
 
   const GpufMHAConfig* config;  // Not owned
   se::DeviceMemoryBase lhs_bmm1_buffer;
@@ -166,12 +153,10 @@ struct GpufMHAParams {
   std::optional<se::DeviceMemoryBase> activation_buffer;
   std::optional<se::DeviceMemoryBase> mask_buffer;
   std::optional<se::DeviceMemoryBase> bias_buffer;
-  std::optional<se::DeviceMemoryBase> seqlen_q_buffer;
-  std::optional<se::DeviceMemoryBase> seqlen_k_buffer;
 };
 
 struct GpufMHABackwardParams {
-  static absl::StatusOr<GpufMHABackwardParams> For(
+  static StatusOr<GpufMHABackwardParams> For(
       const GpufMHABackwardConfig& config,
       se::DeviceMemoryBase bmm1_grad_gemm1_rhs_buffer,
       se::DeviceMemoryBase bmm1_grad_gemm2_rhs_buffer,
@@ -180,16 +165,9 @@ struct GpufMHABackwardParams {
       se::DeviceMemoryBase d_output_buffer,
       se::DeviceMemoryBase d_bmm1_lhs_buffer,
       se::DeviceMemoryBase d_bmm1_rhs_buffer,
-      se::DeviceMemoryBase d_bmm2_rhs_buffer,
-      std::optional<se::DeviceMemoryBase> d_s_buffer,
-      std::optional<se::DeviceMemoryBase> softmax_sum_buffer,
-      std::optional<se::DeviceMemoryBase> d_Q_accum_buffer,
+      se::DeviceMemoryBase d_bmm2_rhs_buffer, se::DeviceMemoryBase d_s_buffer,
       std::optional<se::DeviceMemoryBase> mask_buffer,
-      std::optional<se::DeviceMemoryBase> d_bias_buffer,
-      std::optional<se::DeviceMemoryBase> fwd_output_buffer,
-      std::optional<se::DeviceMemoryBase> bias_buffer,
-      std::optional<se::DeviceMemoryBase> seqlen_q_buffer,
-      std::optional<se::DeviceMemoryBase> seqlen_k_buffer);
+      std::optional<se::DeviceMemoryBase> d_bias_buffer);
 
   const GpufMHABackwardConfig* config;  // Not owned
   se::DeviceMemoryBase bmm1_grad_gemm1_rhs_buffer;
@@ -200,15 +178,9 @@ struct GpufMHABackwardParams {
   se::DeviceMemoryBase d_bmm1_lhs_buffer;
   se::DeviceMemoryBase d_bmm1_rhs_buffer;
   se::DeviceMemoryBase d_bmm2_rhs_buffer;
-  std::optional<se::DeviceMemoryBase> d_s_buffer;
-  std::optional<se::DeviceMemoryBase> softmax_sum_buffer;
-  std::optional<se::DeviceMemoryBase> d_Q_accum_buffer;
-  std::optional<se::DeviceMemoryBase> mask_buffer;
+  se::DeviceMemoryBase d_s_buffer;
   std::optional<se::DeviceMemoryBase> d_bias_buffer;
-  std::optional<se::DeviceMemoryBase> fwd_output_buffer;
-  std::optional<se::DeviceMemoryBase> bias_buffer;
-  std::optional<se::DeviceMemoryBase> seqlen_q_buffer;
-  std::optional<se::DeviceMemoryBase> seqlen_k_buffer;
+  std::optional<se::DeviceMemoryBase> mask_buffer;
 };
 
 class FusedMultiHeadedAttentionRunner {
@@ -388,39 +360,31 @@ struct RunFusedMHABackwardOptions {
   FusedMultiHeadedAttentionBackwardRunner* runner_cache;
 };
 
-absl::Status RunGpuFMHA(const GpufMHAConfig& fmha_config,
-                        se::DeviceMemoryBase lhs_bmm1_buffer,
-                        se::DeviceMemoryBase rhs_bmm1_buffer,
-                        se::DeviceMemoryBase rhs_bmm2_buffer,
-                        se::DeviceMemoryBase output_buffer,
-                        se::DeviceMemoryBase scratch_buffer,
-                        std::optional<se::DeviceMemoryBase> mask_buffer,
-                        std::optional<se::DeviceMemoryBase> bias_buffer,
-                        std::optional<se::DeviceMemoryBase> activation_buffer,
-                        std::optional<se::DeviceMemoryBase> seqlen_q_buffer,
-                        std::optional<se::DeviceMemoryBase> seqlen_k_buffer,
-                        se::Stream* stream, RunFusedMHAOptions = {});
+Status RunGpuFMHA(const GpufMHAConfig& fmha_config,
+                  se::DeviceMemoryBase lhs_bmm1_buffer,
+                  se::DeviceMemoryBase rhs_bmm1_buffer,
+                  se::DeviceMemoryBase rhs_bmm2_buffer,
+                  se::DeviceMemoryBase output_buffer,
+                  se::DeviceMemoryBase scratch_buffer,
+                  std::optional<se::DeviceMemoryBase> mask_buffer,
+                  std::optional<se::DeviceMemoryBase> bias_buffer,
+                  std::optional<se::DeviceMemoryBase> activation_buffer,
+                  se::Stream* stream, RunFusedMHAOptions = {});
 
-absl::Status RunGpuFMHABackward(
-    const GpufMHABackwardConfig& fmha_config,
-    se::DeviceMemoryBase bmm1_grad_gemm1_rhs_buffer,
-    se::DeviceMemoryBase bmm1_grad_gemm2_rhs_buffer,
-    se::DeviceMemoryBase bmm2_grad_gemm1_lhs_buffer,
-    se::DeviceMemoryBase bmm2_grad_gemm2_rhs_buffer,
-    se::DeviceMemoryBase d_output_buffer, se::DeviceMemoryBase scratch_buffer,
-    se::DeviceMemoryBase d_bmm1_lhs_buffer,
-    se::DeviceMemoryBase d_bmm1_rhs_buffer,
-    se::DeviceMemoryBase d_bmm2_rhs_buffer,
-    std::optional<se::DeviceMemoryBase> d_s_buffer,
-    std::optional<se::DeviceMemoryBase> softmax_sum_buffer,
-    std::optional<se::DeviceMemoryBase> d_Q_accum_buffer,
-    std::optional<se::DeviceMemoryBase> mask_buffer,
-    std::optional<se::DeviceMemoryBase> d_bias_buffer,
-    std::optional<se::DeviceMemoryBase> fwd_output_buffer,
-    std::optional<se::DeviceMemoryBase> bias_buffer,
-    std::optional<se::DeviceMemoryBase> seqlen_q_buffer,
-    std::optional<se::DeviceMemoryBase> seqlen_k_buffer, se::Stream* stream,
-    RunFusedMHABackwardOptions = {});
+Status RunGpuFMHABackward(const GpufMHABackwardConfig& fmha_config,
+                          se::DeviceMemoryBase bmm1_grad_gemm1_rhs_buffer,
+                          se::DeviceMemoryBase bmm1_grad_gemm2_rhs_buffer,
+                          se::DeviceMemoryBase bmm2_grad_gemm1_lhs_buffer,
+                          se::DeviceMemoryBase bmm2_grad_gemm2_rhs_buffer,
+                          se::DeviceMemoryBase d_output_buffer,
+                          se::DeviceMemoryBase scratch_buffer,
+                          se::DeviceMemoryBase d_bmm1_lhs_buffer,
+                          se::DeviceMemoryBase d_bmm1_rhs_buffer,
+                          se::DeviceMemoryBase d_bmm2_rhs_buffer,
+                          se::DeviceMemoryBase d_s_buffer,
+                          std::optional<se::DeviceMemoryBase> mask_buffer,
+                          std::optional<se::DeviceMemoryBase> d_bias_buffer,
+                          se::Stream* stream, RunFusedMHABackwardOptions = {});
 
 std::string ToString(const GpufMHAConfig& config);
 

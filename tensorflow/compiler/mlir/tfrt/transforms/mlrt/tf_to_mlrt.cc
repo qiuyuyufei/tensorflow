@@ -35,7 +35,6 @@ limitations under the License.
 #include "mlir/IR/SymbolTable.h"  // from @llvm-project
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
-#include "tensorflow/compiler/mlir/tensorflow/ir/host_runtime/tfrt_ops.h.inc"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_dialect.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/translate/export_tf_dialect_op.h"
@@ -99,7 +98,7 @@ class FuncOpSignatureConversion final
     }
 
     // Update the function signature in-place.
-    rewriter.modifyOpInPlace(func_op, [&] {
+    rewriter.updateRootInPlace(func_op, [&] {
       func_op.setType(mlir::FunctionType::get(
           func_op.getContext(), converted_signature.getConvertedTypes(),
           func_type.getResults()));
@@ -319,26 +318,6 @@ class GetResourceOpConversion final
     auto new_op = rewriter.create<tf_mlrt::GetResourceOp>(
         op->getLoc(), result_types, op.getIndices());
     rewriter.replaceOp(op, new_op->getResults());
-    return mlir::success();
-  }
-};
-
-// Convert tf.IfrtLoadVariableOp to tf_mlrt.IfrtLoadVariableOp
-class IfrtLoadVariableOpConversion
-    : public mlir::OpConversionPattern<mlir::TF::IfrtLoadVariableOp> {
- public:
-  using OpConversionPattern::OpConversionPattern;
-
-  mlir::LogicalResult matchAndRewrite(
-      mlir::TF::IfrtLoadVariableOp op, OpAdaptor adaptor,
-      mlir::ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<mlir::Type> result_types(
-        op->getNumResults(), rewriter.getType<tf_mlrt::TFTensorType>());
-    auto new_op = rewriter.create<tf_mlrt::IfrtLoadVariableOp>(
-        op.getLoc(), result_types, adaptor.getOperands()[0],
-        op.getDeviceShardingConfigProtoTextAttr(), op.getNameAttr());
-    rewriter.replaceOp(op, new_op);
-
     return mlir::success();
   }
 };
@@ -1184,12 +1163,12 @@ class TfToMlrtConversionPass
           return true;
         });
 
-    // LINT.IfChange
+    // LINT.IfChange(fallback_allow_list)
     // Order the list of added ops alphabetically.
     patterns.add<WhileOpConversion>(&context, &type_converter_, &symbol_table);
     patterns.add<AsyncOpConversion, GetResourceOpConversion,
-                 SetResourceOpConversion, IfrtLoadVariableOpConversion,
-                 TFAwaitOpConversion, TFPromiseOpConversion>(&context);
+                 SetResourceOpConversion, TFAwaitOpConversion,
+                 TFPromiseOpConversion>(&context);
     patterns.add<BatchFunctionOpConversion, CaseOpConversion, CondOpConversion,
                  TFAsyncWhileOpConversion, TFMapFnOpConversion>(type_converter_,
                                                                 &context);
@@ -1200,7 +1179,7 @@ class TfToMlrtConversionPass
                  TFCallOpConversion<mlir::TF::StatefulPartitionedCallOp>,
                  TFCallOpConversion<mlir::TF::LegacyCallOp>>(&context,
                                                              &type_converter_);
-    // LINT.ThenChange(util.cc)
+    // LINT.ThenChange(util.cc:fallback_allow_list)
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter_);

@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -75,8 +75,9 @@ Value applySingleResultLhloCode(Location loc, ValueRange operands,
 // into a reduction operator of scf.reduce by doing buffer allocation for
 // scalar arguments and the result of `scf.reduce` to make it compatible with
 // LHLO ops.
-void convertToReductionOperator(Location loc, Block& loopReduceOpBody,
+void convertToReductionOperator(Location loc, scf::ReduceOp reduceOp,
                                 Block* lhloBlock, OpBuilder* b) {
+  Block& loopReduceOpBody = reduceOp.getReductionOperator().front();
   OpBuilder::InsertionGuard guard(*b);
   b->setInsertionPointToStart(&loopReduceOpBody);
   b->create<scf::ReduceReturnOp>(
@@ -210,8 +211,7 @@ class ReduceOpConverter : public OpConversionPattern<lmhlo::ReduceOp> {
 
     scf::ReduceOp scfReduceOp =
         createReduceOpInNestedParallelLoops(reduceOp, &rewriter);
-    convertToReductionOperator(reduceOp.getLoc(),
-                               scfReduceOp.getReductions().front().front(),
+    convertToReductionOperator(reduceOp.getLoc(), scfReduceOp,
                                &reduceOp.getBody().front(), &rewriter);
     rewriter.replaceOp(reduceOp, std::nullopt);
     return success();
@@ -387,8 +387,7 @@ class ReduceWindowOpConverter
     scf::ReduceOp reduceOp = createReduceOpInNestedParallelLoops(
         reduceWindowOp, outputLoop, windowLoop, &rewriter);
 
-    convertToReductionOperator(reduceWindowOp.getLoc(),
-                               reduceOp.getReductions().front().front(),
+    convertToReductionOperator(reduceWindowOp.getLoc(), reduceOp,
                                &reduceWindowOp.getBody().front(), &rewriter);
     rewriter.replaceOp(reduceWindowOp, std::nullopt);
     return success();
@@ -453,14 +452,12 @@ class ReduceWindowOpConverter
         loc, inputType.getElementType(), mappedIvs.inBounds,
         /*withElseRegion=*/true);
 
-    OpBuilder thenBuilder =
-        elemOrInit.getThenBodyBuilder(rewriter->getListener());
+    OpBuilder thenBuilder = elemOrInit.getThenBodyBuilder(rewriter);
     Value elem =
         thenBuilder.create<mlir::memref::LoadOp>(loc, input, mappedIvs.ivs);
     thenBuilder.create<scf::YieldOp>(loc, elem);
 
-    OpBuilder elseBuilder =
-        elemOrInit.getElseBodyBuilder(rewriter->getListener());
+    OpBuilder elseBuilder = elemOrInit.getElseBodyBuilder(rewriter);
     elseBuilder.create<scf::YieldOp>(loc, *windowLoop.getInitVals().begin());
 
     return rewriter->create<scf::ReduceOp>(loc,

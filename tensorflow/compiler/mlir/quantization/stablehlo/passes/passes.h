@@ -17,15 +17,10 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_MLIR_QUANTIZATION_STABLEHLO_PASSES_PASSES_H_
 
 #include <memory>
-#include <string>
 
-#include "absl/status/statusor.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project  // IWYU pragma: keep
 #include "mlir/Pass/Pass.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
-#include "tensorflow/compiler/mlir/quantization/common/quantization_lib/quantization_config.h"
-#include "tensorflow/compiler/mlir/quantization/stablehlo/quantization_config.pb.h"
 #include "tensorflow/compiler/mlir/quantization/stablehlo/quantization_options.pb.h"
 
 namespace mlir::quant::stablehlo {
@@ -35,14 +30,10 @@ std::unique_ptr<OperationPass<func::FuncOp>> CreateQuantizeWeightPass(
     const ::stablehlo::quantization::QuantizationComponentSpec&
         quantization_component_spec = {});
 
-// Converts a serialized StableHLO module to bfloat16 and output serialized
-// module.
-absl::StatusOr<std::string> ConvertSerializedStableHloModuleToBfloat16(
-    StringRef serialized_stablehlo_module);
-
-std::unique_ptr<OperationPass<ModuleOp>>
-CreateLiftQuantizableSpotsAsFunctionsPass(
-    const ::stablehlo::quantization::QuantizationSpecs& quantization_specs);
+// Creates an instance of the StableHLO dialect PrepareQuantize pass without any
+// arguments. Preset method of SRQ is set to the quantization option by default.
+std::unique_ptr<OperationPass<func::FuncOp>> CreatePrepareQuantizePass(
+    bool enable_per_channel_quantization = true, int bit_width = 8);
 
 // Adds generated pass default constructors or options definitions.
 #define GEN_PASS_DECL

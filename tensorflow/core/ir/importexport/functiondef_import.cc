@@ -86,7 +86,7 @@ class ValueMapManager {
     return ::tensorflow::OkStatus();
   }
 
-  absl::StatusOr<Value> GetValueOrCreatePlaceholder(StringRef full_name) {
+  tensorflow::StatusOr<Value> GetValueOrCreatePlaceholder(StringRef full_name) {
     StringRef node_name;
     StringRef output_name = "";
     bool is_control_dep = full_name[0] == '^';
@@ -233,8 +233,8 @@ Status ImportNodes(ValueMapManager value_manager,
   return ::tensorflow::OkStatus();
 }
 
-absl::StatusOr<NamedAttrList> ConvertArgDefAttributes(const OpDef::ArgDef& arg,
-                                                      Builder builder) {
+tensorflow::StatusOr<NamedAttrList> ConvertArgDefAttributes(
+    const OpDef::ArgDef& arg, Builder builder) {
   NamedAttrList input_attrs;
   StringAttr arg_name = builder.getStringAttr(arg.name());
   input_attrs.set("tfg.name", arg_name);

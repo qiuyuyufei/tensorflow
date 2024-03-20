@@ -73,8 +73,6 @@ class GetMinibatchesInCsrWithPhysicalReplicaOp : public OpKernel {
   std::string table_name_;
   std::unique_ptr<SparseCoreOpsStatsHandler> sparse_core_ops_stats_handler_;
 
-  bool allow_id_dropping_for_minibatching_ = false;
-
  private:
   int num_replica_ = 1;
   int max_minibatches_per_sc_ = 1;
@@ -98,8 +96,7 @@ class GetMinibatchSplitsWithPhysicalReplicaOp : public OpKernel {
   virtual void CalculateHeadroom(int32 this_max_ids, int32 this_max_uniques,
                                  tstring program_key,
                                  int64_t max_ids_per_partition,
-                                 int64_t max_unique_ids_per_partition,
-                                 int32_t dropped_id_count) {}
+                                 int64_t max_unique_ids_per_partition) {}
   virtual inline int32_t CalculateBucketIdWithHashing(int32_t col_id,
                                                       int32_t num_buckets) {
     // TODO(pineapplejuice233): Add a proper hashing function here.

@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -50,7 +50,6 @@ limitations under the License.
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "mlir/IR/Location.h"  // from @llvm-project
@@ -144,21 +143,18 @@ llvm::Value* EmitFloatMax(llvm::Value* lhs_value, llvm::Value* rhs_value,
     auto cmp = b->CreateFCmpUGE(lhs_value, rhs_value);
     return b->CreateSelect(cmp, lhs_value, rhs_value, name.data());
   } else {
-    // logic: isNaN(lhs) || (!isNan(rhs) && lhs >= rhs) ? lhs : rhs
+    // logic: isNaN(lhs) || (!isNan(rhs) && lhs > rhs) ? lhs : rhs
     // See also: IEEE Std 754-2008 5.11.
     //
     // This also works, but we wanted to make it similar to minimum.
-    // logic: isNaN(lhs) || lhs >= rhs ? lhs : rhs
+    // logic: isNaN(lhs) || lhs > rhs ? lhs : rhs
     //
     // b->CreateMaximum() doesn't work on GPU before SM80.
-    //
-    // A test with a strange LLVM version breaks if we use OGT here, so we use
-    // OGE.
     auto lhs_is_nan = b->CreateFCmpUNE(lhs_value, lhs_value);
     auto rhs_is_not_nan = b->CreateFCmpOEQ(rhs_value, rhs_value);
-    auto lhs_is_ge = b->CreateFCmpOGE(lhs_value, rhs_value);
+    auto lhs_is_greater = b->CreateFCmpOGT(lhs_value, rhs_value);
     return b->CreateSelect(
-        b->CreateOr(lhs_is_nan, b->CreateAnd(rhs_is_not_nan, lhs_is_ge)),
+        b->CreateOr(lhs_is_nan, b->CreateAnd(rhs_is_not_nan, lhs_is_greater)),
         lhs_value, rhs_value, name.data());
   }
 }
@@ -170,22 +166,19 @@ llvm::Value* EmitFloatMin(llvm::Value* lhs_value, llvm::Value* rhs_value,
     auto cmp = b->CreateFCmpULE(lhs_value, rhs_value);
     return b->CreateSelect(cmp, lhs_value, rhs_value, name.data());
   } else {
-    // logic: isNaN(lhs) || (!isNan(rhs) && lhs <= rhs) ? lhs : rhs
+    // logic: isNaN(lhs) || (!isNan(rhs) && lhs < rhs) ? lhs : rhs
     // See also: IEEE Std 754-2008 5.11.
     //
     // This should also work, but the tests show that it doesn't work for
     // minimum(x, NaN) on GPU:
-    // logic: isNaN(lhs) || lhs <= rhs ? lhs : rhs
+    // logic: isNaN(lhs) || lhs < rhs ? lhs : rhs
     //
     // b->CreateMaximum() doesn't work on GPU before SM80.
-    //
-    // A test with a strange LLVM version breaks if we use OLT here, so we use
-    // OLE.
     auto lhs_is_nan = b->CreateFCmpUNE(lhs_value, lhs_value);
     auto rhs_is_not_nan = b->CreateFCmpOEQ(rhs_value, rhs_value);
-    auto lhs_is_le = b->CreateFCmpOLE(lhs_value, rhs_value);
+    auto lhs_is_less = b->CreateFCmpOLT(lhs_value, rhs_value);
     return b->CreateSelect(
-        b->CreateOr(lhs_is_nan, b->CreateAnd(rhs_is_not_nan, lhs_is_le)),
+        b->CreateOr(lhs_is_nan, b->CreateAnd(rhs_is_not_nan, lhs_is_less)),
         lhs_value, rhs_value, name.data());
   }
 }
@@ -194,6 +187,9 @@ llvm::Value* EmitBufferIndexingGEP(llvm::Value* array, llvm::Type* element_type,
                                    llvm::Value* index, llvm::IRBuilder<>* b) {
   llvm::Type* array_type = array->getType();
   CHECK(array_type->isPointerTy());
+  llvm::PointerType* array_type_as_pointer =
+      llvm::cast<llvm::PointerType>(array_type);
+  CHECK(array_type_as_pointer->isOpaqueOrPointeeTypeMatches(element_type));
   VLOG(2) << "EmitBufferIndexingGEP with type="
           << llvm_ir::DumpToString(array_type)
           << " array=" << llvm_ir::DumpToString(array)
@@ -214,25 +210,31 @@ llvm::Value* EmitBufferIndexingGEP(llvm::Value* array, llvm::Type* element_type,
 llvm::Type* PrimitiveTypeToIrType(PrimitiveType element_type,
                                   llvm::Module* module) {
   switch (element_type) {
+    case PRED:
+    // i8 is used for S4/U4 as arrays of i4 values are not packed
     case S4:
     case U4:
-      return llvm::Type::getIntNTy(module->getContext(), 4);
-    case PRED:
     case S8:
     case U8:
       return llvm::Type::getInt8Ty(module->getContext());
     case S16:
     case U16:
+    case BF16:
+      // For BF16 we just need some type that is 16 bits wide so that it will
+      // take up the right amount of space in memory. LLVM does not have a BF16
+      // type (the LLVM half type is IEEE 16 bit floating point, not bfloat), so
+      // we can't map it directly to an LLVM type. We will not map a BF16
+      // addition to an addition on this type (int16_t) - this is just the type
+      // used for storage.
       return llvm::Type::getInt16Ty(module->getContext());
     case F8E5M2:
     case F8E5M2FNUZ:
     case F8E4M3FN:
     case F8E4M3B11FNUZ:
     case F8E4M3FNUZ:
-      // We represent F8 as an int since there is no LLVM F8 dtype.
+      // Similarly as with BF16, we represent F8 as an int since there is no
+      // LLVM F8 dtype.
       return llvm::Type::getInt8Ty(module->getContext());
-    case BF16:
-      return llvm::Type::getBFloatTy(module->getContext());
     case F16:
       return llvm::Type::getHalfTy(module->getContext());
     case S32:
@@ -277,11 +279,11 @@ llvm::Type* PrimitiveTypeToIrType(PrimitiveType element_type,
     case TUPLE:
     // An Opaque is like a void*, use i8*.
     case OPAQUE_TYPE:
-      return llvm::PointerType::getUnqual(module->getContext());
+      return llvm::Type::getInt8PtrTy(module->getContext());
     case TOKEN:
       // Tokens do not have a physical representation, but the compiler needs
       // some placeholder type, so use int8_t*.
-      return llvm::PointerType::getUnqual(module->getContext());
+      return llvm::Type::getInt8PtrTy(module->getContext());
     default:
       LOG(FATAL) << "unsupported type " << element_type;
   }
@@ -316,11 +318,12 @@ llvm::Type* ShapeToIrType(const Shape& shape, llvm::Module* module) {
   return result_type;
 }
 
-absl::StatusOr<llvm::Value*> EncodeSelfDescribingShapeConstant(
-    const Shape& shape, int32_t* shape_size, llvm::IRBuilder<>* b) {
+StatusOr<llvm::Value*> EncodeSelfDescribingShapeConstant(const Shape& shape,
+                                                         int32_t* shape_size,
+                                                         llvm::IRBuilder<>* b) {
   std::string encoded_shape = shape.SerializeAsString();
   if (encoded_shape.size() > std::numeric_limits<int32_t>::max()) {
-    return Internal("Encoded shape size exceeded int32_t size limit.");
+    return InternalError("Encoded shape size exceeded int32_t size limit.");
   }
   *shape_size = static_cast<int32_t>(encoded_shape.size());
   return b->CreateGlobalStringPtr(encoded_shape);
@@ -355,49 +358,6 @@ llvm::GlobalVariable* AllocateSharedMemoryTile(llvm::Module* module,
       llvm::GlobalValue::NotThreadLocal, kGPUSharedMemoryAddrSpace);
 }
 
-SharedMemoryTile AllocateSharedMemoryTile(
-    llvm::Module* module, llvm::Type* element_type,
-    absl::Span<int64_t const> dimensions_major_to_minor,
-    absl::string_view buffer_name) {
-  llvm::Type* ty = element_type;
-  for (auto dim : llvm::reverse(dimensions_major_to_minor)) {
-    ty = llvm::ArrayType::get(ty, dim);
-  }
-  return SharedMemoryTile{
-      llvm_ir::AllocateSharedMemoryTile(module, ty, buffer_name), element_type};
-}
-
-static std::vector<llvm::Value*> IndexWith0(
-    absl::Span<llvm::Value* const> index, llvm::IRBuilder<>* b) {
-  std::vector<llvm::Value*> index_with_0{
-      llvm::ConstantInt::get(index.front()->getType(), 0)};
-  absl::c_copy(index, std::back_inserter(index_with_0));
-  return index_with_0;
-}
-
-llvm::Value* SharedMemoryTile::Address(absl::Span<llvm::Value* const> index,
-                                       llvm::IRBuilder<>* b) const {
-  llvm::Value* gep = b->CreateInBoundsGEP(base_ptr_->getValueType(), base_ptr_,
-                                          IndexWith0(index, b));
-  // __shared__ memory uses a different address space, so we cast it
-  // to global address space before writing or reading.
-  return b->CreateAddrSpaceCast(gep,
-                                llvm::PointerType::get(b->getContext(), 0));
-};
-
-llvm::Value* SharedMemoryTile::Load(absl::Span<llvm::Value* const> index,
-                                    llvm::IRBuilder<>* b) const {
-  auto* load_type = llvm::GetElementPtrInst::getIndexedType(
-      base_ptr_->getValueType(), IndexWith0(index, b));
-  return b->CreateLoad(load_type, Address(index, b));
-}
-
-llvm::StoreInst* SharedMemoryTile::Store(llvm::Value* value,
-                                         absl::Span<llvm::Value* const> index,
-                                         llvm::IRBuilder<>* b) const {
-  return b->CreateStore(value, Address(index, b));
-}
-
 llvm::AllocaInst* EmitAllocaAtFunctionEntry(llvm::Type* type,
                                             absl::string_view name,
                                             llvm::IRBuilder<>* b,
@@ -414,12 +374,8 @@ llvm::AllocaInst* EmitAllocaAtFunctionEntryWithCount(llvm::Type* type,
   llvm::Function* function = b->GetInsertBlock()->getParent();
   b->SetInsertPoint(&function->getEntryBlock(),
                     function->getEntryBlock().getFirstInsertionPt());
-  llvm::Module* module = b->GetInsertBlock()->getModule();
-  // Explicitly set local addrspace for SPIR backend.
-  llvm::Triple target(module->getTargetTriple());
-  int addrspace = target.isSPIR() || target.isAMDGPU() ? 5 : 0;
   llvm::AllocaInst* alloca =
-      b->CreateAlloca(type, addrspace, element_count, AsStringRef(name));
+      b->CreateAlloca(type, element_count, AsStringRef(name));
   if (alignment != 0) {
     alloca->setAlignment(llvm::Align(alignment));
   }
@@ -507,7 +463,7 @@ void EmitLogging(const char* tag, llvm::Value* value, llvm::IRBuilder<>* b) {
       b->getVoidTy(), {b->getInt64Ty(), b->getInt64Ty()}, /*isVarArg=*/false);
   b->CreateCall(log_function_type,
                 b->CreateIntToPtr(b->getInt64(absl::bit_cast<int64_t>(&LogS64)),
-                                  b->getPtrTy()),
+                                  log_function_type->getPointerTo()),
                 {b->getInt64(absl::bit_cast<int64_t>(tag)), value});
 }
 
@@ -537,11 +493,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
 }
 
 llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
-                                    llvm::Instruction* inst,
-                                    llvm::Module* module) {
-  if (llvm::Triple(module->getTargetTriple()).isSPIR()) {
-    return inst;
-  }
+                                    llvm::Instruction* inst) {
   llvm::LLVMContext& context = inst->getParent()->getContext();
   llvm::IntegerType* i32 = llvm::Type::getInt32Ty(context);
   inst->setMetadata(

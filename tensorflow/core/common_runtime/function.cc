@@ -16,7 +16,6 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/function.h"
 
 #include <deque>
-#include <utility>
 #include <vector>
 
 #include "absl/algorithm/container.h"
@@ -26,7 +25,6 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/device.h"
 #include "tensorflow/core/common_runtime/executor.h"
 #include "tensorflow/core/common_runtime/executor_factory.h"
-#include "tensorflow/core/common_runtime/function_def_utils.h"
 #include "tensorflow/core/common_runtime/gradients.h"
 #include "tensorflow/core/common_runtime/graph_constructor.h"
 #include "tensorflow/core/common_runtime/graph_optimizer.h"
@@ -52,12 +50,10 @@ limitations under the License.
 #include "tensorflow/core/lib/core/threadpool.h"
 #include "tensorflow/core/lib/gtl/map_util.h"
 #include "tensorflow/core/platform/macros.h"
-#include "tensorflow/core/platform/refcount.h"
 #include "tensorflow/core/platform/str_util.h"
 #include "tensorflow/core/profiler/lib/connected_traceme.h"
 #include "tensorflow/core/profiler/lib/traceme.h"
 #include "tensorflow/core/protobuf/config.pb.h"
-#include "tsl/platform/statusor.h"
 
 // See core/kernels/function_ops.cc for related kernels.
 
@@ -156,8 +152,8 @@ static Node* AddRet(Graph* g, Endpoint input, int index) {
 class FunctionLibraryRuntimeOverlay : public FunctionLibraryRuntime {
  public:
   FunctionLibraryRuntimeOverlay(FunctionLibraryRuntime* base_flr,
-                                FunctionLibraryDefinition lib_def)
-      : base_flr_(base_flr), lib_def_(std::move(lib_def)) {}
+                                const FunctionLibraryDefinition* lib_def)
+      : base_flr_(base_flr), lib_def_(lib_def) {}
   ~FunctionLibraryRuntimeOverlay() override;
 
   Status Instantiate(const string& function_name, AttrSlice attrs,
@@ -207,7 +203,7 @@ class FunctionLibraryRuntimeOverlay : public FunctionLibraryRuntime {
 
  private:
   FunctionLibraryRuntime* base_flr_;          // not owned
-  const FunctionLibraryDefinition lib_def_;
+  const FunctionLibraryDefinition* lib_def_;  // not owned
 };
 
 FunctionLibraryRuntimeOverlay::~FunctionLibraryRuntimeOverlay() = default;
@@ -217,9 +213,9 @@ Status FunctionLibraryRuntimeOverlay::Instantiate(
     const InstantiateOptions& options, Handle* handle) {
   // We automatically set the `lib_def` option for all instantiations, if the
   // caller doesn't set this option explicitly.
-  if (!options.lib_def) {
+  if (!options.lib_def && lib_def_) {
     InstantiateOptions options_copy = options;
-    options_copy.lib_def = &lib_def_;
+    options_copy.lib_def = lib_def_;
     return base_flr_->Instantiate(function_name, attrs, options_copy, handle);
   } else {
     return base_flr_->Instantiate(function_name, attrs, options, handle);
@@ -280,7 +276,7 @@ bool FunctionLibraryRuntimeOverlay::IsStateful(
     const string& function_name) const {
   // Important: we do not forward lookup to the base FLR.
   const OpDef* op_def;
-  const Status s = lib_def_.LookUpOpDef(function_name, &op_def);
+  const Status s = lib_def_->LookUpOpDef(function_name, &op_def);
   return s.ok() && op_def->is_stateful();
 }
 
@@ -307,7 +303,7 @@ const DeviceMgr* FunctionLibraryRuntimeOverlay::device_mgr() const {
 
 const FunctionLibraryDefinition*
 FunctionLibraryRuntimeOverlay::GetFunctionLibraryDefinition() const {
-  return &lib_def_;
+  return lib_def_ ? lib_def_ : base_flr_->GetFunctionLibraryDefinition();
 }
 
 string FunctionLibraryRuntimeOverlay::DebugString(Handle handle) {
@@ -441,8 +437,7 @@ class FunctionLibraryRuntimeImpl : public FunctionLibraryRuntime {
   // FunctionLibraryDefinition.
   Status CreateKernel(const std::shared_ptr<const NodeProperties>& props,
                       FunctionLibraryRuntime* flr, OpKernel** kernel);
-  Status FunctionDefToBody(core::RefCountPtr<FunctionRecord>&& record,
-                           AttrSlice attrs,
+  Status FunctionDefToBody(const FunctionDef& fdef, AttrSlice attrs,
                            const FunctionLibraryDefinition* lib_def,
                            std::unique_ptr<FunctionBody>* fbody);
   Status CreateItem(Item** item);
@@ -605,7 +600,7 @@ Status FunctionLibraryRuntimeImpl::GetRetTypes(Handle h,
   }
   const FunctionBody* fbody = GetFunctionBody(h);
   *ret_types = fbody->ret_types;
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status FunctionLibraryRuntimeImpl::CreateKernel(
@@ -671,7 +666,7 @@ Status FunctionLibraryRuntimeImpl::CreateKernel(
   // Constructs a CallOp kernel for running the instantiated function.
   auto device_type = DeviceType(device_->attributes().device_type());
   auto new_props = std::make_shared<NodeProperties>(
-      &fbody->record->fdef().signature(), props->node_def, fbody->arg_types,
+      &fbody->fdef.signature(), props->node_def, fbody->arg_types,
       fbody->ret_types);
   OpKernelConstruction construction(
       device_type, device_, device_->GetAllocator(AllocatorAttributes()), flr,
@@ -684,18 +679,16 @@ Status FunctionLibraryRuntimeImpl::CreateKernel(
 }
 
 Status FunctionLibraryRuntimeImpl::FunctionDefToBody(
-    core::RefCountPtr<FunctionRecord>&& record, AttrSlice attrs,
+    const FunctionDef& fdef, AttrSlice attrs,
     const FunctionLibraryDefinition* lib_def,
     std::unique_ptr<FunctionBody>* fbody) {
   if (lib_def == base_lib_def_) {
-    return FunctionDefToBodyHelper(std::move(record), attrs, lib_def,
-                                   get_func_sig_, fbody);
+    return FunctionDefToBodyHelper(fdef, attrs, lib_def, get_func_sig_, fbody);
   } else {
     auto get_func_sig = [lib_def](const string& op, const OpDef** sig) {
       return lib_def->LookUpOpDef(op, sig);
     };
-    return FunctionDefToBodyHelper(std::move(record), attrs, lib_def,
-                                   get_func_sig, fbody);
+    return FunctionDefToBodyHelper(fdef, attrs, lib_def, get_func_sig, fbody);
   }
 }
 
@@ -715,10 +708,8 @@ Status FunctionLibraryRuntimeImpl::InstantiateSymbolicGradient(
     // TODO(josh11b): Should filter out the attrs from func that aren't used
     // by the gradient function.
     TF_RETURN_IF_ERROR(creator(AttrSlice(&func.attr()), &grad_fdef));
-    core::RefCountPtr<FunctionRecord> record(
-        new FunctionRecord(std::move(grad_fdef), {}, true));
-    TF_RETURN_IF_ERROR(FunctionDefToBody(
-        std::move(record), AttrSlice(&func.attr()), lib_def, g_body));
+    TF_RETURN_IF_ERROR(
+        FunctionDefToBody(grad_fdef, AttrSlice(&func.attr()), lib_def, g_body));
   } else {
     // f is a user-defined function.
     InstantiateOptions options;
@@ -732,7 +723,7 @@ Status FunctionLibraryRuntimeImpl::InstantiateSymbolicGradient(
     CHECK_NOTNULL(f_body);
     *g_body = SymbolicGradient(*f_body);
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 bool FunctionLibraryRuntimeImpl::IsLocalTarget(
@@ -792,7 +783,7 @@ Status FunctionLibraryRuntimeImpl::Instantiate(
                                 " not found in items.");
       }
       ++item_handle->second->instantiation_counter;
-      return absl::OkStatus();
+      return OkStatus();
     }
   }
 
@@ -814,12 +805,11 @@ Status FunctionLibraryRuntimeImpl::Instantiate(
     }
     TF_RETURN_IF_ERROR(InstantiateSymbolicGradient(func, lib_def, &fbody));
   } else {
-    core::RefCountPtr<FunctionRecord> fdef = lib_def->FindRecord(function_name);
+    const FunctionDef* fdef = lib_def->Find(function_name);
     if (fdef == nullptr) {
       return errors::NotFound("Function ", function_name, " is not defined.");
     }
-    TF_RETURN_IF_ERROR(
-        FunctionDefToBody(std::move(fdef), attrs, lib_def, &fbody));
+    TF_RETURN_IF_ERROR(FunctionDefToBody(*fdef, attrs, lib_def, &fbody));
     Int32FulltypePass int32_fulltype("FunctionLibraryRuntime::Instantiate");
     TF_RETURN_IF_ERROR(
         int32_fulltype.ProcessGraph(fbody->graph, /*ints_on_device=*/false));
@@ -843,11 +833,8 @@ Status FunctionLibraryRuntimeImpl::Instantiate(
       item->allow_control_flow_sync_execution =
           options.allow_control_flow_sync_execution;
       if (options.lib_def) {
-        TF_ASSIGN_OR_RETURN(
-            FunctionLibraryDefinition reachable_lib_def,
-            options.lib_def->ReachableDefinitions(function_name));
-        item->overlay_flr.reset(new FunctionLibraryRuntimeOverlay(
-            this, std::move(reachable_lib_def)));
+        item->overlay_flr.reset(
+            new FunctionLibraryRuntimeOverlay(this, options.lib_def));
       }
       local_handle = next_handle_++;
       items_->emplace(local_handle, std::unique_ptr<Item>(item));
@@ -859,7 +846,7 @@ Status FunctionLibraryRuntimeImpl::Instantiate(
     TF_RETURN_IF_ERROR(GetOrCreateItem(local_handle, &item));
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status FunctionLibraryRuntimeImpl::ReleaseHandle(Handle handle) {
@@ -872,7 +859,7 @@ Status FunctionLibraryRuntimeImpl::ReleaseHandle(Handle handle) {
   {
     mutex_lock l(mu_);
     // Return directly if all items has already been released.
-    if (items_ == nullptr) return absl::OkStatus();
+    if (items_ == nullptr) return OkStatus();
 
     auto it = items_->find(h);
     if (it == items_->end()) {
@@ -958,7 +945,7 @@ Status FunctionLibraryRuntimeImpl::CreateItem(Item** item) {
   auto g = std::make_unique<Graph>(lib_def);
   CopyGraph(*fbody->graph, g.get());
 
-  PruneFunctionBody(fbody->record->fdef(), g.get());
+  PruneFunctionBody(fbody->fdef, g.get());
   optimizer_.Optimize(this, env(), device(), &g, GraphOptimizer::Options());
   TF_RETURN_IF_ERROR(EnsureMemoryTypes(DeviceType(device()->device_type()),
                                        device()->name(), g.get()));
@@ -1005,7 +992,7 @@ Status FunctionLibraryRuntimeImpl::CreateItem(Item** item) {
       (*item)->exec = exec.release();
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status FunctionLibraryRuntimeImpl::GetOrCreateItem(LocalHandle local_handle,
@@ -1019,7 +1006,7 @@ Status FunctionLibraryRuntimeImpl::GetOrCreateItem(LocalHandle local_handle,
     }
     *item = iter->second.get();
     if ((*item)->exec != nullptr) {
-      return absl::OkStatus();
+      return OkStatus();
     }
   }
   // NOTE: We need to call CreateItem out of mu_ because creating an
@@ -1036,7 +1023,6 @@ void FunctionLibraryRuntimeImpl::ExecutorArgsFromOptions(
   exec_args->rendezvous = run_opts.rendezvous;
   exec_args->stats_collector = run_opts.stats_collector;
   exec_args->cancellation_manager = run_opts.cancellation_manager;
-  exec_args->session_config = config_;
   exec_args->step_container = run_opts.step_container;
   if (run_opts.runner) {
     exec_args->runner = *run_opts.runner;
@@ -1308,7 +1294,7 @@ Status FunctionLibraryRuntimeImpl::PrepareRunSync(
       device_name_, handle, /*include_multi_device=*/true);
   if (local_handle == kInvalidLocalHandle) {
     *out_item = nullptr;
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   TF_RETURN_IF_ERROR(GetOrCreateItem(local_handle, out_item));
@@ -1318,7 +1304,7 @@ Status FunctionLibraryRuntimeImpl::PrepareRunSync(
   }
   DCHECK(run_opts->runner != nullptr);
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status FunctionLibraryRuntimeImpl::RunSync(Options opts, Handle handle,
@@ -1385,7 +1371,7 @@ Status FunctionLibraryRuntimeImpl::Clone(
                                     skip_flib_def));
   *out_flr = (*out_pflr)->GetFLR(device_->name());
   if (*out_flr != nullptr) {
-    return absl::OkStatus();
+    return OkStatus();
   } else {
     return errors::Internal("Cloning FunctionLibraryRuntime failed.");
   }
@@ -1462,10 +1448,7 @@ void SymbolicGradientHelper::Copy(FunctionBody* gbody) {
 
   // Copy just the fdef attributes (copy '_noinline' and other similar flags to
   // the gradient function body).
-  FunctionDef fdef;
-  *(fdef.mutable_attr()) = fbody_->record->fdef().attr();
-  gbody->record = core::RefCountPtr<FunctionRecord>(
-      new FunctionRecord(std::move(fdef), {}, true));
+  *(gbody->fdef.mutable_attr()) = fbody_->fdef.attr();
 
   // Copy the nodes.
   node_map[src.source_node()->id()] = dst->source_node();

@@ -1,4 +1,4 @@
-/* Copyright 2020 The OpenXLA Authors.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,29 +23,20 @@ limitations under the License.
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/base/thread_annotations.h"
-#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
-#include "third_party/nanobind/include/nanobind/nanobind.h"
-#include "third_party/nanobind/include/nanobind/stl/optional.h"  // IWYU pragma: keep
-#include "third_party/nanobind/include/nanobind/stl/unique_ptr.h"  // IWYU pragma: keep
-#include "third_party/nanobind/include/nanobind/stl/vector.h"  // IWYU pragma: keep
 #include "pybind11/cast.h"  // from @pybind11
 #include "pybind11/functional.h"  // from @pybind11
 #include "pybind11/pybind11.h"  // from @pybind11
 #include "xla/client/executable_build_options.h"
 #include "xla/client/xla_builder.h"
-#include "xla/literal.h"
 #include "xla/pjrt/pjrt_client.h"
-#include "xla/pjrt/status_casters.h"
 #include "xla/python/outfeed_receiver.h"
 #include "xla/python/py_client.h"
+#include "xla/python/status_casters.h"
 #include "xla/python/types.h"
-#include "tsl/platform/logging.h"
 
 namespace xla {
 
-namespace nb = nanobind;
 namespace py = pybind11;
 
 namespace {
@@ -56,7 +47,7 @@ class OutfeedReceiverForPython {
  public:
   // A callback to Python takes: consumer id, received literal.
   using CallbackToPython =
-      std::function<void(ClientAndPtr<PjRtDevice>, uint32_t, py::object)>;
+      std::function<void(ClientAndPtr<PjRtDevice>, uint32_t, pybind11::object)>;
 
   OutfeedReceiverForPython(
       CallbackToPython callback_python,
@@ -93,16 +84,15 @@ class OutfeedReceiverForPython {
       absl::MutexLock lock(&mu_);
       outfeed_receiver_shutting_down_ = true;
     }
-    nb::gil_scoped_release gil_release;
+    py::gil_scoped_release gil_release;
     outfeed_receiver_ = nullptr;  // Shutdown the outfeed receiver.
   }
 
   void Start() { outfeed_receiver_->Start(); }
 
-  absl::StatusOr<XlaOp> AddOutfeed(XlaBuilder* builder, XlaOp token,
-                                   uint32_t consumer_id,
-                                   std::vector<XlaOp> arrays,
-                                   uint32_t device_idx) {
+  StatusOr<XlaOp> AddOutfeed(XlaBuilder* builder, XlaOp token,
+                             uint32_t consumer_id, std::vector<XlaOp> arrays,
+                             uint32_t device_idx) {
     return outfeed_receiver_->AddOutfeedToBuilder(builder, token, consumer_id,
                                                   arrays, device_idx);
   }
@@ -122,13 +112,12 @@ class OutfeedReceiverForPython {
           return client->pjrt_client() == device->client();
         });
     CHECK(it != clients_.end());
-    nb::gil_scoped_acquire gil_acquire;  // Need GIL also for LiteralToPython
-    nb::object literal_python = LiteralToPython(std::move(literal)).value();
+    py::gil_scoped_acquire gil_acquire;  // Need GIL also for LiteralToPython
+    py::object literal_python = LiteralToPython(std::move(literal)).value();
     // The callback_ should handle all exceptions in user-code. If we get
     // an exception here, it is a bug in the callback and we should stop.
-    callback_python_(
-        WrapWithClient<PjRtDevice>(*it, device), consumer_id,
-        py::reinterpret_steal<py::object>(literal_python.release().ptr()));
+    callback_python_(WrapWithClient<PjRtDevice>(*it, device), consumer_id,
+                     std::move(literal_python));
   }
 
  private:
@@ -141,30 +130,25 @@ class OutfeedReceiverForPython {
 
 }  // namespace
 
-void BuildOutfeedReceiverSubmodule(nb::module_& m) {
-  nb::module_ outfeed_receiver =
-      m.def_submodule("outfeed_receiver", "Outfeed receiver");
+void BuildOutfeedReceiverSubmodule(py::module* m) {
+  py::module outfeed_receiver =
+      m->def_submodule("outfeed_receiver", "Outfeed receiver");
   outfeed_receiver.def(
       "start",
-      [](nb::object callback_to_python, nb::object clients,
+      [](OutfeedReceiverForPython::CallbackToPython callback_to_python,
+         std::vector<std::shared_ptr<PyClient>> clients,
          ssize_t max_callback_queue_size_bytes,
          std::optional<ExecutableBuildOptions> executable_build_options)
           -> std::unique_ptr<OutfeedReceiverForPython> {
-        // TODO(phawkins): after the nanobind transition, pass
-        // clients as a std::vector<std::shared_ptr<PyClient>>.
         auto server = std::make_unique<OutfeedReceiverForPython>(
-            py::cast<OutfeedReceiverForPython::CallbackToPython>(
-                py::handle(callback_to_python.ptr())),
-            py::cast<std::vector<std::shared_ptr<PyClient>>>(
-                py::handle(clients.ptr())),
-            max_callback_queue_size_bytes, executable_build_options);
-        nb::gil_scoped_release gil_release;
+            callback_to_python, clients, max_callback_queue_size_bytes,
+            executable_build_options);
         server->Start();
         return server;
       },
-      nb::arg("callback_to_python"), nb::arg("backends"),
-      nb::arg("max_queue_size_bytes") = 256 * 1024 * 1024,
-      nb::arg("executable_build_options").none() = nb::none(),
+      py::arg("callback_to_python"), py::arg("backends"),
+      py::arg("max_queue_size_bytes") = 256 * 1024 * 1024,
+      py::arg("executable_build_options") = std::nullopt,
       R"(Starts a multithreaded outfeed receiver.
 
       There is one thread for each of the specified devices. When Python
@@ -179,22 +163,23 @@ void BuildOutfeedReceiverSubmodule(nb::module_& m) {
         * max_queue_size_bytes: an optional integer to bound the maximum size
             of arrays in the callback queue. When this limit is reached the
             device listener pauses.
-      )");
+      )",
+      py::call_guard<py::gil_scoped_release>());
 
-  nb::class_<OutfeedReceiverForPython> outfeed_receiver_class(
+  py::class_<OutfeedReceiverForPython> outfeed_receiver_class(
       outfeed_receiver, "OutfeedReceiverForPython");
 
   outfeed_receiver_class.def(
       "add_outfeed",
       xla::ValueOrThrowWrapper(&OutfeedReceiverForPython::AddOutfeed),
-      nb::arg("builder"), nb::arg("token"), nb::arg("consumer_id"),
-      nb::arg("arrays"), nb::arg("device_idx"),
+      py::arg("builder"), py::arg("token"), py::arg("consumer_id"),
+      py::arg("arrays"), py::arg("device_idx"),
       R"(Adds an outfeed into the given computation builder.
 
       Has the side-effect of registering the sent shape along with the consumer
       ID. Returns error if the outfeed shape is not compatible with previously
       used shape for the same consumer ID.)",
-      nb::call_guard<nb::gil_scoped_release>());
+      py::call_guard<py::gil_scoped_release>());
 }
 
 }  // namespace xla

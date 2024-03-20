@@ -57,14 +57,14 @@ class QuantizeTrainingTest : public ::testing::Test {
                            .Attr("dtype", DT_FLOAT)
                            .Attr("shape", shape)
                            .Finalize(g, out));
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status FindNode(Graph* g, const string& name, Node** out) {
     for (Node* node : g->nodes()) {
       if (node->name() == name) {
         *out = node;
-        return absl::OkStatus();
+        return OkStatus();
       }
     }
     return errors::Unimplemented("Node ", name, " not found.");

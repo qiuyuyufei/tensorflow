@@ -1,4 +1,4 @@
-/* Copyright 2022 The OpenXLA Authors.
+/* Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ namespace ifrt {
 
 char PjRtCompiler::ID = 0;
 
-absl::StatusOr<std::unique_ptr<LoadedExecutable>> PjRtCompiler::Compile(
+StatusOr<std::unique_ptr<LoadedExecutable>> PjRtCompiler::Compile(
     std::unique_ptr<Program> program, std::unique_ptr<CompileOptions> options) {
   DCHECK(this);
   const auto* xla_program = llvm::dyn_cast<XlaProgram>(program.get());
@@ -46,7 +46,7 @@ absl::StatusOr<std::unique_ptr<LoadedExecutable>> PjRtCompiler::Compile(
       std::move(xla_compile_options->loaded_host_callbacks));
 }
 
-absl::StatusOr<std::unique_ptr<LoadedExecutable>>
+StatusOr<std::unique_ptr<LoadedExecutable>>
 PjRtCompiler::DeserializeLoadedExecutable(
     absl::string_view serialized,
     std::unique_ptr<DeserializeExecutableOptions> options) {

@@ -36,7 +36,6 @@ limitations under the License.
 #include "tensorflow/core/data/service/worker.grpc.pb.h"
 #include "tensorflow/core/data/service/worker.pb.h"
 #include "tensorflow/core/data/service/worker_impl.h"
-#include "tensorflow/core/framework/allocator.h"
 #include "tensorflow/core/framework/dataset.pb.h"
 #include "tensorflow/core/framework/metrics.h"
 #include "tensorflow/core/framework/tensor.h"
@@ -57,10 +56,9 @@ namespace data {
 
 StatusOr<std::unique_ptr<DataServiceWorkerClient>>
 CreateDataServiceWorkerClient(const std::string& dispatcher_protocol,
-                              const DataTransferServerInfo& info,
-                              Allocator* allocator) {
+                              const DataTransferServerInfo& info) {
   auto client = std::make_unique<DataServiceWorkerClient>(
-      info.address(), dispatcher_protocol, info.protocol(), allocator);
+      info.address(), dispatcher_protocol, info.protocol());
   TF_RETURN_IF_ERROR(client->Initialize());
   TF_RETURN_WITH_CONTEXT_IF_ERROR(
       client->CheckCompatibility(info.compatibility_info()),
@@ -79,11 +77,11 @@ Status DataServiceWorkerClient::GetElement(const GetElementRequest& req,
 Status DataServiceWorkerClient::EnsureInitialized() {
   mutex_lock l(mu_);
   if (client_) {
-    return absl::OkStatus();
+    return OkStatus();
   }
   TF_RETURN_IF_ERROR(DataTransferClient::Build(
-      GetDataTransferProtocol(), {protocol_, address_, allocator_}, &client_));
-  return absl::OkStatus();
+      GetDataTransferProtocol(), {protocol_, address_}, &client_));
+  return OkStatus();
 }
 
 std::string DataServiceWorkerClient::GetDataTransferProtocol() const {
@@ -155,7 +153,7 @@ class GrpcDataTransferClient : public DataTransferClient {
       case GetElementResponse::ELEMENT_NOT_SET:
         break;
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   void TryCancel() override {
@@ -190,7 +188,7 @@ class GrpcTransferClientRegistrar {
               config.protocol, &credentials));
           *out = std::make_unique<GrpcDataTransferClient>(credentials,
                                                           config.address);
-          return absl::OkStatus();
+          return OkStatus();
         });
   }
 };
@@ -236,7 +234,7 @@ class LocalDataTransferClient : public DataTransferClient {
       return errors::Cancelled(absl::Substitute(
           "Client for worker $0 has been cancelled.", worker_address_));
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   StatusOr<std::shared_ptr<DataServiceWorkerImpl>> GetWorker(
@@ -265,7 +263,7 @@ class LocalTransferClientRegistrar {
         kLocalTransferProtocol, [](DataTransferClient::Config config,
                                    std::unique_ptr<DataTransferClient>* out) {
           *out = std::make_unique<LocalDataTransferClient>(config.address);
-          return absl::OkStatus();
+          return OkStatus();
         });
   }
 };

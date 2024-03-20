@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -188,17 +188,6 @@ static absl::Mutex env_argv_mu(absl::kConstInit);
 
 bool ParseFlagsFromEnvAndDieIfUnknown(absl::string_view envvar,
                                       const std::vector<tsl::Flag>& flag_list) {
-  bool parsed_recognized_flags =
-      ParseFlagsFromEnvAndIgnoreUnknown(envvar, flag_list);
-  if (!parsed_recognized_flags) {
-    return false;
-  } else {
-    return !DieIfEnvHasUnknownFlagsLeft(envvar);
-  }
-}
-
-bool ParseFlagsFromEnvAndIgnoreUnknown(
-    absl::string_view envvar, const std::vector<tsl::Flag>& flag_list) {
   absl::MutexLock lock(&env_argv_mu);
   auto* env_argv = &EnvArgvs()[envvar];
   SetArgvFromEnv(envvar, env_argv);  // a no-op if already initialized
@@ -210,24 +199,20 @@ bool ParseFlagsFromEnvAndIgnoreUnknown(
     }
   }
 
-  return tsl::Flags::Parse(&env_argv->argc, env_argv->argv.data(), flag_list);
-}
+  bool result =
+      tsl::Flags::Parse(&env_argv->argc, &env_argv->argv[0], flag_list);
 
-bool DieIfEnvHasUnknownFlagsLeft(absl::string_view envvar) {
-  absl::MutexLock lock(&env_argv_mu);
-  auto* env_argv = &EnvArgvs()[envvar];
-  SetArgvFromEnv(envvar, env_argv);
-
-  if (env_argv->argc != 1) {
+  // There's always at least one unparsed argc, namely the fake argv[0].
+  if (result && env_argv->argc != 1) {
     // Skip the first argv, which is the fake argv[0].
     auto unknown_flags = absl::MakeSpan(env_argv->argv);
     unknown_flags.remove_prefix(1);
     LOG(QFATAL) << "Unknown flag" << (unknown_flags.size() > 1 ? "s" : "")
                 << " in " << envvar << ": "
                 << absl::StrJoin(unknown_flags, " ");
-    return true;
+    return false;
   }
-  return false;
+  return result;
 }
 
 // Testing only.

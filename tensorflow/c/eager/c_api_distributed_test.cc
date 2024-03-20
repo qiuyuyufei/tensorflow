@@ -315,11 +315,11 @@ class GraphErrorInjectionPass : public tensorflow::GraphOptimizationPass {
   tensorflow::Status Run(
       const tensorflow::GraphOptimizationPassOptions& options) override {
     if (!enabled_) {
-      return absl::OkStatus();
+      return ::tensorflow::OkStatus();
     }
     if (first_call_) {
       first_call_ = false;
-      return absl::OkStatus();
+      return ::tensorflow::OkStatus();
     }
     return tensorflow::errors::Internal("Graph pass runs for more than once!");
   }
@@ -447,7 +447,7 @@ class FunctionErrorInjectionPass : public tensorflow::FunctionOptimizationPass {
         return tensorflow::errors::Internal("Injected graph pass error.");
       }
     }
-    return absl::OkStatus();
+    return ::tensorflow::OkStatus();
   }
 
  private:

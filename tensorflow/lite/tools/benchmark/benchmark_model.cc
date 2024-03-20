@@ -15,8 +15,6 @@ limitations under the License.
 
 #include "tensorflow/lite/tools/benchmark/benchmark_model.h"
 
-#include <cstdint>
-
 #ifdef __linux__
 #include <unistd.h>
 #endif  // __linux__
@@ -73,7 +71,6 @@ BenchmarkParams BenchmarkModel::DefaultParams() {
                   BenchmarkParam::Create<bool>(false));
   params.AddParam("memory_footprint_check_interval_ms",
                   BenchmarkParam::Create<int32_t>(kMemoryCheckIntervalMs));
-  params.AddParam("gpu_invoke_loop_times", BenchmarkParam::Create<int32_t>(-1));
   return params;
 }
 
@@ -174,12 +171,7 @@ std::vector<Flag> BenchmarkModel::GetFlags() {
       CreateFlag<int32_t>("memory_footprint_check_interval_ms", &params_,
                           "The interval in millisecond between two consecutive "
                           "memory footprint checks. This is only used when "
-                          "--report_peak_memory_footprint is set to true."),
-      CreateFlag<int32_t>(
-          "gpu_invoke_loop_times", &params_,
-          "Number of GPU delegate invoke loop iterations. If > 0 then reported "
-          "latency is divided by this number. Used only when "
-          "TFLITE_GPU_ENABLE_INVOKE_LOOP is defined.")};
+                          "--report_peak_memory_footprint is set to true.")};
 }
 
 void BenchmarkModel::LogParams() {
@@ -206,12 +198,6 @@ void BenchmarkModel::LogParams() {
                       "Report the peak memory footprint", verbose);
   LOG_BENCHMARK_PARAM(int32_t, "memory_footprint_check_interval_ms",
                       "Memory footprint check interval (ms)", verbose);
-#ifdef TFLITE_GPU_ENABLE_INVOKE_LOOP
-  LOG_BENCHMARK_PARAM(
-      int32_t, "gpu_invoke_loop_times",
-      "Number of GPU delegate invoke loop iterations to divide latency by",
-      verbose);
-#endif
 }
 
 TfLiteStatus BenchmarkModel::PrepareInputData() { return kTfLiteOk; }
@@ -244,15 +230,8 @@ Stat<int64_t> BenchmarkModel::Run(int min_num_times, float min_secs,
     TfLiteStatus status = RunImpl();
     int64_t end_us = profiling::time::NowMicros();
     listeners_.OnSingleRunEnd();
-    int64_t run_duration_us = end_us - start_us;
-#ifdef TFLITE_GPU_ENABLE_INVOKE_LOOP
-    int32_t gpu_invoke_loop_times = params_.Get<int>("gpu_invoke_loop_times");
-    if (gpu_invoke_loop_times > 0) {
-      run_duration_us = static_cast<int64_t>(
-          static_cast<double>(run_duration_us) / gpu_invoke_loop_times);
-    }
-#endif
-    run_stats.UpdateStat(run_duration_us);
+
+    run_stats.UpdateStat(end_us - start_us);
     if (run_frequency > 0) {
       inter_run_sleep_time =
           next_run_finish_time - profiling::time::NowMicros() * 1e-6;

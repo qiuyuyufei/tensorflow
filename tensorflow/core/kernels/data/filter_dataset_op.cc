@@ -81,7 +81,7 @@ class FilterDatasetOp::Dataset : public DatasetBase {
 
   Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
     inputs->push_back(input_);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status CheckExternalState() const override {
@@ -107,7 +107,7 @@ class FilterDatasetOp::Dataset : public DatasetBase {
     TF_RETURN_IF_ERROR(b->AddDataset(
         this, {{0, input_graph_node}}, {{1, other_arguments}},
         {{kPredicate, f}, {kTarguments, other_arguments_types_attr}}, output));
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -140,7 +140,7 @@ class FilterDatasetOp::Dataset : public DatasetBase {
           tf_shared_lock l(mu_);
           if (!input_impl_) {
             *end_of_sequence = true;
-            return absl::OkStatus();
+            return OkStatus();
           }
           TF_RETURN_IF_ERROR(
               input_impl_->GetNext(ctx, out_tensors, end_of_sequence));
@@ -148,15 +148,12 @@ class FilterDatasetOp::Dataset : public DatasetBase {
         if (*end_of_sequence) {
           mutex_lock l(mu_);
           input_impl_.reset();
-          return absl::OkStatus();
+          return OkStatus();
         }
 
         std::vector<Tensor> result;
-        auto status = instantiated_captured_func_->RunWithBorrowedArgs(
-            ctx, *out_tensors, &result, model_node());
-        if (!status.ok()) {
-          return AddErrorContext(status);
-        }
+        TF_RETURN_IF_ERROR(instantiated_captured_func_->RunWithBorrowedArgs(
+            ctx, *out_tensors, &result, model_node()));
 
         if (result.size() != 1 || result[0].dtype() != DT_BOOL ||
             result[0].NumElements() != 1) {
@@ -204,7 +201,7 @@ class FilterDatasetOp::Dataset : public DatasetBase {
                                            static_cast<float>(1));
       }
       *end_of_sequence = false;
-      return absl::OkStatus();
+      return OkStatus();
     }
 
    protected:
@@ -227,7 +224,7 @@ class FilterDatasetOp::Dataset : public DatasetBase {
           writer->WriteScalar(prefix(), kFilteredElements, filtered_elements_));
       TF_RETURN_IF_ERROR(
           writer->WriteScalar(prefix(), kDroppedElements, dropped_elements_));
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status RestoreInternal(IteratorContext* ctx,
@@ -245,7 +242,7 @@ class FilterDatasetOp::Dataset : public DatasetBase {
           reader->ReadScalar(prefix(), kFilteredElements, &filtered_elements_));
       TF_RETURN_IF_ERROR(
           reader->ReadScalar(prefix(), kDroppedElements, &dropped_elements_));
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     data::TraceMeMetadata GetTraceMeMetadata() const override {

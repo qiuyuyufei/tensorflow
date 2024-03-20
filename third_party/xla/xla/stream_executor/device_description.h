@@ -1,4 +1,4 @@
-/* Copyright 2015 The OpenXLA Authors.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,12 +28,12 @@ limitations under the License.
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "xla/stream_executor/device_description.pb.h"
 #include "xla/stream_executor/launch_dim.h"
+#include "xla/stream_executor/platform/port.h"
 
 namespace stream_executor {
 namespace internal {
@@ -53,8 +53,8 @@ struct CudaComputeCapability {
     HOPPER = 9
   };
 
-  constexpr CudaComputeCapability() = default;
-  constexpr CudaComputeCapability(int major, int minor) {
+  CudaComputeCapability() = default;
+  CudaComputeCapability(int major, int minor) {
     this->major = major;
     this->minor = minor;
   }
@@ -66,18 +66,6 @@ struct CudaComputeCapability {
 
   bool IsAtLeast(int other_major, int other_minor = 0) const {
     return !(*this < CudaComputeCapability{other_major, other_minor});
-  }
-
-  bool IsAtLeastVolta() const {
-    return major >= CudaComputeCapabilities::VOLTA;
-  }
-
-  bool IsAtLeastAmpere() const {
-    return major >= CudaComputeCapabilities::AMPERE;
-  }
-
-  bool IsAtLeastHopper() const {
-    return major >= CudaComputeCapabilities::HOPPER;
   }
 
   bool operator<(const CudaComputeCapability &other) const {
@@ -159,49 +147,32 @@ class RocmComputeCapability {
     return absl::StrJoin(kSupportedGfxVersions, ", ");
   }
 
-  bool gfx9_mi100_or_later() const {
-    static constexpr absl::string_view kList[] = {"gfx908", "gfx90a", "gfx940",
-                                                  "gfx941", "gfx942"};
+  bool has_nhwc_layout_support() const {
+    static constexpr absl::string_view kList[] = {"gfx908", "gfx90a"};
     return absl::c_count(kList, gfx_version()) != 0;
   }
 
-  bool gfx9_mi200_or_later() const {
-    static constexpr absl::string_view kList[] = {"gfx90a", "gfx940", "gfx941",
-                                                  "gfx942"};
+  bool has_bf16_dtype_support() const {
+    static constexpr absl::string_view kList[] = {"gfx908", "gfx90a"};
     return absl::c_count(kList, gfx_version()) != 0;
   }
-
-  bool gfx9_mi300() const {
-    static constexpr absl::string_view kList[] = {"gfx940", "gfx941", "gfx942"};
-    return absl::c_count(kList, gfx_version()) != 0;
-  }
-
-  bool navi21() const { return gfx_version() == "gfx1030"; }
-
-  bool navi31() const { return gfx_version() == "gfx1100"; }
-
-  bool has_nhwc_layout_support() const { return gfx9_mi100_or_later(); }
-
-  bool has_bf16_dtype_support() const { return gfx9_mi100_or_later(); }
 
   bool has_fast_fp16_support() const {
-    return gfx9_mi100_or_later() || navi21() || navi31();
+    static constexpr absl::string_view kList[] = {"gfx906", "gfx908", "gfx90a",
+                                                  "gfx1030"};
+    return absl::c_count(kList, gfx_version()) != 0;
   }
 
-  bool has_mfma_instr_support() const { return gfx9_mi100_or_later(); }
+  bool has_mfma_instr_support() const {
+    static constexpr absl::string_view kList[] = {"gfx908", "gfx90a"};
+    return absl::c_count(kList, gfx_version()) != 0;
+  }
 
   bool has_fp16_atomics_support() const {
     // TODO(rocm): Check. This should be the same as has_fast_fp16_support().
-    return gfx9_mi200_or_later();
+    static constexpr absl::string_view kList[] = {"gfx90a"};
+    return absl::c_count(kList, gfx_version()) != 0;
   }
-
-  bool fence_before_barrier() const {
-    return gfx_version() != "gfx900" && gfx_version() != "gfx906";
-  }
-
-  bool has_hipblaslt() const { return gfx9_mi200_or_later(); }
-
-  bool has_fp8_support() const { return gfx9_mi300(); }
 
   RocmComputeCapabilityProto ToProto() const {
     RocmComputeCapabilityProto proto;
@@ -217,13 +188,11 @@ class RocmComputeCapability {
   std::string gcn_arch_name_ = "gfx000";  // default to invalid arch.
 
   static constexpr absl::string_view kSupportedGfxVersions[]{
-      "gfx900",                       // MI25
-      "gfx906",                       // MI50 / MI60
-      "gfx908",                       // MI100
-      "gfx90a",                       // MI200
-      "gfx940",  "gfx941", "gfx942",  // MI300
-      "gfx1030",                      // Navi21
-      "gfx1100"                       // Navi31
+      "gfx900",  // MI25
+      "gfx906",  // MI50 / MI60
+      "gfx908",  // MI100
+      "gfx90a",  // MI200
+      "gfx1030"  // Navi21
   };
 };
 

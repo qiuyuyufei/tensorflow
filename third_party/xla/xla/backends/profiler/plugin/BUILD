@@ -6,6 +6,7 @@ load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
 load("@local_tsl//tsl/profiler/builds:build_config.bzl", "tf_profiler_copts")
 
 package(
+    default_visibility = ["//visibility:public"],
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
@@ -23,7 +24,7 @@ cc_library(
     srcs = ["plugin_tracer.cc"],
     hdrs = ["plugin_tracer.h"],
     copts = tf_profiler_copts(),
-    visibility = ["//xla:internal"],
+    visibility = ["//visibility:public"],
     deps = [
         ":profiler_c_api_hdrs",
         "//xla:status",
@@ -55,10 +56,7 @@ cc_library(
     name = "plugin_tracer_impl",
     srcs = ["plugin_tracer_impl.cc"],
     hdrs = ["plugin_tracer_impl.h"],
-    visibility = [
-        "//learning/brain/research/pjrt:__pkg__",
-        "//xla/pjrt/c:__pkg__",
-    ],
+    visibility = ["//visibility:public"],
     deps = [
         ":profiler_c_api_hdrs",
         ":profiler_error",

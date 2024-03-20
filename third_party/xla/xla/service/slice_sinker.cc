@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -238,7 +238,7 @@ Status SinkSlices(const std::vector<HloInstruction*>& slice_sources,
 // This pass currently doesn't transform non-elementwise instructions. We may
 // extend this pass to transform non-elementwise instructions, such as dot,
 // broadcast and reduce in the future.
-absl::StatusOr<bool> SliceSinker::Run(
+StatusOr<bool> SliceSinker::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

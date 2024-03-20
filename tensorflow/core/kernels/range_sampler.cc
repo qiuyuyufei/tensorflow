@@ -252,7 +252,7 @@ Status FixedUnigramSampler::SetDistributionSampler(Env* env,
                                     " must be equal to weights size  ",
                                     weights_.size()));
   dist_sampler_.reset(new random::DistributionSampler(weights_));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status FixedUnigramSampler::SetDistributionSampler(
@@ -263,7 +263,7 @@ Status FixedUnigramSampler::SetDistributionSampler(
                                     " must be equal to weights size  ",
                                     weights_.size()));
   dist_sampler_.reset(new random::DistributionSampler(weights_));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 float FixedUnigramSampler::Probability(int64_t value) const {
@@ -309,7 +309,7 @@ Status FixedUnigramSampler::LoadFromFile(Env* env, const string& vocab_file,
     }
     ++word_id;
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void FixedUnigramSampler::LoadFromUnigrams(const std::vector<float>& unigrams,

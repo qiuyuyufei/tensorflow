@@ -220,7 +220,7 @@ Status ValidateTfrtPipelineOptions(const TfrtPipelineOptions &options) {
         "Invalid pipeline options. Targeting both TPU and GPU is not "
         "supported.");
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status CreateTFExecutorToTFPreInvariantOptimizationPipeline(
@@ -234,7 +234,7 @@ Status CreateTFExecutorToTFPreInvariantOptimizationPipeline(
         /*print_module_scope=*/true));
   }
   CreateTFExecutorToTFPreInvariantOptimizationPipelineHelper(pm, options);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

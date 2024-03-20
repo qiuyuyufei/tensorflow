@@ -13,31 +13,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <memory>
 #include <string>
 #include <utility>
 
 #include "absl/container/flat_hash_set.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/Dialect/Quant/QuantOps.h"  // from @llvm-project  // IWYU pragma: keep
-#include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
 #include "mlir/IR/Operation.h"  // from @llvm-project
 #include "mlir/IR/PatternMatch.h"  // from @llvm-project
 #include "mlir/Pass/Pass.h"  // from @llvm-project  // IWYU pragma: keep
-#include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "mlir/Support/TypeID.h"  // from @llvm-project
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"  // from @llvm-project
 #include "stablehlo/dialect/StablehloOps.h"  // from @stablehlo  // IWYU pragma: keep
 #include "tensorflow/compiler/mlir/lite/quantization/ir/QuantOps.h"
-#include "tensorflow/compiler/mlir/quantization/common/attrs_and_constraints.h"
-#include "tensorflow/compiler/mlir/quantization/common/quantization_lib/quantization_config.h"
-#include "tensorflow/compiler/mlir/quantization/common/quantization_lib/quantization_utils.h"
-#include "tensorflow/compiler/mlir/quantization/stablehlo/passes/passes.h"
-#include "tensorflow/compiler/mlir/quantization/stablehlo/passes/quantization_patterns.h"
-#include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
+#include "tensorflow/compiler/mlir/lite/quantization/quantization_config.h"
+#include "tensorflow/compiler/mlir/lite/quantization/quantization_utils.h"
 
 namespace mlir::quant::stablehlo {
 
@@ -49,22 +41,44 @@ namespace {
 // Base struct for quantization.
 template <typename ConcreteT, typename RootOpT = quantfork::DequantizeCastOp>
 struct StableHloQuantizationBase
-    : public StableHloQuantizationPattern<ConcreteT, quantfork::QuantizeCastOp,
-                                          quantfork::DequantizeCastOp,
-                                          /*VerifierT=*/void, RootOpT> {
-  explicit StableHloQuantizationBase(MLIRContext* ctx)
-      : StableHloQuantizationPattern<ConcreteT, quantfork::QuantizeCastOp,
-                                     quantfork::DequantizeCastOp,
-                                     /*VerifierT=*/void, RootOpT>(ctx) {}
+    : public QuantizationPattern<ConcreteT, quantfork::QuantizeCastOp,
+                                 quantfork::DequantizeCastOp,
+                                 /*VerifierT=*/void, RootOpT> {
+  explicit StableHloQuantizationBase(MLIRContext* ctx,
+                                     const QuantPassSpec& quant_params)
+      : QuantizationPattern<ConcreteT, quantfork::QuantizeCastOp,
+                            quantfork::DequantizeCastOp,
+                            /*VerifierT=*/void, RootOpT>(ctx, quant_params) {}
 
-  static bool AllowHybridQuantization(Operation& op) { return false; }
+  static bool IsQuantizableCustomOp(Operation* op,
+                                    const CustomMap& custom_op_map) {
+    return false;
+  }
+
+  static bool AllowDynamicRangeQuantizedOperand(
+      Operation* quantized_op, const CustomMap& custom_op_map) {
+    return false;
+  }
+
+  static bool AllowDynamicRangeQuantizedResult(Operation* quantized_op,
+                                               const CustomMap& custom_op_map) {
+    return false;
+  }
+
+  static bool IsWeightOnlyOp(Operation* quantized_op,
+                             absl::flat_hash_set<std::string>& ops_blocklist,
+                             bool weight_only_quantization,
+                             const CustomMap& custom_op_map) {
+    return false;
+  }
 };
 
 // Quantization rewrite pattern using DQ as the root op.
 struct StableHloQuantization
     : public StableHloQuantizationBase<StableHloQuantization> {
-  explicit StableHloQuantization(MLIRContext* ctx)
-      : StableHloQuantizationBase<StableHloQuantization>(ctx) {}
+  explicit StableHloQuantization(MLIRContext* ctx,
+                                 const QuantPassSpec& quant_params)
+      : StableHloQuantizationBase<StableHloQuantization>(ctx, quant_params) {}
 };
 
 // Quantization rewrite pattern using Q as the root op. This is for the
@@ -72,61 +86,52 @@ struct StableHloQuantization
 struct StableHloQuantizationReverse
     : public StableHloQuantizationBase<StableHloQuantizationReverse,
                                        quantfork::QuantizeCastOp> {
-  explicit StableHloQuantizationReverse(MLIRContext* ctx)
+  explicit StableHloQuantizationReverse(MLIRContext* ctx,
+                                        const QuantPassSpec& quant_params)
       : StableHloQuantizationBase<StableHloQuantizationReverse,
-                                  quantfork::QuantizeCastOp>(ctx) {}
-};
-
-// Quantization rewrite pattern using DQ as the root op.
-struct StableHloQuantizationHybrid
-    : public StableHloQuantizationBase<StableHloQuantizationHybrid> {
-  explicit StableHloQuantizationHybrid(MLIRContext* ctx)
-      : StableHloQuantizationBase<StableHloQuantizationHybrid>(ctx) {}
-
-  static bool AllowHybridQuantization(Operation& op) {
-    auto call_op = cast<TF::XlaCallModuleOp>(op);
-    return call_op && GetEntryFunctionName(call_op).contains("dot_general");
-  }
+                                  quantfork::QuantizeCastOp>(ctx,
+                                                             quant_params) {}
 };
 
 class QuantizePass : public impl::QuantizePassBase<QuantizePass> {
  public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(QuantizePass)
 
-  using impl::QuantizePassBase<QuantizePass>::QuantizePassBase;
+  explicit QuantizePass() = default;
 
-  explicit QuantizePass(const bool enable_per_channel_quantized_weight,
-                        const bool enable_weight_only,
-                        const QuantizationSpecs& quant_specs) {
-    enable_per_channel_quantized_weight_ = enable_per_channel_quantized_weight;
-    enable_weight_only_ = enable_weight_only;
-  }
+  explicit QuantizePass(const QuantizationSpecs& quant_specs)
+      : quant_specs_(quant_specs) {}
+
+  QuantizePass(const QuantizePass& other) : quant_specs_(other.quant_specs_) {}
 
  private:
   void runOnOperation() override;
+
+  QuantizationSpecs quant_specs_;
 };
 
 void QuantizePass::runOnOperation() {
-  ModuleOp module_op = getOperation();
+  func::FuncOp func = getOperation();
   MLIRContext& ctx = getContext();
 
+  NumericVerifySpec numeric_verify_spec;
+  numeric_verify_spec.verify_numeric = quant_specs_.verify_numeric;
+  numeric_verify_spec.whole_model_verify = quant_specs_.whole_model_verify;
+
+  const QuantPassSpec quant_params = {std::move(numeric_verify_spec),
+                                      quant_specs_};
+
   RewritePatternSet patterns(&ctx);
-  patterns.add<StableHloQuantization, StableHloQuantizationReverse>(&ctx);
-  if (enable_weight_only_) {
-    patterns.add<StableHloQuantizationHybrid>(&ctx);
-    PopulateQuantizeHybridPatterns(ctx, patterns);
-  }
+  patterns.add<StableHloQuantization, StableHloQuantizationReverse>(
+      &ctx, quant_params);
 
-  PopulateQuantizeOpWithRegionPattern(ctx, patterns);
-  PopulateFusedGemmStylePatterns(ctx, patterns,
-                                 enable_per_channel_quantized_weight_);
-  PopulateQuantizeSingularOpPatterns(ctx, patterns);
-
-  if (failed(applyPatternsAndFoldGreedily(module_op, std::move(patterns)))) {
+  if (failed(applyPatternsAndFoldGreedily(func, std::move(patterns)))) {
     // There are cases where no rewrites happen even if a pattern matches,
     // causing this to result in a convergence failure. Consider this as a
     // best-effort.
-    module_op.emitWarning("Failed to converge pattern at QuantizePass.");
+    // TODO: b/305469508 - Make QuantizationPattern converge if there are no
+    // patterns that are rewritable.
+    func.emitWarning("Failed to converge pattern at QuantizePass.");
   }
 }
 

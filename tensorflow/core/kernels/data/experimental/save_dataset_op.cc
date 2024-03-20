@@ -92,7 +92,7 @@ Status SaveDatasetOp::DoCompute(OpKernelContext* ctx) {
   TF_RETURN_IF_ERROR(WriteMetadataFile(ctx->env(), path, run_id,
                                        dataset->output_dtypes(), num_elements,
                                        /*finalized=*/true));
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status SaveDatasetOp::WriteData(OpKernelContext* ctx, DatasetBase* dataset,
@@ -173,7 +173,7 @@ Status SaveDatasetOp::GetShardIndex(IteratorContext* ctx,
                                     int64_t* shard_index) {
   if (!use_shard_func_) {
     *shard_index = (*shard_index + 1) % GetCpuBudget();
-    return absl::OkStatus();
+    return OkStatus();
   }
   std::vector<Tensor> output_tensors;
   TF_RETURN_IF_ERROR(function->RunWithBorrowedArgs(
@@ -184,7 +184,7 @@ Status SaveDatasetOp::GetShardIndex(IteratorContext* ctx,
     return errors::InvalidArgument("`shard_func` must return a scalar int64.");
   }
   *shard_index = output_tensors[0].flat<int64_t>()(0);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status SaveDatasetOp::WriteMetadataFile(Env* env, const std::string& path,
@@ -244,7 +244,7 @@ class SaveDatasetV2Op::Dataset : public DatasetBase {
 
   Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
     inputs->push_back(input_);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status CheckExternalState() const override {
@@ -296,7 +296,7 @@ class SaveDatasetV2Op::Dataset : public DatasetBase {
          std::make_pair(kShardFuncTarguments, shard_func_arguments_types_attr)},
         output));
 
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -396,7 +396,7 @@ class SaveDatasetV2Op::Dataset : public DatasetBase {
       }
 
       current_writer->Write(*out_tensors);
-      return absl::OkStatus();
+      return OkStatus();
     }
 
    protected:
@@ -447,7 +447,7 @@ class SaveDatasetV2Op::Dataset : public DatasetBase {
         TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
       if (!use_shard_func) {
         *shard_index = (*shard_index + 1) % GetCpuBudget();
-        return absl::OkStatus();
+        return OkStatus();
       }
       std::vector<Tensor> output_tensors;
       TF_RETURN_IF_ERROR(function->RunWithBorrowedArgs(
@@ -459,7 +459,7 @@ class SaveDatasetV2Op::Dataset : public DatasetBase {
             "`shard_func` must return a scalar int64.");
       }
       *shard_index = output_tensors[0].flat<int64_t>()(0);
-      return absl::OkStatus();
+      return OkStatus();
     }
 
     Status WriteMetadataFile(Env* env, const std::string& path, uint64 run_id,

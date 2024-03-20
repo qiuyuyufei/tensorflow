@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -48,10 +48,9 @@ class InterpreterExecutable : public InterpreterExecutableBase {
   static int64_t ShapeSizeBytes(const Shape& shape);
 
  protected:
-  absl::StatusOr<Literal> Evaluate(
-      const ServiceExecutableRunOptions* run_options,
-      const HloComputation& computation,
-      absl::Span<const Literal> arg_literals) override
+  StatusOr<Literal> Evaluate(const ServiceExecutableRunOptions* run_options,
+                             const HloComputation& computation,
+                             absl::Span<const Literal> arg_literals) override
       ABSL_LOCKS_EXCLUDED(evaluator_lock_);
 
   // The interpreter interprets executables with an HloEvaluator.

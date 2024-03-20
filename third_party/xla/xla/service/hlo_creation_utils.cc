@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -375,17 +375,16 @@ StatusOr<HloInstruction*> MakeDotHlo(
     const DotDimensionNumbers& dim_numbers,
     const PrecisionConfig& precision_config,
     std::optional<PrimitiveType> preferred_element_type,
-    std::vector<SparsityDescriptor> sparsity,
-    absl::Span<HloInstruction* const> sparse_meta, const OpMetadata* metadata) {
+    const OpMetadata* metadata) {
   HloComputation* computation = lhs->parent();
   CHECK_EQ(computation, rhs->parent());
-  TF_ASSIGN_OR_RETURN(Shape dot_shape,
-                      ShapeInference::InferDotOpShape(
-                          lhs->shape(), rhs->shape(), dim_numbers,
-                          preferred_element_type, absl::MakeSpan(sparsity)));
+  TF_ASSIGN_OR_RETURN(
+      Shape dot_shape,
+      ShapeInference::InferDotOpShape(lhs->shape(), rhs->shape(), dim_numbers,
+                                      preferred_element_type));
   return computation->AddInstruction(
       HloInstruction::CreateDot(dot_shape, lhs, rhs, dim_numbers,
-                                precision_config, sparsity, sparse_meta),
+                                precision_config),
       metadata);
 }
 

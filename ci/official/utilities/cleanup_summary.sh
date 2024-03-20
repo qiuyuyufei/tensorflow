@@ -14,8 +14,6 @@
 # limitations under the License.
 # ==============================================================================
 
-set -euxo pipefail
-
 function resultstore_extract_fallback {
   # In case the main script fails somehow.
   cat <<EOF
@@ -31,17 +29,7 @@ EOF
 # Print out any ResultStore URLs for Bazel invocations' results.
 # Each failed target there will have its own representation, making failures
 # easier to find and read.
-function resultstore_extract {
-  local \
-    XML_PATH="$TFCI_OUTPUT_DIR/Bazel_Test_and_Build_Results/sponge_log.xml"
-
-  python3 \
-    "$TFCI_GIT_DIR/ci/official/utilities/extract_resultstore_links.py" \
-    "$TFCI_OUTPUT_DIR/script.log" \
-    --print \
-    --xml-out-path "$XML_PATH" || resultstore_extract_fallback
-}
-
-if grep -q "Streaming build results to" "$TFCI_OUTPUT_DIR/script.log"; then
-  resultstore_extract || resultstore_extract_fallback
-fi
+python3 \
+  "$TFCI_GIT_DIR/ci/official/utilities/extract_resultstore_links.py" \
+  "$TFCI_OUTPUT_DIR/script.log" \
+  --print || resultstore_extract_fallback

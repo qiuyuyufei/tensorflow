@@ -1,4 +1,4 @@
-/* Copyright 2018 The OpenXLA Authors.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -75,7 +75,7 @@ class BFloat16ConversionFoldingTest : public HloTestBase {
   bool FoldConversions(HloModule* module) {
     TestBFloat16Support bfloat16_support_;
     BFloat16ConversionFolding fold(&bfloat16_support_);
-    absl::StatusOr<bool> result = fold.Run(module);
+    StatusOr<bool> result = fold.Run(module);
     EXPECT_IS_OK(result.status());
     return result.value();
   }

@@ -189,13 +189,13 @@ class PosixEnv : public Env {
     });
   }
 
-  absl::Status LoadDynamicLibrary(const char* library_filename,
-                                  void** handle) override {
+  Status LoadDynamicLibrary(const char* library_filename,
+                            void** handle) override {
     return internal::LoadDynamicLibrary(library_filename, handle);
   }
 
-  absl::Status GetSymbolFromLibrary(void* handle, const char* symbol_name,
-                                    void** symbol) override {
+  Status GetSymbolFromLibrary(void* handle, const char* symbol_name,
+                              void** symbol) override {
     return internal::GetSymbolFromLibrary(handle, symbol_name, symbol);
   }
 
@@ -218,7 +218,7 @@ class PosixEnv : public Env {
     // See if we have the executable path. if executable.runfiles exists, return
     // that folder.
     string runfiles_path = bin_path + runfiles_suffix;
-    absl::Status s = this->IsDirectory(runfiles_path);
+    Status s = this->IsDirectory(runfiles_path);
     if (s.ok()) {
       return runfiles_path;
     }

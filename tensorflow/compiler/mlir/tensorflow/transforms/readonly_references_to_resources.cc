@@ -92,7 +92,7 @@ StringRef GetNodeNameFromClassAttrOrSharedNameAttr(Operation *op) {
   StringRef result;
   for (Attribute class_attr : classes_attr) {
     StringRef node_name = class_attr.cast<StringAttr>().getValue();
-    if (!node_name.starts_with(kLocationPrefix)) {
+    if (!node_name.startswith(kLocationPrefix)) {
       continue;
     }
     if (!result.empty()) {

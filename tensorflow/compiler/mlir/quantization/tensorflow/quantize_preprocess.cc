@@ -30,10 +30,8 @@ limitations under the License.
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "mlir/Transforms/Passes.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/lite/stablehlo/transforms/legalize_tf_xla_call_module_to_stablehlo_pass.h"
-#include "tensorflow/compiler/mlir/lite/stablehlo/transforms/passes.h"
 #include "tensorflow/compiler/mlir/lite/stablehlo/transforms/rename_entrypoint_to_main.h"
 #include "tensorflow/compiler/mlir/lite/stablehlo/transforms/tf_stablehlo_pass.h"
-#include "tensorflow/compiler/mlir/quantization/stablehlo/cc/pass_pipeline.h"
 #include "tensorflow/compiler/mlir/quantization/stablehlo/passes/bridge/passes.h"
 #include "tensorflow/compiler/mlir/quantization/stablehlo/passes/passes.h"
 #include "tensorflow/compiler/mlir/quantization/tensorflow/cc/run_passes.h"
@@ -48,8 +46,6 @@ limitations under the License.
 namespace tensorflow {
 namespace quantization {
 
-using ::mlir::quant::stablehlo::AddXlaCallModuleOpDeserializationPasses;
-
 // Adds passes that unfuse MHLO ops that do not have their equivalents in
 // StableHLO.
 void AddUnfuseMhloOpsPasses(mlir::PassManager& pm) {
@@ -57,12 +53,8 @@ void AddUnfuseMhloOpsPasses(mlir::PassManager& pm) {
       mlir::mhlo::createLegalizeEinsumToDotGeneralPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::mhlo::createLegalizeDotToDotGeneralPass());
-  // Unfuse mhlo BatchNorm to primitive ops.
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::odml::createUnfuseBatchNormPass());
-  // Fuse Conv + Mul to Conv.
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::odml::createFuseConvolutionPass());
-  // Fold broadcast_in_dim + Mul.
-  pm.addNestedPass<mlir::func::FuncOp>(mlir::odml::createFoldBroadcastPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::quant::stablehlo::createUnfuseMhloBatchNormPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::mhlo::createLegalizeTorchIndexSelectToGatherPass());
 }
@@ -99,6 +91,7 @@ void AddTFToStablehloPasses(mlir::PassManager& pm) {
   // Propagates shapes on the TensorFlow graph.
   pm.addPass(mlir::TF::CreateTFShapeInferencePass());
   pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::TF::CreateTensorListOpsDecompositionPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::TFDevice::CreateDecomposeResourceOpsPass());
 
@@ -119,10 +112,8 @@ void AddTFToStablehloPasses(mlir::PassManager& pm) {
   pm.addPass(mlir::createCanonicalizerPass());
 
   // TF -> StableHLO legalization.
-  // Skip StatefulPartitionedCall to preserve aliased functions.
-  mlir::odml::AddLegalizeTFToStablehloPasses(
-      pm, /*skip_quantization_ops=*/true,
-      /*skip_resize=*/false, /*skip_stateful_partitioned_call=*/true);
+  mlir::odml::AddLegalizeTFToStablehloPasses(pm, /*skip_quantization_ops=*/true,
+                                             /*skip_resize=*/false);
   // StableHLO -> MHLO legalization for MHLO optimization.
   pm.addPass(mlir::mhlo::createStablehloLegalizeToHloPass());
   // Rewrites legacy StableHLO ops.
@@ -136,8 +127,7 @@ absl::Status PreprocessAndFreezeGraph(
     const absl::string_view mlir_dump_file_prefix, const bool is_inliner_run,
     const absl::flat_hash_set<std::string>& noinline_functions,
     mlir::ModuleOp module_op, mlir::MLIRContext* context,
-    std::optional<Session*> session, const bool run_tf_to_stablehlo,
-    const bool deserialize_xla_call_module) {
+    std::optional<Session*> session, bool run_tf_to_stablehlo) {
   mlir::PassManager pm_before_freezing_variables(context);
   mlir::StatusScopedDiagnosticHandler statusHandler(module_op.getContext(),
                                                     /*propagate=*/true);
@@ -170,14 +160,6 @@ absl::Status PreprocessAndFreezeGraph(
     // AddLegalizeTFToStablehloPasses expects frozen TF variables when
     // legalizing to stablehlo.constant.
     AddTFToStablehloPasses(pm_after_freezing_variables);
-  }
-
-  if (deserialize_xla_call_module) {
-    // Deserialize the StableHLO module embedded in tf.XlaCallModule and lifts
-    // the StableHLO functions to the top level module. This is needed for
-    // StableHLO quantization. Also restores some shape information for
-    // XlaCallModuleOps and CustomAggregatorOps lost from the calibration step.
-    AddXlaCallModuleOpDeserializationPasses(pm_after_freezing_variables);
   }
 
   if (const auto pre_variable_freezing_status = RunPassesOnModuleOp(

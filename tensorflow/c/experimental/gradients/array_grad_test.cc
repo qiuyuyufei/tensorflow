@@ -41,7 +41,7 @@ Status IdentityNModel(AbstractContext* ctx,
   // for computing gradient so we could safely drop it.
   outputs[0] = temp_outputs[1];
   temp_outputs[0]->Unref();
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 class CppGradients

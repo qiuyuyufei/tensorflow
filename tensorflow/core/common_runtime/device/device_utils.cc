@@ -30,7 +30,7 @@ Status ValidateDeviceType(StringPiece type) {
                   strings::StrCat("Device name/type '", type, "' must match ",
                                   kTfDeviceTypeRegEx->pattern(), "."));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace device_utils

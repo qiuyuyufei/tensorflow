@@ -211,8 +211,7 @@ Status UniformQuantizedConvolutionParams::ValidateOrFillParamsAndValidateShape(
   return ValidateOrFillPaddingList(lhs_shape, rhs_shape);
 }
 
-absl::StatusOr<TensorShape>
-UniformQuantizedConvolutionParams::CalculateOutputShape(
+StatusOr<TensorShape> UniformQuantizedConvolutionParams::CalculateOutputShape(
     const TensorShape& lhs_shape, const TensorShape& rhs_shape) const {
   // Given that lhs_shape, rhs_shape and Op Attrs (feature_group_count,
   // batch_group_count) are valid, calculate output shape.

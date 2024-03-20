@@ -20,7 +20,6 @@ limitations under the License.
 #include <functional>
 #include <map>
 #include <memory>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -65,8 +64,6 @@ class BatchResourceBase : public ResourceBase {
   // Note input from one batch-op invocation is valid and considered a
   // specialized `slice`.
   struct BatchTask : public tensorflow::serving::BatchTask {
-    BatchTask() : criticality_val(tsl::criticality::GetCriticality()){};
-
     // A unique ID to identify this invocation of Batch.
     int64_t guid;
 
@@ -115,10 +112,7 @@ class BatchResourceBase : public ResourceBase {
     // this task's processing costs.
     RequestCost* request_cost = nullptr;
 
-    // Returns the criticality associated with the task.
-    tsl::criticality::Criticality criticality() const override {
-      return criticality_val;
-    };
+    tsl::criticality::Criticality criticality;
 
     // If nonzero, make a batch of this size entirely out of padding. This
     // batch is processed, but is not propagated to the kernel outputs.
@@ -128,10 +122,6 @@ class BatchResourceBase : public ResourceBase {
     virtual std::unique_ptr<BatchTask> CreateDerivedTask() {
       return std::make_unique<BatchTask>();
     }
-
-   private:
-    // Criticality associated with the task.
-    ::tsl::criticality::Criticality criticality_val;
   };
 
   // Appending a T suffix to make the type alias different to those in
@@ -180,8 +170,6 @@ class BatchResourceBase : public ResourceBase {
                               AsyncOpKernel::DoneCallback done);
   // Ingests data from one invocation of the batch op. The data is enqueued to
   // be combined with others into a batch, asynchronously.
-  // `CreateBatchTaskFn` should be used to instantiate fields added to a
-  // child class of `BatchTask` by the caller.
   Status RegisterInput(int64_t guid, OpKernelContext* context,
                        const string& batcher_queue_name,
                        const CreateBatchTaskFn& create_batch_task_fn,
@@ -250,9 +238,7 @@ class BatchResourceBase : public ResourceBase {
   //   2) the input size from this task;
   //   3) the padding amount.
   static void SplitBatchCostsAndRecordMetrics(
-      const std::string& model_name,
-      const std::vector<std::unique_ptr<CostMeasurement>>&
-          batch_cost_measurements,
+      std::vector<std::unique_ptr<CostMeasurement>>& batch_cost_measurements,
       int64_t processed_size, BatchT& batch);
 
  private:

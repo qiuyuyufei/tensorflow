@@ -1,4 +1,4 @@
-/* Copyright 2021 The OpenXLA Authors.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,24 +15,19 @@ limitations under the License.
 
 #include "xla/service/gpu/cudnn_support_utils.h"
 
-#include <cstdint>
+#include <functional>
 #include <vector>
 
-#include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/primitive_util.h"
 #include "xla/service/gpu/cublas_cudnn.h"
-#include "xla/shape.h"
 #include "xla/shape_util.h"
-#include "xla/stream_executor/device_description.h"
-#include "xla/util.h"
 #include "xla/window_util.h"
-#include "tsl/platform/logging.h"
-#include "tsl/platform/statusor.h"
+#include "tsl/platform/status.h"
 
 namespace xla {
 namespace gpu {
 
-absl::StatusOr<bool> CudnnSupportsOptimizedIntegerConvolution(
+StatusOr<bool> CudnnSupportsOptimizedIntegerConvolution(
     const se::CudaComputeCapability& compute_capability,
     HloCustomCallInstruction& conv, int vector_size) {
   TF_ASSIGN_OR_RETURN(auto kind, GetCudnnConvKind(&conv));
@@ -124,13 +119,12 @@ absl::StatusOr<bool> CudnnSupportsOptimizedIntegerConvolution(
   return true;
 }
 
-absl::StatusOr<CudnnReorderTransposeConfig>
-CudnnInferTransposeForFilterReordering(
+StatusOr<CudnnReorderTransposeConfig> CudnnInferTransposeForFilterReordering(
     const Shape& shape, const ConvolutionDimensionNumbers& dimension_numbers) {
   // A normal filter should have four dimensions: [O, I, H, W]
   // An already vectorized filter will have five: [O, I/k, H, W, k]; k=4|32
   if (shape.rank() != 4 && shape.rank() != 5) {
-    return Internal("Filter shape has unexpected rank.");
+    return InternalError("Filter shape has unexpected rank.");
   }
 
   // Get convolution dimension numbers.
@@ -148,7 +142,7 @@ CudnnInferTransposeForFilterReordering(
   if (shape.dimensions(dO) % 32 != 0 ||
       shape.dimensions(dI) % (32 / vsize) != 0 ||
       (revectorize && vsize != 4 && vsize != 32)) {
-    return Internal("Filter shape is not vectorizable.");
+    return InternalError("Filter shape is not vectorizable.");
   }
 
   // Build the resulting shape: [O, I/32, H, W, 32]
@@ -193,14 +187,14 @@ CudnnInferTransposeForFilterReordering(
   return CudnnReorderTransposeConfig{split_shape, output_shape, permutation};
 }
 
-absl::StatusOr<CudnnReorderTransposeConfig>
-CudnnInferTransposeForBiasReordering(const Shape& shape) {
+StatusOr<CudnnReorderTransposeConfig> CudnnInferTransposeForBiasReordering(
+    const Shape& shape) {
   // Expected bias has one dimension: [O]
   if (shape.rank() != 1) {
-    return Internal("Bias shape has unexpected rank.");
+    return InternalError("Bias shape has unexpected rank.");
   }
   if (shape.dimensions(0) % 32 != 0) {
-    return Internal("Bias shape is not vectorizable.");
+    return InternalError("Bias shape is not vectorizable.");
   }
 
   // Build the transposable shape: [O/32, 4, 2, 4]

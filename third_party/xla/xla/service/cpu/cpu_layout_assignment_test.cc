@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -261,7 +261,7 @@ struct DotOutputFusionLayoutAssignmentResult {
   const HloInstruction* addend_fusion_param;
 };
 
-static absl::StatusOr<DotOutputFusionLayoutAssignmentResult> RunDotOutputFusion(
+static StatusOr<DotOutputFusionLayoutAssignmentResult> RunDotOutputFusion(
     HloModule* module, const std::string& test_name, int m, int k, int n,
     const int64_t dot_operand_idx_in_add) {
   DotOutputFusionLayoutAssignmentResult result;

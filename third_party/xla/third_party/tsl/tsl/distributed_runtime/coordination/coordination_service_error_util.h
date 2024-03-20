@@ -28,7 +28,7 @@ constexpr absl::string_view CoordinationErrorPayloadKey() {
 
 // Mark error as a coordination service error (as opposed to RPC
 // errors).
-inline absl::Status MakeCoordinationError(absl::Status s) {
+inline Status MakeCoordinationError(Status s) {
   s.SetPayload(CoordinationErrorPayloadKey(), absl::Cord(""));
   return s;
 }
@@ -37,9 +37,9 @@ inline absl::Status MakeCoordinationError(absl::Status s) {
 // errors), and indicate error origin.
 // Errors reported via the agent API by the user should set `is_reported_error`
 // to true.
-inline absl::Status MakeCoordinationError(
-    absl::Status s, const tensorflow::CoordinatedTask& origin,
-    bool is_reported_error = false) {
+inline Status MakeCoordinationError(Status s,
+                                    const tensorflow::CoordinatedTask& origin,
+                                    bool is_reported_error = false) {
   tensorflow::CoordinationServiceError error;
   *error.mutable_source_task() = origin;
   error.set_is_reported_error(is_reported_error);
@@ -49,8 +49,8 @@ inline absl::Status MakeCoordinationError(
 }
 
 // Mark error as a coordination service error with payload.
-inline absl::Status MakeCoordinationError(
-    absl::Status s, const tensorflow::CoordinationServiceError& payload) {
+inline Status MakeCoordinationError(
+    Status s, const tensorflow::CoordinationServiceError& payload) {
   s.SetPayload(CoordinationErrorPayloadKey(),
                absl::Cord(payload.SerializeAsString()));
   return s;

@@ -45,13 +45,13 @@ class RewriteDatasetParams : public DatasetParams {
   Status GetInputNames(std::vector<string>* input_names) const override {
     *input_names = {RewriteDatasetOp::kInputDataset,
                     RewriteDatasetOp::kRewriteName};
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   Status GetAttributes(AttributeVector* attr_vector) const override {
     attr_vector->emplace_back("output_types", output_dtypes_);
     attr_vector->emplace_back("output_shapes", output_shapes_);
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   string dataset_type() const override {

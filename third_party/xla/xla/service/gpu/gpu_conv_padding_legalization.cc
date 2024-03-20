@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,31 +15,17 @@ limitations under the License.
 
 #include "xla/service/gpu/gpu_conv_padding_legalization.h"
 
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <cstdlib>
-#include <vector>
+#include <memory>
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/log/check.h"
-#include "absl/log/log.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
-#include "xla/hlo/ir/hlo_computation.h"
-#include "xla/hlo/ir/hlo_instructions.h"
+#include "xla/literal.h"
 #include "xla/literal_util.h"
 #include "xla/service/gpu/cublas_cudnn.h"
 #include "xla/service/hlo_creation_utils.h"
 #include "xla/service/shape_inference.h"
-#include "xla/shape.h"
-#include "xla/shape_util.h"
 #include "xla/util.h"
 #include "xla/window_util.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/status.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -416,7 +402,7 @@ bool GpuConvPaddingLegalization::CanonicalizeBackwardInputConvolution(
   return true;
 }
 
-absl::StatusOr<bool> GpuConvPaddingLegalization::RunOnComputation(
+StatusOr<bool> GpuConvPaddingLegalization::RunOnComputation(
     HloComputation* computation) {
   bool changed = false;
   std::vector<HloCustomCallInstruction*> convs;
@@ -443,7 +429,7 @@ absl::StatusOr<bool> GpuConvPaddingLegalization::RunOnComputation(
   return changed;
 }
 
-absl::StatusOr<bool> GpuConvPaddingLegalization::Run(
+StatusOr<bool> GpuConvPaddingLegalization::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

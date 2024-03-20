@@ -70,6 +70,7 @@ td_library(
     ],
     includes = ["."],
     visibility = [
+        # copybara:uncomment "//learning/brain/tfrt/mlir:__subpackages__",
         # copybara:uncomment "//learning/infra/mira/distributed:__subpackages__",
     ],
     deps = [

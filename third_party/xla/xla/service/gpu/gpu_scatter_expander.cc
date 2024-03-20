@@ -1,4 +1,4 @@
-/* Copyright 2019 The OpenXLA Authors.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,9 +15,11 @@ limitations under the License.
 
 #include "xla/service/gpu/gpu_scatter_expander.h"
 
+#include "absl/algorithm/container.h"
+#include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_opcode.h"
-#include "xla/primitive_util.h"
+#include "xla/hlo/ir/hlo_module.h"
+#include "xla/statusor.h"
 
 namespace xla {
 

@@ -32,9 +32,15 @@ namespace flex {
 // needs to first acquire a lock on the mutex object.
 class TFLiteSubgraphResource : public tensorflow::ResourceBase {
  public:
-  explicit TFLiteSubgraphResource(Subgraph& subgraph, TfLiteDelegate* delegate,
-                                  tensorflow::mutex* mutex)
-      : mutex_(mutex), subgraph_(subgraph), delegate_(delegate) {}
+  explicit TFLiteSubgraphResource(Subgraph& subgraph, TfLiteDelegate* delegate)
+      : subgraph_(subgraph), delegate_(delegate) {}
+
+  // This class is movable but not copyable.
+  TFLiteSubgraphResource(TFLiteSubgraphResource&&) = default;
+  TFLiteSubgraphResource& operator=(TFLiteSubgraphResource&&) = default;
+
+  TFLiteSubgraphResource(const TFLiteSubgraphResource&) = delete;
+  TFLiteSubgraphResource& operator=(TFLiteSubgraphResource&) = delete;
 
   std::string DebugString() const override { return "TFLiteSubgraphResource"; }
 
@@ -45,7 +51,7 @@ class TFLiteSubgraphResource : public tensorflow::ResourceBase {
   }
 
   tensorflow::mutex& GetExclusiveLock() TF_LOCK_RETURNED(mutex_) {
-    return *mutex_;
+    return mutex_;
   }
 
   // Returns a pointer to the TfLiteDelegate which this instance of subgraph
@@ -55,7 +61,7 @@ class TFLiteSubgraphResource : public tensorflow::ResourceBase {
   }
 
  private:
-  tensorflow::mutex* mutex_;
+  tensorflow::mutex mutex_;
   Subgraph& subgraph_ TF_GUARDED_BY(mutex_);
   TfLiteDelegate* delegate_ TF_GUARDED_BY(mutex_) = nullptr;
 };

@@ -144,7 +144,7 @@ Status InitializeFusedComputation(
     }
   }
 
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

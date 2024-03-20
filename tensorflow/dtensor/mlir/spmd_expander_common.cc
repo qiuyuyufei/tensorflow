@@ -141,7 +141,7 @@ Status CreateSplitOp(const int num_split, const int split_dimension,
   llvm::SmallVector<mlir::Type, 4> output_types(num_split, output_type);
   *split_op = builder->create<mlir::TF::SplitOp>(
       location, output_types, split_dimension_op.getOutput(), src_input);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // Given layouts + shapes, determines if the two are broadcasting compatible.
@@ -682,7 +682,7 @@ Status SetBuilderInsertionAfterValue(mlir::Value value,
                                      mlir::OpBuilder& builder) {
   if (value.isa<mlir::OpResult>()) {
     builder.setInsertionPointAfterValue(value);
-    return absl::OkStatus();
+    return OkStatus();
   }
   mlir::tf_device::ClusterOp cluster;
   for (mlir::Operation* op : value.getUsers()) {
@@ -696,7 +696,7 @@ Status SetBuilderInsertionAfterValue(mlir::Value value,
   if (!cluster) return errors::Internal("value not used in any cluster");
 
   builder.setInsertionPointToStart(cluster.SingleBlock::getBody());
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status PrintTensor(mlir::Value value, const std::string& format_string = "%s") {
@@ -713,7 +713,7 @@ Status PrintTensor(mlir::Value value, const std::string& format_string = "%s") {
   builder.create<mlir::TF::PrintV2Op>(value.getLoc(), format.getOutput(),
                                       /*output_stream=*/"log(info)",
                                       /*end=*/"\n");
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 Status ExtractConstStringVectorFromValue(
@@ -731,7 +731,7 @@ Status ExtractConstStringVectorFromValue(
   for (const auto& str : attr.getRawStringData()) {
     out_vector.push_back(str.str());
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 StatusOr<std::string> ExtractConstScalarStringFromValue(mlir::Value value) {

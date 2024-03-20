@@ -562,7 +562,7 @@ struct HeapSimulatorStats {
       canonical_logical_buffer->span->second =
           heap_size_bytes_timeline.size() - 1;
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Finalize the memory usage stats from heap simulator trace.
@@ -585,7 +585,7 @@ struct HeapSimulatorStats {
     VLOG(1) << "Peak logical buffers: ["
             << absl::StrJoin(peak_logical_buffers, ", ") << "]";
 
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Keep track of memory usage when iterating through heap simulator trace
@@ -631,7 +631,7 @@ Status ProcessHeapSimulatorTrace(const HloProtoBufferWrapper& wrapper,
       heap_simulator_trace_id >= wrapper.GetHloProto()
                                      .buffer_assignment()
                                      .heap_simulator_traces_size()) {
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   // Run through all the simulator events in the given trace, and simulate the
@@ -682,7 +682,7 @@ Status ProcessHeapSimulatorTrace(const HloProtoBufferWrapper& wrapper,
     }
   }
   TF_RETURN_IF_ERROR(stats->FinalizeMemoryUsage());
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // The stats when processing buffer allocations and logical buffers.

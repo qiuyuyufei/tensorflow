@@ -1,4 +1,4 @@
-# Copyright 2023 The OpenXLA Authors.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,6 @@
 # ============================================================================
 from absl.testing import absltest
 
-from xla.build_tools import test_utils
 from xla.build_tools.lint import check_contents
 from xla.build_tools.lint import diff_parser
 
@@ -25,11 +24,11 @@ class CheckDiffsTest(absltest.TestCase):
   def setUpClass(cls):
     super().setUpClass()
 
-    testdata = test_utils.xla_src_root() / "build_tools" / "lint" / "testdata"
-    with (testdata / "bad_cc.diff").open() as f:
+    base_path = "third_party/xla/build_tools/lint"
+    with open(f"{base_path}/testdata/bad_cc.diff") as f:
       cls.bad_cc_hunks = diff_parser.parse_hunks(f.read())
 
-    with (testdata / "important_cc.diff").open() as f:
+    with open(f"{base_path}/testdata/important_cc.diff") as f:
       cls.important_cc_hunks = diff_parser.parse_hunks(f.read())
 
   def test_check_good_diff(self):

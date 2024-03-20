@@ -384,7 +384,7 @@ cc_library(
     name = "gif",
     hdrs = ["gif.h"],
     deps = [
-        "@gif",
+        "@local_tsl//tsl/platform:gif",
     ],
 )
 
@@ -412,7 +412,7 @@ cc_library(
     name = "jpeg",
     hdrs = ["jpeg.h"],
     deps = [
-        "@libjpeg_turbo//:jpeg",
+        "@local_tsl//tsl/platform:jpeg",
     ],
 )
 
@@ -422,6 +422,20 @@ cc_library(
     deps = [
         "@local_tsl//tsl/platform:load_library",
     ],
+)
+
+cc_library(
+    name = "logger",
+    hdrs = ["logger.h"],
+    deps = [
+        ":env",
+        ":logging",
+        ":protobuf",
+        "@com_google_absl//absl/base",
+        "@com_google_absl//absl/synchronization",
+        "@local_tsl//tsl/platform:logger",
+    ],
+    alwayslink = 1,
 )
 
 cc_library(
@@ -501,7 +515,6 @@ py_strict_test(
     srcs = ["ram_file_system_test.py"],
     python_version = "PY3",
     deps = [
-        # copybara:uncomment "//third_party/py/google/protobuf:use_fast_cpp_protos",
         "//tensorflow/python/compat:v2_compat",
         "//tensorflow/python/eager:def_function",
         "//tensorflow/python/framework:constant_op",
@@ -580,7 +593,7 @@ cc_library(
     hdrs = ["png.h"],
     deps = [
         ":platform",
-        "@png",
+        "@local_tsl//tsl/platform:png",
     ],
 )
 
@@ -1088,7 +1101,7 @@ tf_cuda_library(
         "@local_tsl//tsl/platform",
         "@local_xla//xla/stream_executor",
         "@local_xla//xla/stream_executor:dnn",
-        "@local_xla//xla/stream_executor:platform_manager",
+        "@local_xla//xla/stream_executor:multi_platform_manager",
         "@local_xla//xla/stream_executor/cuda:cuda_activation_header",
         "@local_xla//xla/stream_executor/cuda:cuda_platform_id",
         "@local_xla//xla/stream_executor/host:host_platform_id",
@@ -1111,7 +1124,7 @@ cc_library(
     deps = [
         "@local_xla//xla/stream_executor",
         "@local_xla//xla/stream_executor:dnn",
-        "@local_xla//xla/stream_executor:platform_manager",
+        "@local_xla//xla/stream_executor:multi_platform_manager",
         "@local_xla//xla/stream_executor/cuda:cuda_platform_id",
         "@local_xla//xla/stream_executor/host:host_platform",
         "@local_xla//xla/stream_executor/host:host_platform_id",
@@ -1391,6 +1404,7 @@ filegroup(
         "fingerprint.h",
         "float8.h",
         "init_main.h",
+        "logger.h",
         "mem.h",
         "mutex.h",
         "net.h",

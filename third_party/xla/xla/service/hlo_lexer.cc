@@ -1,4 +1,4 @@
-/* Copyright 2017 The OpenXLA Authors.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -96,7 +96,6 @@ TokKind HloLexer::LexToken() {
     token_state_.token_start = current_ptr_;
 
     int current_char = GetNextChar();
-    TokKind tmp;
     switch (current_char) {
       default:
         // [a-zA-Z_]
@@ -133,11 +132,7 @@ TokKind HloLexer::LexToken() {
           current_ptr_++;
           return TokKind::kArrow;
         }
-        tmp = LexNumberOrPattern();
-        if (tmp == TokKind::kError && current_char == '?') {
-          return TokKind::kQuestionMark;
-        }
-        return tmp;
+        return LexNumberOrPattern();
       case '=':
         return TokKind::kEqual;
       case '<':
@@ -346,13 +341,6 @@ TokKind HloLexer::LexIdentifier() {
       current_ptr_ = consumable.data();
       token_state_.str_val.assign(token_state_.token_start, current_ptr_);
       return TokKind::kDimLabels;
-    }
-    static LazyRE2 sparsity_desc_pattern = {
-        R"(([LR]\.[0-9]+@[0-9]+:[0-9]+_?)+)"};
-    if (RE2::Consume(&consumable, *sparsity_desc_pattern)) {
-      current_ptr_ = consumable.data();
-      token_state_.str_val.assign(token_state_.token_start, current_ptr_);
-      return TokKind::kSparsityDesc;
     }
   }
 
@@ -581,8 +569,6 @@ std::string TokKindToString(TokKind kind) {
       return "kColon";
     case TokKind::kAsterisk:
       return "kAsterisk";
-    case TokKind::kQuestionMark:
-      return "kQuestionMark";
     case TokKind::kOctothorp:
       return "kOctothorp";
     case TokKind::kPlus:
@@ -645,8 +631,6 @@ std::string TokKindToString(TokKind kind) {
       return "kDxD";
     case TokKind::kPad:
       return "kPad";
-    case TokKind::kSparsityDesc:
-      return "kSparsityDesc";
     case TokKind::kIdent:
       return "kIdent";
     case TokKind::kString:

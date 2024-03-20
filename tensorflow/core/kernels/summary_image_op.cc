@@ -173,7 +173,7 @@ class SummaryImageOp : public OpKernel {
         return errors::Internal("PNG encoding failed");
       }
     }
-    return absl::OkStatus();
+    return OkStatus();
   }
 
   template <class T>
